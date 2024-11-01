@@ -1,0 +1,19 @@
+{
+    "app-name": "Banking Application - Development",
+    "transaction-service-config": {
+        "protocol": "http://",
+        "host": "localhost:",
+        "port": 8080,
+        "base": "/bankingapp/api/transaction",
+        "uri": "/logtransactionsummary"
+    },
+    "postgres-config": {
+        "protocol": "postgres://",
+        "host": "localhost",
+        "port": 5432,
+        "user": "manshusengar",
+        "password": "admin",
+        "database": "bank",
+        "schema": "public"
+    }
+}
