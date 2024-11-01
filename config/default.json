@@ -1,0 +1,7 @@
+{
+    "app-name": "Banking Applicaion - Default",
+    "jwt": {
+    "secretkey": "SECRET_KEY",  
+    "expiresIn": "1h"
+  }
+}

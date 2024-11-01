@@ -1,0 +1,40 @@
+{
+  "name": "bankingapp-api",
+  "version": "1.0.0",
+  "description": "A simple net banking application",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "nodemon main.js",
+    "migrate:user": "node user-service/db/migrate.js",
+    "seed:user": "node user-service/db/seed.js",
+    "setup:user": "npm run migrate:user && npm run seed:user",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Manshu Sengar",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "bcryptjs": "^2.4.3",
+    "config": "^3.3.12",
+    "debug": "^4.3.4",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.29.5",
+    "express": "^4.19.1",
+    "joi": "^17.12.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemon": "^3.1.7",
+    "pdfmake": "^0.2.10",
+    "pg": "^8.11.3",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.20.18"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+    "app-name": "Banking Application - Production",
+    "transaction-service-config": {
+        "protocol": "http://",
+        "host": "localhost:",
+        "port": 8081,
+        "base": "/bankingapp/api/transaction",
+        "uri": "/logtransactionsummary"
+    },
+    "postgres-config": {
+        "protocol": "postgres://",
+        "host": "localhost",
+        "port": 5432,
+        "user": "postgres",
+        "password": "your_password",
+        "database": "banking_app",
+        "schema": "public"
+    }
+}
