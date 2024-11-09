@@ -2,8 +2,8 @@ const jwt = require('jsonwebtoken');
 const config = require('config');
 const Logger = require('../logger/logger');
 const log = new Logger('Auth-Middleware');
-const { db, rolePermissions, permissions } = require('../user-service/db/schema');
-const { eq, and } = require('drizzle-orm');
+const { db, rolePermissions, permissions, userPermissions } = require('../user-service/db/schema');
+const { eq, and, or } = require('drizzle-orm');
 
 const secretKey = getJwtSecretKey();
 
@@ -19,11 +19,8 @@ async function authenticateToken(req, res, next) {
     try {
         const decoded = jwt.verify(token, secretKey);
         req.user = decoded;
-
-        // Get user permissions
-        const userPermissions = await getUserPermissions(decoded.roleId);
-        req.user.permissions = userPermissions;
-
+        const userPerms = await getUserPermissions(decoded.userId, decoded.roleId);
+        req.user.permissions = userPerms;
         next();
     } catch (err) {
         log.error('Invalid token:', err);
@@ -34,7 +31,7 @@ async function authenticateToken(req, res, next) {
     }
 }
 
-async function getUserPermissions(roleId) {
+async function getUserPermissions(userId, roleId) {
     try {
         const rolePerms = await db
             .select({
@@ -44,7 +41,18 @@ async function getUserPermissions(roleId) {
             .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
             .where(eq(rolePermissions.roleId, roleId));
 
-        return rolePerms.map(p => p.permissionName);
+        const directPerms = await db
+            .select({
+                permissionName: permissions.name
+            })
+            .from(userPermissions)
+            .innerJoin(permissions, eq(userPermissions.permissionId, permissions.id))
+            .where(eq(userPermissions.userId, userId));
+
+        const allPermissions = [...rolePerms, ...directPerms];
+        const uniquePermissions = [...new Set(allPermissions.map(p => p.permissionName))];
+        
+        return uniquePermissions;
     } catch (error) {
         log.error('Error getting user permissions:', error);
         return [];
@@ -60,13 +68,10 @@ function authorize(requiredPermissions = []) {
                     messageCode: 'NOAUTH'
                 });
             }
-
             const userPermissions = req.user.permissions || [];
-
             const hasRequiredPermissions = requiredPermissions.every(
                 permission => userPermissions.includes(permission)
             );
-
             if (!hasRequiredPermissions) {
                 log.warn(`Access denied for user ${req.user.username}. Required permissions: ${requiredPermissions.join(', ')}`);
                 return res.status(403).send({
@@ -74,7 +79,6 @@ function authorize(requiredPermissions = []) {
                     messageCode: 'INSUFPRM'
                 });
             }
-
             next();
         } catch (error) {
             log.error('Error in authorization:', error);

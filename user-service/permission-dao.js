@@ -82,6 +82,66 @@ class PermissionDao {
             throw error;
         }
     }
+
+
+async assignPermissionsToUser(userId, permissionIds, createdBy) {
+    try {
+        const assignments = [];
+        
+        for (const permissionId of permissionIds) {
+            const [assignment] = await db.insert(userPermissions)
+                .values({
+                    userId,
+                    permissionId,
+                    createdBy
+                })
+                .returning();
+            assignments.push(assignment);
+        }
+        
+        return assignments;
+    } catch (error) {
+        log.error('Error assigning permissions to user:', error);
+        throw error;
+    }
+}
+
+async removePermissionFromUser(userId, permissionId) {
+    try {
+        const [removed] = await db.delete(userPermissions)
+            .where(
+                and(
+                    eq(userPermissions.userId, userId),
+                    eq(userPermissions.permissionId, permissionId)
+                )
+            )
+            .returning();
+        return removed;
+    } catch (error) {
+        log.error('Error removing permission from user:', error);
+        throw error;
+    }
+}
+
+async getUserDirectPermissions(userId) {
+    try {
+        const userPerms = await db
+            .select({
+                id: permissions.id,
+                name: permissions.name,
+                description: permissions.description,
+                assignedAt: userPermissions.createdAt
+            })
+            .from(userPermissions)
+            .innerJoin(permissions, eq(userPermissions.permissionId, permissions.id))
+            .where(eq(userPermissions.userId, userId));
+        
+        return userPerms;
+    } catch (error) {
+        log.error('Error getting user direct permissions:', error);
+        throw error;
+    }
+}
 }
 
 module.exports = new PermissionDao();

@@ -20,21 +20,21 @@ app.use(function(req, res, next) {
     next();
 });
 
-// Import routers
 const userservicerouter = require('./user-service/user-controller');
 const permissionRouter = require('./user-service/permission-controller');
 const roleRouter = require('./user-service/role-controller');
 // const accountservicerouter = require('./account-service/account-controller');
 // const transactionservicerouter = require('./transaction-service/transaction-controller');
 const kycRouter = require('./kyc-service/kyc-controller');
+const schemeRouter = require('./scheme-service/scheme-controller');
+
 // Use routers
 app.use('/bankingapp/api/user', userservicerouter);
 app.use('/bankingapp/api/permissions', permissionRouter);
 app.use('/bankingapp/api/roles', roleRouter);
 app.use('/bankingapp/api/kyc', kycRouter);
+app.use('/bankingapp/api/schemes', schemeRouter);
 
-// app.use('/bankingapp/api/account', accountservicerouter);
-// app.use('/bankingapp/api/transaction', transactionservicerouter);
 
 if(environment === 'development'){
     app.use(morgan('tiny'));
