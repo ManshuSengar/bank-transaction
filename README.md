@@ -39,8 +39,8 @@ A comprehensive **Bank Transaction System** designed to handle various financial
 ## 🛠️ Installation and Setup
 
 ### Prerequisites
-- **Node.js** (v16 or later)
-- **PostgreSQL** (v13 or later)
+- **Node.js** (v18 or later)
+- **PostgreSQL** (v15 or later)
 
 ### Steps
 
@@ -59,9 +59,14 @@ A comprehensive **Bank Transaction System** designed to handle various financial
    - Create a `.env` file in the root directory.
    - Add the following:
      ```env
-     DATABASE_URL=postgresql://user:password@localhost:5432/bank_transaction
-     JWT_SECRET=your_secret_key
-     PORT=3000
+     DB_HOST=localhost 
+     DB_PORT=5432 
+     DB_USER="" 
+     DB_PASSWORD="" 
+     DB_NAME=""
+     SECRET_KEY=""
+     NODE_ENV=""
+     PORT=8080
      ```
 
 4. **Run database migrations**:
@@ -74,20 +79,6 @@ A comprehensive **Bank Transaction System** designed to handle various financial
    npm run dev
    ```
 
----
-
-## 🧪 Testing
-
-- **Unit Tests**:
-  - Test individual modules and services.
-- **Integration Tests**:
-  - Test the interactions between modules and APIs.
-- To run all tests:
-  ```bash
-  npm test
-  ```
-
----
 
 ## 🚀 Future Improvements
 
