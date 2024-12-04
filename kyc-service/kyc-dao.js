@@ -16,7 +16,7 @@ class KycDao {
                     gender: verificationData.gender,
                     address: verificationData.address,
                     documentImagePath: documentPath,
-                    verificationStatus: 'PENDING'
+                    verificationStatus: 'PENDING' // status
                 })
                 .returning();
             return verification;
