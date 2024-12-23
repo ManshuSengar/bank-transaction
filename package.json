@@ -3,14 +3,28 @@
   "version": "1.0.0",
   "description": "A simple net banking application",
   "main": "main.js",
-  "scripts": {
-    "start": "node main.js",
-    "dev": "nodemon main.js",
-    "migrate:user": "node user-service/db/migrate.js",
-    "seed:user": "node user-service/db/seed.js",
-    "setup:user": "npm run migrate:user && npm run seed:user",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+    "scripts": {
+      "start": "node main.js",
+      "dev": "nodemon main.js",
+      "build": "webpack --config webpack.config.js",
+      "start:prod": "node dist/bundle.js",
+      "db:generate": "drizzle-kit generate:pg",
+      "migrate:prod": "node dist/migrate-prod.js",
+      "deploy": "npm run build && npm run migrate:prod && pm2 restart all",
+      "migrate:api-config": "node api-config-service/db/migrate.js",
+      "migrate:api-token": "node api-token-service/db/migrate.js",
+      "migrate:bank": "node bank-service/db/migrate.js",
+      "migrate:callback": "node callback-service/db/migrate.js",
+      "migrate:fund": "node fund-service/db/migrate.js",
+      "migrate:kyc": "node kyc-service/db/migrate.js",
+      "migrate:payin": "node payin-service/db/migrate.js",
+      "migrate:product": "node product-service/db/migrate.js",
+      "migrate:scheme": "node scheme-service/db/migrate.js",
+      "migrate:unique": "node unique-service/db/migrate.js",
+      "migrate:user": "node user-service/db/migrate.js",
+      "migrate:wallet": "node wallet-service/db/migrate.js",
+      "migrate:all": "npm run migrate:api-config && npm run migrate:api-token && npm run migrate:bank && npm run migrate:callback  && npm run migrate:fund && npm run migrate:kyc && npm run migrate:payin && npm run migrate:product && npm run migrate:scheme && npm run migrate:unique && npm run migrate:user && npm run migrate:wallet"
+    },
   "keywords": [],
   "author": "Manshu Sengar",
   "license": "ISC",
@@ -18,6 +32,8 @@
     "axios": "^1.6.8",
     "bcryptjs": "^2.4.3",
     "config": "^3.3.12",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "debug": "^4.3.4",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.29.5",
@@ -26,13 +42,21 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
     "nodemon": "^3.1.7",
     "pdfmake": "^0.2.10",
     "pg": "^8.11.3",
     "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.20.18"
+    "@babel/core": "^7.26.0",
+    "@babel/preset-env": "^7.26.0",
+    "babel-loader": "^9.2.1",
+    "copy-webpack-plugin": "^12.0.2",
+    "drizzle-kit": "^0.20.18",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-node-externals": "^3.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

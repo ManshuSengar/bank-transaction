@@ -1,0 +1,236 @@
+// api-token-dao.js
+const Logger = require("../logger/logger");
+const log = new Logger("API-Token-Dao");
+const { db, apiTokens, apiTokenLogs } = require("./db/schema");
+const { eq, and, like, or, sql } = require("drizzle-orm");
+const crypto = require("crypto");
+
+class ApiTokenDao {
+  generateToken() {
+    return crypto.randomBytes(32).toString("hex");
+  }
+
+  async createToken(tokenData) {
+    try {
+      const [token] = await db
+        .insert(apiTokens)
+        .values({
+          ...tokenData,
+          token: this.generateToken(),
+          status: "PENDING",
+        })
+        .returning();
+      return token;
+    } catch (error) {
+      log.error("Error creating API token:", error);
+      throw error;
+    }
+  }
+
+  async updateToken(tokenId, tokenData) {
+    try {
+      const updates = {
+        ...tokenData,
+        updatedAt: new Date(),
+      };
+
+      // Generate new token if status is being changed to ACTIVE
+      if (tokenData.status === "ACTIVE") {
+        updates.token = this.generateToken();
+      }
+
+      const [token] = await db
+        .update(apiTokens)
+        .set(updates)
+        .where(eq(apiTokens.id, tokenId))
+        .returning();
+      return token;
+    } catch (error) {
+      log.error("Error updating API token:", error);
+      throw error;
+    }
+  }
+
+  async getTokens({ page = 1, limit = 10, status = null, search = null }) {
+    try {
+      // Build conditions array
+      const conditions = [];
+
+      if (status) {
+        conditions.push(eq(apiTokens.status, status));
+      }
+
+      if (search) {
+        conditions.push(
+          or(
+            like(apiTokens.name, `%${search}%`),
+            like(apiTokens.description, `%${search}%`)
+          )
+        );
+      }
+
+      // Build query
+      const offset = (page - 1) * limit;
+
+      // Execute query with or without conditions
+      const [tokens, countResult] = await Promise.all([
+        conditions.length > 0
+          ? db
+              .select()
+              .from(apiTokens)
+              .where(and(...conditions))
+              .limit(limit)
+              .offset(offset)
+              .orderBy(apiTokens.createdAt)
+          : db
+              .select()
+              .from(apiTokens)
+              .limit(limit)
+              .offset(offset)
+              .orderBy(apiTokens.createdAt),
+
+        conditions.length > 0
+          ? db
+              .select({ count: sql`count(*)` })
+              .from(apiTokens)
+              .where(and(...conditions))
+          : db.select({ count: sql`count(*)` }).from(apiTokens),
+      ]);
+
+      return {
+        data: tokens.map((t) => ({ ...t, token: undefined })),
+        pagination: {
+          page,
+          limit,
+          total: Number(countResult[0].count),
+          pages: Math.ceil(Number(countResult[0].count) / limit),
+        },
+      };
+    } catch (error) {
+      log.error("Error getting API tokens:", error);
+      throw error;
+    }
+  }
+
+  async getUserTokens(userId) {
+    try {
+      const tokens = await db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.userId, userId))
+        .orderBy(apiTokens.createdAt);
+      return tokens;
+    } catch (error) {
+      log.error("Error getting user tokens:", error);
+      throw error;
+    }
+  }
+
+  async getTokenByValue(token) {
+    try {
+      const tokens = await db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.token, token))
+        .orderBy(apiTokens.createdAt);
+        console.log("token--> ",tokens);
+      return tokens;
+    } catch (error) {
+      log.error("Error getting user tokens:", error);
+      throw error;
+    }
+  }
+
+
+  async getTokenById(id) {
+    try {
+      const [token] = await db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.id, id))
+        .limit(1);
+      return token;
+    } catch (error) {
+      log.error("Error getting token by ID:", error);
+      throw error;
+    }
+  }
+
+  async getTokenLogs(tokenId, { page = 1, limit = 10 }) {
+    try {
+      const offset = (page - 1) * limit;
+      const [logs, countResult] = await Promise.all([
+        db
+          .select()
+          .from(apiTokenLogs)
+          .where(eq(apiTokenLogs.tokenId, tokenId))
+          .limit(limit)
+          .offset(offset)
+          .orderBy(apiTokenLogs.createdAt),
+        db
+          .select({ count: sql`count(*)` })
+          .from(apiTokenLogs)
+          .where(eq(apiTokenLogs.tokenId, tokenId)),
+      ]);
+
+      return {
+        data: logs,
+        pagination: {
+          page,
+          limit,
+          total: Number(countResult[0].count),
+          pages: Math.ceil(Number(countResult[0].count) / limit),
+        },
+      };
+    } catch (error) {
+      log.error("Error getting token logs:", error);
+      throw error;
+    }
+  }
+
+  async logTokenUsage(logData) {
+    try {
+      const [log] = await db.insert(apiTokenLogs).values(logData).returning();
+      return log;
+    } catch (error) {
+      log.error("Error logging token usage:", error);
+      throw error;
+    }
+  }
+
+  async updateTokenStatus(tokenId, status, rejectionReason, userId) {
+    try {
+      const updateData = {
+        status,
+        updatedAt: new Date(),
+      };
+
+      if (status === "REJECTED") {
+        updateData.rejectionReason = rejectionReason;
+      }
+
+      if (status === "ACTIVE" || status === "REJECTED") {
+        updateData.approvedBy = userId;
+        updateData.approvedAt = new Date();
+      }
+
+      // Generate new token if status is being changed to ACTIVE
+      if (status === "ACTIVE") {
+        updateData.token = this.generateToken();
+      }
+
+      const [token] = await db
+        .update(apiTokens)
+        .set(updateData)
+        .where(eq(apiTokens.id, tokenId))
+        .returning();
+
+      return token;
+    } catch (error) {
+      log.error("Error updating token status:", error);
+      throw error;
+    }
+  }
+}
+
+module.exports = new ApiTokenDao();
