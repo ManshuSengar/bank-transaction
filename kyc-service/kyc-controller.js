@@ -200,7 +200,7 @@ kycRouter.get('/status',
 // Admin routes for verification approval/rejection
 kycRouter.put('/aadhar/:verificationId/verify',
     authenticateToken,
-    authorize(['manage_kyc']),
+    // authorize(['manage_kyc']),
     async (req, res) => {
         try {
             const { status, comments } = req.body;
@@ -228,7 +228,7 @@ kycRouter.put('/aadhar/:verificationId/verify',
 
 kycRouter.put('/pan/:verificationId/verify',
     authenticateToken,
-    authorize(['manage_kyc']),
+    // authorize(['manage_kyc']),
     async (req, res) => {
         try {
             const { status, comments } = req.body;
@@ -257,7 +257,7 @@ kycRouter.put('/pan/:verificationId/verify',
 // Get all pending verifications (Admin only)
 kycRouter.get('/pending',
     authenticateToken,
-    authorize(['manage_kyc']),
+    // authorize(['manage_kyc']),
     async (req, res) => {
         try {
             const pending = await kycDao.getAllPendingVerifications();
@@ -271,4 +271,96 @@ kycRouter.get('/pending',
         }
     });
 
+
+kycRouter.get('/aadhar/:verificationId',
+    authenticateToken,
+    async (req, res) => {
+        try {
+            const verification = await kycDao.getAadharVerificationById(req.params.verificationId);
+            
+            if (!verification) {
+                return res.status(404).send({
+                    messageCode: 'NOT_FOUND',
+                    message: 'Aadhar verification not found'
+                });
+            }
+
+            // Check if user has permission to view this verification
+            if (verification.user.id !== req.user.userId && !req.user.permissions?.includes('manage_kyc')) {
+                return res.status(403).send({
+                    messageCode: 'FORBIDDEN',
+                    message: 'Access denied'
+                });
+            }
+
+            res.send({
+                messageCode: 'VERIFICATION_FETCHED',
+                message: 'Aadhar verification details retrieved successfully',
+                data: verification
+            });
+        } catch (error) {
+            log.error('Error getting Aadhar verification:', error);
+            res.status(500).send({
+                messageCode: 'INTERNAL_ERROR',
+                message: 'An error occurred while retrieving Aadhar verification'
+            });
+        }
+    });
+
+kycRouter.get('/pan/:verificationId',
+    authenticateToken,
+    async (req, res) => {
+        try {
+            const verification = await kycDao.getPanVerificationById(req.params.verificationId);
+            
+            if (!verification) {
+                return res.status(404).send({
+                    messageCode: 'NOT_FOUND',
+                    message: 'PAN verification not found'
+                });
+            }
+
+            // Check if user has permission to view this verification
+            if (verification.user.id !== req.user.userId && !req.user.permissions?.includes('manage_kyc')) {
+                return res.status(403).send({
+                    messageCode: 'FORBIDDEN',
+                    message: 'Access denied'
+                });
+            }
+
+            res.send({
+                messageCode: 'VERIFICATION_FETCHED',
+                message: 'PAN verification details retrieved successfully',
+                data: verification
+            });
+        } catch (error) {
+            log.error('Error getting PAN verification:', error);
+            res.status(500).send({
+                messageCode: 'INTERNAL_ERROR',
+                message: 'An error occurred while retrieving PAN verification'
+            });
+        }
+    });
+
+
+    // Get user's KYC details from token
+kycRouter.get('/details', 
+    authenticateToken,
+    async (req, res) => {
+        try {
+            const verifications = await kycDao.getUserVerifications(req.user.userId);
+            
+            res.send({
+                messageCode: 'KYC_FETCHED',
+                message: 'KYC details retrieved successfully',
+                data: verifications
+            });
+        } catch (error) {
+            log.error('Error getting user KYC details:', error);
+            res.status(500).send({
+                messageCode: 'INTERNAL_ERROR',
+                message: 'An error occurred while retrieving KYC details'
+            });
+        }
+    });
 module.exports = kycRouter;

@@ -15,5 +15,17 @@
         "password": "admin",
         "database": "bank",
         "schema": "public"
+    },
+    
+        "email-config": {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "secure": false,
+            "user": "manshusengar77@gmail.com",
+            "password": "12345",
+            "from": "Banking App <your-email@gmail.com>"
+        },
+        "app-config": {
+            "frontendUrl": "http://localhost:4200"
+        }
     }
-}

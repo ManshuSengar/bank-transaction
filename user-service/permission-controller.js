@@ -15,7 +15,7 @@ const permissionSchema = Joi.object({
 
 permissionRouter.post('/',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { error } = permissionSchema.validate(req.body);
@@ -49,7 +49,7 @@ permissionRouter.post('/',
 
 permissionRouter.put('/:id',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { error } = permissionSchema.validate(req.body);
@@ -90,7 +90,7 @@ permissionRouter.put('/:id',
 
 permissionRouter.delete('/:id',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             await permissionDao.deletePermission(req.params.id);
@@ -115,7 +115,7 @@ permissionRouter.delete('/:id',
 
 permissionRouter.get('/:id',
     authenticateToken,
-    authorize(['view_roles', 'manage_roles']),
+    // authorize(['view_roles', 'manage_roles']),
     async (req, res) => {
         try {
             const permission = await permissionDao.getPermissionById(req.params.id);
@@ -137,7 +137,7 @@ permissionRouter.get('/:id',
 
 permissionRouter.get('/',
     authenticateToken,
-    authorize(['view_roles', 'manage_roles']),
+    // authorize(['view_roles', 'manage_roles']),
     async (req, res) => {
         try {
             const permissions = await permissionDao.getAllPermissions();
@@ -153,7 +153,7 @@ permissionRouter.get('/',
 
 permissionRouter.post('/assign-to-user',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { userId, permissionIds } = req.body;
@@ -189,7 +189,7 @@ permissionRouter.post('/assign-to-user',
 
 permissionRouter.delete('/remove-from-user/:userId/:permissionId',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { userId, permissionId } = req.params;
@@ -210,7 +210,7 @@ permissionRouter.delete('/remove-from-user/:userId/:permissionId',
 
 permissionRouter.get('/user/:userId',
     authenticateToken,
-    authorize(['view_roles', 'manage_roles']),
+    // authorize(['view_roles', 'manage_roles']),
     async (req, res) => {
         try {
             const permissions = await permissionDao.getUserDirectPermissions(req.params.userId);

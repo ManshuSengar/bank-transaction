@@ -1,8 +1,8 @@
 // permission-dao.js
 const Logger = require('../logger/logger');
 const log = new Logger('Permission-Dao');
-const { db, permissions } = require('./db/schema');
-const { eq } = require('drizzle-orm');
+const { db, permissions, userPermissions } = require('./db/schema');
+const { eq, and } = require('drizzle-orm');
 
 class PermissionDao {
     async createPermission(permissionData) {
@@ -51,19 +51,38 @@ class PermissionDao {
 
     async getPermissionById(permissionId) {
         try {
-            const permission = await db.query.permissions.findFirst({
-                where: eq(permissions.id, permissionId)
-            });
+            const [permission] = await db
+                .select({
+                    id: permissions.id,
+                    name: permissions.name,
+                    description: permissions.description,
+                    createdAt: permissions.createdAt,
+                    updatedAt: permissions.updatedAt
+                })
+                .from(permissions)
+                .where(eq(permissions.id, permissionId))
+                .limit(1);
+
             return permission;
         } catch (error) {
-            log.error('Error getting permission:', error);
+            console.log('Error getting permission:', error);
             throw error;
         }
     }
 
     async getAllPermissions() {
         try {
-            const allPermissions = await db.query.permissions.findMany();
+            const allPermissions = await db
+                .select({
+                    id: permissions.id,
+                    name: permissions.name,
+                    description: permissions.description,
+                    createdAt: permissions.createdAt,
+                    updatedAt: permissions.updatedAt
+                })
+                .from(permissions)
+                .orderBy(permissions.name);
+
             return allPermissions;
         } catch (error) {
             log.error('Error getting all permissions:', error);
@@ -73,9 +92,18 @@ class PermissionDao {
 
     async getPermissionByName(name) {
         try {
-            const permission = await db.query.permissions.findFirst({
-                where: eq(permissions.name, name.toLowerCase())
-            });
+            const [permission] = await db
+                .select({
+                    id: permissions.id,
+                    name: permissions.name,
+                    description: permissions.description,
+                    createdAt: permissions.createdAt,
+                    updatedAt: permissions.updatedAt
+                })
+                .from(permissions)
+                .where(eq(permissions.name, name.toLowerCase()))
+                .limit(1);
+
             return permission;
         } catch (error) {
             log.error('Error getting permission by name:', error);
@@ -83,65 +111,90 @@ class PermissionDao {
         }
     }
 
-
-async assignPermissionsToUser(userId, permissionIds, createdBy) {
-    try {
-        const assignments = [];
-        
-        for (const permissionId of permissionIds) {
-            const [assignment] = await db.insert(userPermissions)
-                .values({
-                    userId,
-                    permissionId,
-                    createdBy
-                })
-                .returning();
-            assignments.push(assignment);
+    async assignPermissionsToUser(userId, permissionIds, createdBy) {
+        try {
+            const assignments = await db.transaction(async (tx) => {
+                const results = [];
+                
+                for (const permissionId of permissionIds) {
+                    const [assignment] = await tx.insert(userPermissions)
+                        .values({
+                            userId,
+                            permissionId,
+                            createdBy
+                        })
+                        .returning();
+                    results.push(assignment);
+                }
+                
+                return results;
+            });
+            
+            return assignments;
+        } catch (error) {
+            console.log('Error assigning permissions to user:', error);
+            log.error('Error assigning permissions to user:', error);
+            throw error;
         }
-        
-        return assignments;
-    } catch (error) {
-        log.error('Error assigning permissions to user:', error);
-        throw error;
     }
-}
 
-async removePermissionFromUser(userId, permissionId) {
-    try {
-        const [removed] = await db.delete(userPermissions)
-            .where(
-                and(
-                    eq(userPermissions.userId, userId),
-                    eq(userPermissions.permissionId, permissionId)
+    async removePermissionFromUser(userId, permissionId) {
+        try {
+            const [removed] = await db.delete(userPermissions)
+                .where(
+                    and(
+                        eq(userPermissions.userId, userId),
+                        eq(userPermissions.permissionId, permissionId)
+                    )
                 )
-            )
-            .returning();
-        return removed;
-    } catch (error) {
-        log.error('Error removing permission from user:', error);
-        throw error;
+                .returning();
+            return removed;
+        } catch (error) {
+            log.error('Error removing permission from user:', error);
+            throw error;
+        }
     }
-}
 
-async getUserDirectPermissions(userId) {
-    try {
-        const userPerms = await db
-            .select({
-                id: permissions.id,
-                name: permissions.name,
-                description: permissions.description,
-                assignedAt: userPermissions.createdAt
-            })
-            .from(userPermissions)
-            .innerJoin(permissions, eq(userPermissions.permissionId, permissions.id))
-            .where(eq(userPermissions.userId, userId));
-        
-        return userPerms;
-    } catch (error) {
-        log.error('Error getting user direct permissions:', error);
-        throw error;
+    async getUserDirectPermissions(userId) {
+        try {
+            const userPerms = await db
+                .select({
+                    id: permissions.id,
+                    name: permissions.name,
+                    description: permissions.description,
+                    createdBy: userPermissions.createdBy
+                })
+                .from(userPermissions)
+                .innerJoin(permissions, eq(userPermissions.permissionId, permissions.id))
+                .where(eq(userPermissions.userId, userId))
+                .orderBy(permissions.name);
+            
+            return userPerms;
+        } catch (error) {
+            console.log('Error getting user direct permissions:', error);
+            log.error('Error getting user direct permissions:', error);
+            throw error;
+        }
     }
-}
+
+    async getUsersWithPermission(permissionId) {
+        try {
+            const users = await db
+                .select({
+                    userId: userPermissions.userId,
+                    assignedAt: userPermissions.createdAt,
+                    assignedBy: userPermissions.createdBy
+                })
+                .from(userPermissions)
+                .where(eq(userPermissions.permissionId, permissionId))
+                .orderBy(userPermissions.createdAt);
+
+            return users;
+        } catch (error) {
+            log.error('Error getting users with permission:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new PermissionDao();

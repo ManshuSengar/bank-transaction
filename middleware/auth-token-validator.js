@@ -101,5 +101,6 @@ function getJwtSecretKey() {
 
 module.exports = {
     authenticateToken,
-    authorize
+    authorize,
+    getUserPermissions
 };

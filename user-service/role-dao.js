@@ -8,15 +8,12 @@ class RoleDao {
     async createRole(roleData) {
         try {
             const [newRole] = await db.transaction(async (tx) => {
-                // Create role
                 const [role] = await tx.insert(roles)
                     .values({
                         name: roleData.name.toUpperCase(),
                         description: roleData.description
                     })
                     .returning();
-
-                // If permissions are provided, assign them
                 if (roleData.permissions && roleData.permissions.length > 0) {
                     const permissionValues = roleData.permissions.map(permId => ({
                         roleId: role.id,
@@ -26,7 +23,6 @@ class RoleDao {
                     await tx.insert(rolePermissions)
                         .values(permissionValues);
                 }
-
                 return [role];
             });
 
@@ -40,7 +36,6 @@ class RoleDao {
     async updateRole(roleId, roleData) {
         try {
             const result = await db.transaction(async (tx) => {
-                // Update role
                 const [updatedRole] = await tx.update(roles)
                     .set({
                         name: roleData.name.toUpperCase(),
@@ -49,14 +44,10 @@ class RoleDao {
                     })
                     .where(eq(roles.id, roleId))
                     .returning();
-
-                // If permissions are provided, update them
                 if (roleData.permissions) {
-                    // Remove existing permissions
                     await tx.delete(rolePermissions)
                         .where(eq(rolePermissions.roleId, roleId));
 
-                    // Add new permissions
                     if (roleData.permissions.length > 0) {
                         const permissionValues = roleData.permissions.map(permId => ({
                             roleId,
@@ -81,11 +72,9 @@ class RoleDao {
     async deleteRole(roleId) {
         try {
             const deletedRole = await db.transaction(async (tx) => {
-                // Delete role permissions first
                 await tx.delete(rolePermissions)
                     .where(eq(rolePermissions.roleId, roleId));
 
-                // Delete role
                 const [role] = await tx.delete(roles)
                     .where(eq(roles.id, roleId))
                     .returning();
@@ -102,16 +91,27 @@ class RoleDao {
 
     async getRoleById(roleId) {
         try {
-            const role = await db.query.roles.findFirst({
-                where: eq(roles.id, roleId),
-                with: {
-                    permissions: {
-                        through: {
-                            columns: []
-                        }
-                    }
-                }
-            });
+            const [role] = await db
+                .select({
+                    id: roles.id,
+                    name: roles.name,
+                    description: roles.description,
+                    createdAt: roles.createdAt,
+                    updatedAt: roles.updatedAt,
+                    permissions: db
+                        .select({
+                            id: permissions.id,
+                            name: permissions.name,
+                            description: permissions.description
+                        })
+                        .from(permissions)
+                        .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
+                        .where(eq(rolePermissions.roleId, roleId))
+                })
+                .from(roles)
+                .where(eq(roles.id, roleId))
+                .limit(1);
+
             return role;
         } catch (error) {
             log.error('Error getting role:', error);
@@ -121,16 +121,26 @@ class RoleDao {
 
     async getAllRoles() {
         try {
-            const allRoles = await db.query.roles.findMany({
-                with: {
-                    permissions: {
-                        through: {
-                            columns: []
-                        }
-                    }
-                }
-            });
-            return allRoles;
+            const roles = await db
+                .select({
+                    id: roles.id,
+                    name: roles.name,
+                    description: roles.description,
+                    createdAt: roles.createdAt,
+                    updatedAt: roles.updatedAt,
+                    permissions: db
+                        .select({
+                            id: permissions.id,
+                            name: permissions.name,
+                            description: permissions.description
+                        })
+                        .from(permissions)
+                        .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
+                        .where(eq(rolePermissions.roleId, roles.id))
+                })
+                .from(roles);
+
+            return roles;
         } catch (error) {
             log.error('Error getting all roles:', error);
             throw error;
@@ -168,13 +178,19 @@ class RoleDao {
 
     async getRolePermissions(roleId) {
         try {
-            const permissions = await db.query.rolePermissions.findMany({
-                where: eq(rolePermissions.roleId, roleId),
-                with: {
-                    permission: true
-                }
-            });
-            return permissions.map(rp => rp.permission);
+            const rolePermissionsList = await db
+                .select({
+                    id: permissions.id,
+                    name: permissions.name,
+                    description: permissions.description,
+                    createdAt: permissions.createdAt,
+                    updatedAt: permissions.updatedAt
+                })
+                .from(rolePermissions)
+                .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+                .where(eq(rolePermissions.roleId, roleId));
+
+            return rolePermissionsList;
         } catch (error) {
             log.error('Error getting role permissions:', error);
             throw error;
