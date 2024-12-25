@@ -14,40 +14,42 @@ const apiConfigSchema = Joi.object({
     isDefault: Joi.boolean().default(false)
 });
 
+
 const chargeSchema = Joi.object({
     apiConfigId: Joi.number().when('$productId', {
-        is: Joi.valid(1, 2), // Both PAYIN and PAYOUT require apiConfigId
+        is: Joi.valid(1, 2),
         then: Joi.required(),
         otherwise: Joi.forbidden()
     }),
     minAmount: Joi.number().positive().when('$productId', {
-        is: 2, // PAYOUT
+        is: 2,
         then: Joi.required(),
-        otherwise: Joi.forbidden()
+        otherwise: Joi.optional() // Changed from forbidden to optional
     }),
     maxAmount: Joi.number().positive().when('$productId', {
-        is: 2, // PAYOUT
+        is: 2,
         then: Joi.required(),
-        otherwise: Joi.forbidden()
+        otherwise: Joi.optional() // Changed from forbidden to optional
     }),
     chargeType: Joi.string().valid('FLAT', 'PERCENTAGE').required(),
     chargeValue: Joi.number().positive().required(),
-    gst: Joi.number().min(0).max(100),
-    tds: Joi.number().min(0).max(100)
+    gst: Joi.number().min(0).max(100).optional(),
+    tds: Joi.number().min(0).max(100).optional()
 });
 
-// Main scheme validation
 const schemeSchema = Joi.object({
     name: Joi.string().min(3).max(100).required(),
     productId: Joi.number().required(),
-    description: Joi.string(),
+    description: Joi.string().optional().allow('', null),
     status: Joi.string().valid('ACTIVE', 'INACTIVE').default('ACTIVE'),
-    minTransactionLimit: Joi.number().positive(),
-    maxTransactionLimit: Joi.number().positive().greater(Joi.ref('minTransactionLimit')),
-    dailyLimit: Joi.number().positive(),
-    monthlyLimit: Joi.number().positive(),
+    minTransactionLimit: Joi.number().positive().optional().allow(null),
+    maxTransactionLimit: Joi.number().positive().greater(Joi.ref('minTransactionLimit')).optional().allow(null),
+    dailyLimit: Joi.number().positive().optional().allow(null),
+    monthlyLimit: Joi.number().positive().optional().allow(null),
     charges: Joi.array().items(chargeSchema).min(1).required()
 });
+
+
 
 module.exports = {
     apiConfigSchema,

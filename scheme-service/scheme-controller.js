@@ -40,13 +40,17 @@ schemeRouter.post('/',
         }
 });
 
-// Update existing scheme
 schemeRouter.put('/:id',
     authenticateToken,
-    // authorize(['manage_schemes']),
     async (req, res) => {
         try {
-            const { error } = schemeSchema.validate(req.body);
+            const { error } = schemeSchema.validate(req.body, {
+                context: {
+                    productId: req.body.productId
+                },
+                allowUnknown: true // Allow fields not specified in schema
+            });
+            
             if (error) {
                 return res.status(400).send({
                     messageCode: 'VALIDATION_ERROR',

@@ -170,7 +170,7 @@ class PayinDao {
           referenceId: finalOriginalUniqueId,
           remarks: `Payin QR Generation - ${finalOriginalUniqueId}`,
         });
-        await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
+        // await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
         return {
           transaction,
           walletTransaction,
