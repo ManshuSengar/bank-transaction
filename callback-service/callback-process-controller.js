@@ -13,37 +13,59 @@ const callbackSchema = Joi.object({
 });
 
 // Callback Processing Endpoint
-callbackProcessRouter.post('/bizzpaa', async (req, res) => {
+callbackProcessRouter.post('/bizzpaa', express.text(), async (req, res) => {
     try {
-        // Validate input
-        const { error } = callbackSchema.validate(req.body);
-        if (error) {
+        let data = req.body;
+        if (!data) {
             return res.status(400).send({
                 messageCode: 'VALIDATION_ERROR',
-                message: error.details[0].message
+                message: 'Request body is required'
             });
         }
+        log.info(`Received callback data: ${data}`);
+        data = data.trim();
+        if (!data) {
+            return res.status(400).send({
+                messageCode: 'VALIDATION_ERROR',
+                message: 'Request body cannot be empty'
+            });
+        }
+        try {
+            // Log system callback
+            const { systemLog, decryptedData } = await callbackProcessDao.logSystemCallback(data);
 
-        const { data } = req.body;
-        console.log("data--> ",data);
-        // Log system callback
-        const { systemLog, decryptedData } = await callbackProcessDao.logSystemCallback(data);
+            // Validate decrypted data
+            if (!decryptedData) {
+                return res.status(400).send({
+                    messageCode: 'VALIDATION_ERROR',
+                    message: 'Failed to decrypt data'
+                });
+            }
 
-        // Process user callback
-        const userCallback = await callbackProcessDao.processUserCallback(decryptedData);
+            const userCallback = await callbackProcessDao.processUserCallback(decryptedData);
 
-        // Respond with success
-        res.send({
-            messageCode: 'CALLBACK_PROCESSED',
-            message: 'Callback processed successfully',
-            systemLogId: systemLog.id,
-            userCallbackLogId: userCallback?.id
-        });
+            // Return success response
+            return res.status(200).send({
+                messageCode: 'CALLBACK_PROCESSED',
+                message: 'Callback processed successfully',
+                systemLogId: systemLog.id,
+                userCallbackLogId: userCallback?.id
+            });
+        } catch (error) {
+            console.log("processError final--> ",error);
+            log.error('Error processing callback:', error);
+            throw {
+                statusCode: 500,
+                messageCode: 'ERR_CALLBACK_PROCESS',
+                message: error.message || 'Error processing callback data'
+            };
+        }
     } catch (error) {
-        log.error('Error processing callback:', error);
-        res.status(error.statusCode || 500).send({
+        console.log("processError 211final--> ",error);
+        log.error('Callback error:', error);
+        return res.status(error.statusCode || 500).send({
             messageCode: error.messageCode || 'ERR_CALLBACK_PROCESS',
-            message: error.message || 'Error processing callback'
+            message: error.message || 'An unexpected error occurred'
         });
     }
 });

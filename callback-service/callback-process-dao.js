@@ -9,37 +9,55 @@ const payinDao = require("../payin-service/payin-dao");
 const walletDao = require("../wallet-service/wallet-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
 const { payinTransactions } = require("../payin-service/db/schema");
-
+const axios=require('axios');
 class CallbackProcessDao {
   // Log system callback
-  async logSystemCallback(encryptedData, payinTransactionId = null) {
-    try {
-      const decryptedData = await encryptionService.decrypt(encryptedData);
-      const [systemLog] = await db
-        .insert(systemCallbackLogs)
-        .values({
-          encryptedData,
-          decryptedData,
-          payinTransactionId,
-          status: "RECEIVED",
-        })
-        .returning();
+ // In CallbackProcessDao class
 
-      return { systemLog, decryptedData };
-    } catch (error) {
-      log.error("Error processing system callback:", error);
+async logSystemCallback(encryptedData, payinTransactionId = null) {
+  try {
+      // Validate encrypted data
+      if (!encryptedData) {
+          throw new Error('Encrypted data is required');
+      }
+
+      // Decrypt the data
+      let decryptedData = null;
+      try {
+          decryptedData = await encryptionService.decrypt(encryptedData);
+      } catch (decryptError) {
+          log.error('Decryption error:', decryptError);
+          throw new Error('Failed to decrypt data');
+      }
+
+      // Insert into system callback logs
+      const [systemLog] = await db
+          .insert(systemCallbackLogs)
+          .values({
+              encryptedData: encryptedData.toString(), // Ensure string format
+              decryptedData: decryptedData ? JSON.stringify(decryptedData) : null,
+              payinTransactionId,
+              status: "RECEIVED"
+          })
+          .returning();
+
+      return { 
+          systemLog, 
+          decryptedData 
+      };
+  } catch (error) {
+      log.error("Error in logSystemCallback:", error);
       throw error;
-    }
   }
+}
 
   async processUserCallback(decryptedData) {
     try {
       return await db.transaction(async (tx) => {
-        // 1. Find the unique ID record
         const uniqueIdRecord = await uniqueIdDao.getUniqueIdByGeneratedId(
           decryptedData.OrderId
         );
-
+        
         if (!uniqueIdRecord) {
           throw {
             statusCode: 404,
@@ -47,7 +65,7 @@ class CallbackProcessDao {
             message: "Unique ID not found",
           };
         }
-
+        await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
         // 2. Find the original payin transaction
         const [payinTransaction] = await tx
           .select()
@@ -162,6 +180,7 @@ class CallbackProcessDao {
           callbackResponse = JSON.stringify(response.data);
           isSuccessful = true;
         } catch (callbackError) {
+          console.log("callbackError--> ",callbackError);
           errorMessage = callbackError.message;
           log.error("Callback failed:", callbackError);
         }
@@ -192,6 +211,7 @@ class CallbackProcessDao {
         };
       });
     } catch (error) {
+      console.log("error last--> ",error);
       log.error("Error processing user callback:", error);
       throw error;
     }
