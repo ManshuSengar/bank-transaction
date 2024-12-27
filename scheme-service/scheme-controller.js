@@ -74,9 +74,18 @@ schemeRouter.put('/:id',
             });
         } catch (error) {
             log.error('Error updating scheme:', error);
-            res.status(500).send({
-                messageCode: 'ERR_UPDATE_SCHEME',
-                message: 'Error updating scheme'
+            
+            // Handle specific error cases
+            if (error.messageCode === 'DUPLICATE_SCHEME_NAME') {
+                return res.status(400).send({
+                    messageCode: error.messageCode,
+                    message: error.message
+                });
+            }
+            
+            res.status(error.statusCode || 500).send({
+                messageCode: error.messageCode || 'ERR_UPDATE_SCHEME',
+                message: error.message || 'Error updating scheme'
             });
         }
 });

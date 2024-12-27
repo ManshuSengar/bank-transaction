@@ -9,6 +9,7 @@ const {
 } = require("./db/schema");
 const { users } = require("../user-service/db/schema");
 const { eq, and, or, between, desc, sql } = require("drizzle-orm");
+const crypto = require("crypto");
 
 class WalletDao {
   generateTransactionUniqueId() {
@@ -542,6 +543,25 @@ class WalletDao {
       return types;
     } catch (error) {
       log.error("Error getting wallet types:", error);
+      throw error;
+    }
+  }
+
+  async getAllWalletsOfType(walletType) {
+    try {
+      const wallets = await db
+        .select({
+          id: userWallets.id,
+          userId: userWallets.userId,
+          type: walletTypes.name,
+        })
+        .from(userWallets)
+        .innerJoin(walletTypes, eq(userWallets.walletTypeId, walletTypes.id))
+        .where(eq(walletTypes.name, walletType));
+
+      return wallets;
+    } catch (error) {
+      log.error("Error getting wallets by type:", error);
       throw error;
     }
   }
