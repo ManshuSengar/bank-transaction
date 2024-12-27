@@ -114,8 +114,9 @@ async logSystemCallback(encryptedData, payinTransactionId = null) {
             amount,
             "CREDIT",
             `Payin Transaction Credit - ${payinTransaction.uniqueId}`,
-            payinTransaction.id,
-            userId
+            payinTransaction.transactionId,
+            userId,
+            "PAYIN"
           );
         } else if (status === "REJECTED") {
           // Refund charges to service wallet
@@ -124,8 +125,9 @@ async logSystemCallback(encryptedData, payinTransactionId = null) {
             chargeAmount,
             "CREDIT",
             `Payin Transaction Charge Refund - ${payinTransaction.uniqueId}`,
-            payinTransaction.id,
-            userId
+            payinTransaction.transactionId,
+            userId,
+            "PAYIN"
           );
         }
 
@@ -144,6 +146,7 @@ async logSystemCallback(encryptedData, payinTransactionId = null) {
         const modifiedPayload = {
           ...decryptedData,
           OrderId: uniqueIdRecord.originalUniqueId,
+          txnid:uniqueIdRecord.generatedUniqueId
         };
 
         // 8. Get user's callback configurations
@@ -190,6 +193,7 @@ async logSystemCallback(encryptedData, payinTransactionId = null) {
           .insert(userCallbackLogs)
           .values({
             userId,
+            transactionId:uniqueIdRecord.generatedUniqueId,
             configId: callbackConfig.id,
             originalPayload: decryptedData,
             modifiedPayload,

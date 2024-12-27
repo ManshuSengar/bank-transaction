@@ -146,7 +146,8 @@ class FundDao {
                 "CREDIT",
                 `Fund request #${requestId} approved`,
                 requestId,
-                userId
+                userId,
+                "FUND_REQUEST"
               );
             }
           } 
@@ -169,7 +170,8 @@ class FundDao {
                 "DEBIT",
                 `Internal Wallet Transfer #${requestId}`,
                 requestId,
-                userId
+                userId,
+                "FUND_REQUEST"
               );
 
               // Then credit target wallet
@@ -179,7 +181,8 @@ class FundDao {
                 "CREDIT",
                 `Internal Wallet Transfer #${requestId}`,
                 requestId,
-                userId
+                userId,
+                "FUND_REQUEST"
               );
             }
           }

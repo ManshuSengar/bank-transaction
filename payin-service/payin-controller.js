@@ -207,6 +207,8 @@ payinRouter.get('/user/transactions', authenticateToken, async (req, res) => {
             limit = 10,
         } = req.query;
 
+        const userDetails = await userDao.getUserByUsername(req.user.username);
+
         const transactions = await payinDao.getFilteredTransactions({
             userId,
             startDate,
@@ -222,6 +224,16 @@ payinRouter.get('/user/transactions', authenticateToken, async (req, res) => {
         res.send({
             messageCode: 'TRANSACTIONS_FETCHED',
             message: 'Transactions retrieved successfully',
+            user: {
+                id: userDetails.id,
+                firstname: userDetails.firstname,
+                lastname: userDetails.lastname,
+                username: userDetails.username,
+                emailId: userDetails.emailId,
+                phoneNo: userDetails.phoneNo,
+                role: userDetails.role,
+                address: userDetails.address
+            },
             ...transactions
         });
 

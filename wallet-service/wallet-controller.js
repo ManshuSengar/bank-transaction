@@ -26,30 +26,44 @@ const topupSchema = Joi.object({
   reference: Joi.string().max(100),
 });
 
+walletRouter.get("/wallet-type", authenticateToken, async (req, res) => {
+  try {
+    console.log("testing-->");
+    const wallets = await walletDao.getWalletTypes();
+    // console.log("wallets--> ",wallets);
+    res.send({
+      messageCode: "WALLETS_FETCHED",
+      message: "Wallets retrieved successfully",
+      wallets,
+    });
+  } catch (error) {
+    console.log("testing-->", error);
+    log.error("Error fetching user wallets:", error);
+    res.status(500).send({
+      messageCode: "ERR_FETCH_WALLETS",
+      message: "Error retrieving wallets",
+    });
+  }
+});
 
-walletRouter.get(
-    "/wallet-type",
-  authenticateToken,
-    async (req, res) => {
-      try {
-        console.log("testing-->");
-        const wallets = await walletDao.getWalletTypes();
-        // console.log("wallets--> ",wallets);
-        res.send({
-          messageCode: "WALLETS_FETCHED",
-          message: "Wallets retrieved successfully",
-          wallets,
-        });
-      } catch (error) {
-        console.log("testing-->", error);
-        log.error("Error fetching user wallets:", error);
-        res.status(500).send({
-          messageCode: "ERR_FETCH_WALLETS",
-          message: "Error retrieving wallets",
-        });
-      }
-    }
-  );
+walletRouter.get("/total-balances", authenticateToken, async (req, res) => {
+  try {
+    const totalBalances = await walletDao.getTotalWalletBalances(
+      req.user.userId
+    );
+    res.send({
+      messageCode: "WALLET_TOTALS_FETCHED",
+      message: "Wallet total balances retrieved successfully",
+      walletTotals: totalBalances,
+    });
+  } catch (error) {
+    log.error("Error fetching wallet total balances:", error);
+    res.status(500).send({
+      messageCode: "ERR_FETCH_WALLET_TOTALS",
+      message: "Error retrieving wallet total balances",
+    });
+  }
+});
 
 // Get all wallets for authenticated user
 walletRouter.get("/my-wallets", authenticateToken, async (req, res) => {
@@ -288,7 +302,8 @@ walletRouter.post(
         "CREDIT",
         req.body.description || "Admin topup",
         req.body.reference,
-        req.user.userId
+        req.user.userId,
+        "FUND_REQUEST"
       );
 
       res.send({
@@ -305,7 +320,6 @@ walletRouter.post(
     }
   }
 );
-
 
 // Get wallet transactions
 walletRouter.get(
@@ -372,6 +386,81 @@ walletRouter.get("/summary", authenticateToken, async (req, res) => {
   }
 });
 
+// Get all wallet transactions (admin only)
+walletRouter.get(
+  "/admin/all-transactions",
+  authenticateToken,
+  // authorize(["manage_wallets"]), // Ensure only admins can access
+  async (req, res) => {
+    try {
+      console.log("Query parameters:", req.query);
+      const {
+        type,
+        referenceType,
+        page = 1,
+        limit = 10,
+        walletType,
+        startDate,
+        endDate,
+        userId,
+      } = req.query;
 
+      const filters = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+      };
+      if (type?.trim()) {
+        filters.type = type.toUpperCase().trim();
+      }
+
+      if (referenceType?.trim()) {
+        filters.referenceType = referenceType.toUpperCase().trim();
+      }
+      if (startDate && endDate) {
+        filters.startDate = startDate;
+        filters.endDate = endDate;
+      }
+      if (userId) {
+        filters.userId = parseInt(userId);
+      }
+      if (walletType?.trim()) {
+        const allWallets = await walletDao.getAllWalletsOfType(
+          walletType.trim().toUpperCase()
+        );
+        if (allWallets.length === 0) {
+          return res.status(200).send({
+            messageCode: "NO_MATCHING_WALLETS",
+            message: "No wallets found for the specified wallet type",
+            data: [],
+            pagination: {
+              page: 1,
+              limit: 10,
+              total: 0,
+              pages: 0,
+            },
+          });
+        }
+        filters.walletIds = allWallets.map((w) => w.id);
+      }
+      console.log("Final Filters:", JSON.stringify(filters, null, 2));
+      const transactionLogs = await walletDao.getAllWalletTransactionLogs(
+        filters
+      );
+      res.send({
+        messageCode: "TRANSACTION_LOGS_FETCHED",
+        message: "Transaction logs retrieved successfully",
+        ...transactionLogs,
+      });
+    } catch (error) {
+      console.error("Detailed error in transaction logs:", error);
+      log.error("Error fetching transaction logs:", error);
+      res.status(500).send({
+        messageCode: "ERR_FETCH_TRANSACTION_LOGS",
+        message: "Error retrieving transaction logs",
+        errorDetails: error.message,
+      });
+    }
+  }
+);
 
 module.exports = walletRouter;

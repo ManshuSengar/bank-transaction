@@ -22,16 +22,16 @@
 //             const mailOptions = {
 //                 from: config.get('email-config.from'),
 //                 to: user.emailId,
-//                 subject: 'Welcome to Banking App - Account Details',
+//                 subject: 'Welcome to Fonexpay - Account Details',
 //                 html: `
-//                     <h1>Welcome to Banking App!</h1>
+//                     <h1>Welcome to Fonexpay!</h1>
 //                     <p>Dear ${user.firstname} ${user.lastname},</p>
 //                     <p>Your account has been successfully created. Here are your login credentials:</p>
 //                     <p><strong>Username:</strong> ${user.username}</p>
 //                     <p><strong>Temporary Password:</strong> ${password}</p>
 //                     <p>For security reasons, please change your password after your first login.</p>
 //                     <p>If you have any questions, please don't hesitate to contact our support team.</p>
-//                     <p>Best regards,<br>Banking App Team</p>
+//                     <p>Best regards,<br>Fonexpay Team</p>
 //                 `
 //             };
 
@@ -58,7 +58,7 @@
 //                     <p><a href="${resetLink}">Reset Password</a></p>
 //                     <p>This link will expire in 1 hour.</p>
 //                     <p>If you didn't request this, please ignore this email or contact our support team.</p>
-//                     <p>Best regards,<br>Banking App Team</p>
+//                     <p>Best regards,<br>Fonexpay Team</p>
 //                 `
 //             };
 
@@ -91,18 +91,16 @@ class EmailController {
             
             // Create reusable transporter using the test account
             this.transporter = nodemailer.createTransport({
-                host: 'smtp.ethereal.email',
-                port: 587,
-                secure: false,
+                host: 'smtpout.secureserver.net',
+                port: 465,
+                secure: true, 
                 auth: {
-                    user: "nat.schroeder@ethereal.email",
-                    pass: "KE8WJycdJ8vsxX9vuM"
+                    user: process.env.EMAIL,
+                    pass: process.env.EMAIL_PASSWORD
                 }
             });
-
             log.info('Email transporter initialized with Ethereal account');
-            log.info(`Ethereal Email Username: ${testAccount.user}`);
-            log.info(`Ethereal Email Password: ${testAccount.pass}`);
+         
         } catch (error) {
             log.error('Error initializing email transporter:', error);
             throw error;
@@ -116,18 +114,18 @@ class EmailController {
             }
 
             const mailOptions = {
-                from: '"Banking App" <test@bankingapp.com>',
+                from: '"Fonexpay" <Support@fonexpay.com>',
                 to: user.emailId,
-                subject: 'Welcome to Banking App - Account Details',
+                subject: 'Welcome to Fonexpay - Account Details',
                 html: `
-                    <h1>Welcome to Banking App!</h1>
+                    <h1>Welcome to Fonexpay!</h1>
                     <p>Dear ${user.firstname} ${user.lastname},</p>
                     <p>Your account has been successfully created. Here are your login credentials:</p>
                     <p><strong>Username:</strong> ${user.username}</p>
                     <p><strong>Temporary Password:</strong> ${password}</p>
                     <p>For security reasons, please change your password after your first login.</p>
                     <p>If you have any questions, please don't hesitate to contact our support team.</p>
-                    <p>Best regards,<br>Banking App Team</p>
+                    <p>Best regards,<br>Fonexpay Team</p>
                 `
             };
 
@@ -154,7 +152,7 @@ class EmailController {
             const resetLink = `http://localhost:4200/reset-password?token=${resetToken}`;
             
             const mailOptions = {
-                from: '"Banking App" <test@bankingapp.com>',
+                from: '"Fonexpay" <test@bankingapp.com>',
                 to: user.emailId,
                 subject: 'Password Reset Request',
                 html: `
@@ -164,7 +162,7 @@ class EmailController {
                     <p><a href="${resetLink}">Reset Password</a></p>
                     <p>This link will expire in 1 hour.</p>
                     <p>If you didn't request this, please ignore this email or contact our support team.</p>
-                    <p>Best regards,<br>Banking App Team</p>
+                    <p>Best regards,<br>Fonexpay Team</p>
                 `
             };
 
