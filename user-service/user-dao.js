@@ -222,10 +222,10 @@ async function registerNewUser(userObj) {
 
       // Send welcome email
       console.log("randomPassword--> ",randomPassword);
-    //   await emailService.sendWelcomeEmail(
-    //     { ...user, password: randomPassword },
-    //     randomPassword
-    //   );
+      await emailService.sendWelcomeEmail(
+        { ...user, password: randomPassword },
+        randomPassword
+      );
 
       return user;
     });

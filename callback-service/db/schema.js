@@ -52,6 +52,7 @@ const systemCallbackLogs = pgTable('system_callback_logs', {
 
 const userCallbackLogs = pgTable('user_callback_logs', {
     id: serial('id').primaryKey(),
+    transactionId:varchar('transaction_id', { length: 2000 }).notNull(),
     userId: integer('user_id').references(() => users.id).notNull(),
     configId: integer('config_id').references(() => callbackConfigs.id).notNull(),
     originalPayload: jsonb('original_payload'),

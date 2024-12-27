@@ -45,6 +45,7 @@ const userWallets = pgTable('user_wallets', {
 // Wallet transactions table
 const walletTransactions = pgTable('wallet_transactions', {
     id: serial('id').primaryKey(),
+    transactionUniqueId: varchar('transaction_unique_id', { length: 100 }).unique().notNull(),
     fromWalletId: integer('from_wallet_id').references(() => userWallets.id),
     toWalletId: integer('to_wallet_id').references(() => userWallets.id),
     amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
@@ -62,6 +63,7 @@ const walletTransactions = pgTable('wallet_transactions', {
 
 const walletTransactionLogs = pgTable('wallet_transaction_logs', {
     id: serial('id').primaryKey(),
+    transactionUniqueId: varchar('transaction_unique_id', { length: 100 }).unique().notNull(),
     walletId: integer('wallet_id').references(() => userWallets.id).notNull(),
     transactionId: integer('transaction_id').references(() => walletTransactions.id).notNull(),
     type: varchar('type', { length: 20 }).notNull(), // CREDIT, DEBIT
