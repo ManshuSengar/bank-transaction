@@ -36,27 +36,27 @@ payinRouter.post("/qr", async (req, res) => {
       req.socket.remoteAddress ||
       req.headers["x-forwarded-for"]?.split(",")[0];
     // Validate API Token
-    const validToken = await apiTokenDao.getValidToken(token, clientIp);
-    console.log("validate token--> ", validToken);
-    // const apiToken = await apiTokenDao.getTokenByValue(token);
+    // const validToken = await apiTokenDao.getValidToken(token, clientIp);
+    // console.log("validate token--> ", validToken);
+    const apiToken = await apiTokenDao.getTokenByValue(token);
     // console.log("apiToken--> ",apiToken);
-    if (!validToken) {
-      return res.status(401).send({
-        messageCode: "INVALID_TOKEN",
-        message: "Invalid token, inactive token, or unauthorized IP address",
-      });
-    }
-    // if (!apiToken[0] || apiToken[0].status !== 'ACTIVE') {
-    //     return res.status(401).send({
-    //         messageCode: 'INVALID_TOKEN',
-    //         message: 'Invalid or inactive API token'
-    //     });
+    // if (!validToken) {
+    //   return res.status(401).send({
+    //     messageCode: "INVALID_TOKEN",
+    //     message: "Invalid token, inactive token, or unauthorized IP address",
+    //   });
     // }
+    if (!apiToken[0] || apiToken[0].status !== 'ACTIVE') {
+        return res.status(401).send({
+            messageCode: 'INVALID_TOKEN',
+            message: 'Invalid or inactive API token'
+        });
+    }
 
     // Validate token belongs to the user
     const user = await userDao.getUserByUsername(username);
     console.log("user--> ", user);
-    if (!user || validToken.userId !== user.id) {
+    if (!user || apiToken[0].userId !== user.id) {
       return res.status(403).send({
         messageCode: "TOKEN_USER_MISMATCH",
         message: "Token does not belong to the specified user",
