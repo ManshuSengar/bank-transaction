@@ -6,7 +6,7 @@ const { eq, and } = require("drizzle-orm");
 const crypto = require("crypto");
 
 class UniqueIdDao {
-  generateUniqueId(length = 32) {
+  generateUniqueId(length = 6) {
     return crypto.randomBytes(length).toString("hex");
   }
 

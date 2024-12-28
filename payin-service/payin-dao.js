@@ -11,7 +11,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
-
+const {users} =require("../user-service/db/schema");
 class PayinDao {
   async generateQR(userId, amount, originalUniqueId = null) {
     try {
@@ -266,7 +266,6 @@ class PayinDao {
     }
   }
 
-  // payin-dao.js
 
   async getFilteredTransactions({
     userId,
@@ -364,6 +363,122 @@ class PayinDao {
       throw error;
     }
   }
+
+  async getAdminFilteredTransactions({
+    startDate,
+    endDate,
+    status,
+    search,
+    minAmount,
+    maxAmount,
+    page = 1,
+    limit = 10,
+  }) {
+    try {
+      const conditions = [];
+  
+      if (startDate && endDate) {
+        conditions.push(
+          and(
+            gte(payinTransactions.createdAt, new Date(startDate)),
+            lte(payinTransactions.createdAt, new Date(endDate))
+          )
+        );
+      }
+  
+      if (status) {
+        conditions.push(eq(payinTransactions.status, status));
+      }
+  
+      if (minAmount) {
+        conditions.push(gte(payinTransactions.amount, minAmount));
+      }
+  
+      if (maxAmount) {
+        conditions.push(lte(payinTransactions.amount, maxAmount));
+      }
+  
+      if (search) {
+        conditions.push(
+          or(
+            like(payinTransactions.uniqueId, `%${search}%`),
+            like(payinTransactions.vendorTransactionId, `%${search}%`)
+          )
+        );
+      }
+  
+      const offset = (page - 1) * limit;
+  
+      const [transactions, countResult] = await Promise.all([
+        db
+          .select({
+            id: payinTransactions.id,
+            transactionId:payinTransactions?.transactionId,
+            amount: payinTransactions.amount,
+            uniqueId: payinTransactions.uniqueId,
+            chargeValue: payinTransactions.chargeValue,
+            gstAmount: payinTransactions.gstAmount,
+            status: payinTransactions.status,
+            createdAt: payinTransactions.createdAt,
+            userId: payinTransactions.userId,
+            user: {
+              username: users.username,
+              firstname: users.firstname,
+              lastname: users.lastname,
+              emailId: users.emailId,
+              phoneNo: users.phoneNo,
+            },
+          })
+          .from(payinTransactions)
+          .leftJoin(users, eq(payinTransactions.userId, users.id))
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .limit(limit)
+          .offset(offset)
+          .orderBy(desc(payinTransactions.createdAt)),
+  
+        db
+          .select({
+            count: sql`count(*)`,
+          })
+          .from(payinTransactions)
+          .where(conditions.length > 0 ? and(...conditions) : undefined),
+      ]);
+  
+      const [summary] = await db
+        .select({
+          totalAmount: sql`SUM(amount)`,
+          totalCharges: sql`SUM(total_charges)`,
+          successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
+          failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
+          pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
+        })
+        .from(payinTransactions)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+  
+      return {
+        data: transactions,
+        pagination: {
+          page,
+          limit,
+          total: Number(countResult[0].count),
+          pages: Math.ceil(Number(countResult[0].count) / limit),
+        },
+        summary: {
+          totalAmount: Number(summary.totalAmount) || 0,
+          totalCharges: Number(summary.totalCharges) || 0,
+          successCount: Number(summary.successCount) || 0,
+          failedCount: Number(summary.failedCount) || 0,
+          pendingCount: Number(summary.pendingCount) || 0,
+        },
+      };
+    } catch (error) {
+      console.log("Error getting admin transactions:", error);
+      log.error("Error getting admin transactions:", error);
+      throw error;
+    }
+  }
 }
+
+
 
 module.exports = new PayinDao();

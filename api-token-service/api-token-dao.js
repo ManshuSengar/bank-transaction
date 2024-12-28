@@ -231,6 +231,31 @@ class ApiTokenDao {
       throw error;
     }
   }
+
+  async getValidToken(token, ipAddress) {
+    console.log("token,token",token,"--> ",ipAddress);
+    try {
+      const tokens = await db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.token, token))
+        .orderBy(apiTokens.createdAt);
+        console.log("tokens--> ",tokens);
+      if (!tokens.length) {
+        return null;
+      }
+      const validToken = tokens.find(token => {
+        if (token.status !== 'ACTIVE') return false;
+        if (!token.ipAddresses) return true;
+        const whitelistedIps = token.ipAddresses.split(',').map(ip => ip.trim());
+        return whitelistedIps.includes(ipAddress);
+      });
+      return validToken || null;
+    } catch (error) {
+      log.error("Error getting valid token:", error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ApiTokenDao();
