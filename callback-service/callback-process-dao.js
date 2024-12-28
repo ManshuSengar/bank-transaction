@@ -1,7 +1,7 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Callback-Process-Dao");
 const { db, systemCallbackLogs, userCallbackLogs } = require("./db/schema");
-const { eq, and } = require("drizzle-orm");
+const { eq, and, gte, lte, desc, sql } = require('drizzle-orm');
 const encryptionService = require("../encryption-service/encryption-dao");
 const callbackDao = require("./callback-dao");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
@@ -223,68 +223,77 @@ async logSystemCallback(encryptedData, payinTransactionId = null) {
 
   async getFilteredSystemCallbackLogs(filters) {
     try {
-      let query = db
-        .select({
-          systemLog: systemCallbackLogs,
-          payinTransaction: payinTransactions,
-        })
-        .from(systemCallbackLogs)
-        .leftJoin(
-          payinTransactions,
-          eq(systemCallbackLogs.payinTransactionId, payinTransactions.id)
-        );
+        // Build base conditions array
+        const conditions = [];
+        const baseQuery = db
+            .select({
+                systemLog: systemCallbackLogs,
+                payinTransaction: payinTransactions,
+            })
+            .from(systemCallbackLogs)
+            .leftJoin(
+                payinTransactions,
+                eq(systemCallbackLogs.payinTransactionId, payinTransactions.id)
+            );
 
-      if (filters.userId) {
-        query = query.where(eq(payinTransactions.userId, filters.userId));
-      }
+        // Add filters
+        if (filters.userId) {
+            conditions.push(eq(payinTransactions.userId, filters.userId));
+        }
 
-      if (filters.startDate) {
-        query = query.where(
-          gte(systemCallbackLogs.createdAt, filters.startDate)
-        );
-      }
+        if (filters.startDate) {
+            conditions.push(gte(systemCallbackLogs.createdAt, filters.startDate));
+        }
 
-      if (filters.endDate) {
-        query = query.where(lte(systemCallbackLogs.createdAt, filters.endDate));
-      }
+        if (filters.endDate) {
+            conditions.push(lte(systemCallbackLogs.createdAt, filters.endDate));
+        }
 
-      if (filters.status) {
-        query = query.where(eq(systemCallbackLogs.status, filters.status));
-      }
+        if (filters.status) {
+            conditions.push(eq(systemCallbackLogs.status, filters.status));
+        }
 
-      const countQuery = query.clone();
-      const [{ count }] = await countQuery.select({ count: sql`count(*)` });
+        // Get total count
+        const totalCount = await db
+            .select({ count: sql`count(*)` })
+            .from(systemCallbackLogs)
+            .leftJoin(
+                payinTransactions,
+                eq(systemCallbackLogs.payinTransactionId, payinTransactions.id)
+            )
+            .where(and(...conditions));
 
-      query = query
-        .orderBy(desc(systemCallbackLogs.createdAt))
-        .limit(filters.limit)
-        .offset(filters.offset);
+        // Get paginated results with all columns
+        const systemLogs = await baseQuery
+            .where(and(...conditions))
+            .orderBy(desc(systemCallbackLogs.createdAt))
+            .limit(filters.limit)
+            .offset(filters.offset);
 
-      const systemLogs = await query;
-
-      return {
-        total: parseInt(count),
-        logs: systemLogs.map((log) => ({
-          id: log.systemLog.id,
-          decryptedData: log.systemLog.decryptedData,
-          status: log.systemLog.status,
-          createdAt: log.systemLog.createdAt,
-          payinTransactionId: log.systemLog.payinTransactionId,
-          transactionDetails: log.payinTransaction
-            ? {
-                uniqueId: log.payinTransaction.uniqueId,
-                status: log.payinTransaction.status,
-                amount: log.payinTransaction.amount,
-                userId: log.payinTransaction.userId,
-              }
-            : null,
-        })),
-      };
+        return {
+            total: parseInt(totalCount[0].count),
+            logs: systemLogs.map((log) => ({
+                id: log.systemLog.id,
+                decryptedData: log.systemLog.decryptedData,
+                status: log.systemLog.status,
+                createdAt: log.systemLog.createdAt,
+                payinTransactionId: log.systemLog.payinTransactionId,
+                encryptedData:log.systemLog.encryptedData,
+                transactionDetails: log.payinTransaction
+                    ? {
+                          uniqueId: log.payinTransaction.uniqueId,
+                          status: log.payinTransaction.status,
+                          amount: log.payinTransaction.amount,
+                          userId: log.payinTransaction.userId,
+                      }
+                    : null,
+            })),
+        };
     } catch (error) {
-      log.error("Error fetching filtered system callback logs:", error);
-      throw error;
+        log.error("Error fetching filtered system callback logs:", error);
+        throw error;
     }
-  }
+}
 
 
 async getFilteredUserCallbackLogs(filters) {

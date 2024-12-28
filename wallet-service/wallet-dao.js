@@ -13,7 +13,7 @@ const crypto = require("crypto");
 
 class WalletDao {
   generateTransactionUniqueId() {
-    return crypto.randomBytes(16).toString("hex");
+    return crypto.randomBytes(6).toString("hex");
   }
   async initializeUserWallets(userId, tx = db) {
     // Make tx parameter optional with default as db
