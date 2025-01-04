@@ -1,189 +1,176 @@
 // callback-service/callback-process-controller.js
-const express = require('express');
+const express = require("express");
 const callbackProcessRouter = express.Router();
-const callbackProcessDao = require('./callback-process-dao');
-const Logger = require('../logger/logger');
-const log = new Logger('Callback-Process-Controller');
-const Joi = require('joi');
-const { authenticateToken } = require('../middleware/auth-token-validator');
+const callbackProcessDao = require("./callback-process-dao");
+const Logger = require("../logger/logger");
+const log = new Logger("Callback-Process-Controller");
+const Joi = require("joi");
+const { authenticateToken } = require("../middleware/auth-token-validator");
 
 // Validation schema
 const callbackSchema = Joi.object({
-    data: Joi.string().required() // Encrypted payload
+  data: Joi.string().required(), // Encrypted payload
 });
 
 // Callback Processing Endpoint
-callbackProcessRouter.post('/bizzpaa', express.text(), async (req, res) => {
-    try {
-        let data = req.body;
-        if (!data) {
-            return res.status(400).send({
-                messageCode: 'VALIDATION_ERROR',
-                message: 'Request body is required'
-            });
-        }
-        log.info(`Received callback data: ${data}`);
-        data = data.trim();
-        if (!data) {
-            return res.status(400).send({
-                messageCode: 'VALIDATION_ERROR',
-                message: 'Request body cannot be empty'
-            });
-        }
-        try {
-            // Log system callback
-            const { systemLog, decryptedData } = await callbackProcessDao.logSystemCallback(data);
-
-            // Validate decrypted data
-            if (!decryptedData) {
-                return res.status(400).send({
-                    messageCode: 'VALIDATION_ERROR',
-                    message: 'Failed to decrypt data'
-                });
-            }
-
-            const userCallback = await callbackProcessDao.processUserCallback(decryptedData);
-
-            // Return success response
-            return res.status(200).send({
-                messageCode: 'CALLBACK_PROCESSED',
-                message: 'Callback processed successfully',
-                systemLogId: systemLog.id,
-                userCallbackLogId: userCallback?.id
-            });
-        } catch (error) {
-            console.log("processError final--> ",error);
-            log.error('Error processing callback:', error);
-            throw {
-                statusCode: 500,
-                messageCode: 'ERR_CALLBACK_PROCESS',
-                message: error.message || 'Error processing callback data'
-            };
-        }
-    } catch (error) {
-        console.log("processError 211final--> ",error);
-        log.error('Callback error:', error);
-        return res.status(error.statusCode || 500).send({
-            messageCode: error.messageCode || 'ERR_CALLBACK_PROCESS',
-            message: error.message || 'An unexpected error occurred'
-        });
+callbackProcessRouter.post("/bizzpaa", express.text(), async (req, res) => {
+  try {
+    let data = req.body;
+    if (!data) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Request body is required",
+      });
     }
+    log.info(`Received callback data: ${data}`);
+    data = data.trim();
+    if (!data) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Request body cannot be empty",
+      });
+    }
+    try {
+      // Log system callback
+      const { systemLog, decryptedData } =
+        await callbackProcessDao.logSystemCallback(data);
+
+      // Validate decrypted data
+      if (!decryptedData) {
+        return res.status(400).send({
+          messageCode: "VALIDATION_ERROR",
+          message: "Failed to decrypt data",
+        });
+      }
+
+      const userCallback = await callbackProcessDao.processUserCallback(
+        decryptedData
+      );
+
+      // Return success response
+      return res.status(200).send({
+        messageCode: "CALLBACK_PROCESSED",
+        message: "Callback processed successfully",
+        systemLogId: systemLog.id,
+        userCallbackLogId: userCallback?.id,
+      });
+    } catch (error) {
+      console.log("processError final--> ", error);
+      log.error("Error processing callback:", error);
+      throw {
+        statusCode: 500,
+        messageCode: "ERR_CALLBACK_PROCESS",
+        message: error.message || "Error processing callback data",
+      };
+    }
+  } catch (error) {
+    console.log("processError 211final--> ", error);
+    log.error("Callback error:", error);
+    return res.status(error.statusCode || 500).send({
+      messageCode: error.messageCode || "ERR_CALLBACK_PROCESS",
+      message: error.message || "An unexpected error occurred",
+    });
+  }
 });
 
+callbackProcessRouter.get("/system-logs", async (req, res) => {
+  try {
+    const {
+      userId,
+      startDate,
+      endDate,
+      status,
+      search,
+      searchType = "all",
+      limit = 50,
+      offset = 0,
+    } = req.query;
 
-callbackProcessRouter.get('/system-logs',async (req, res) => {
+    // Initialize filters object
+    const filters = {
+      limit: Math.min(parseInt(limit) || 50, 100),
+      offset: parseInt(offset) || 0,
+    };
+
+    // Add optional filters only if they exist and are valid
+    if (userId) {
+      const userIdNum = parseInt(userId);
+      if (!isNaN(userIdNum)) {
+        filters.userId = userIdNum;
+      }
+    }
+
+    if (startDate && Date.parse(startDate)) {
+      filters.startDate = new Date(startDate);
+    }
+
+    if (endDate && Date.parse(endDate)) {
+      filters.endDate = new Date(endDate);
+    }
+
+    if (status) {
+      filters.status = status.toUpperCase();
+    }
+
+    // Add search parameters only if search is not empty
+    if (search && search.trim()) {
+      filters.search = search.trim();
+      filters.searchType = ["all", "transactionId", "orderId"].includes(
+        searchType
+      )
+        ? searchType
+        : "all";
+    }
+
+    const systemLogs = await callbackProcessDao.getFilteredSystemCallbackLogs(
+      filters
+    );
+
+    res.send({
+      messageCode: "SYSTEM_LOGS_RETRIEVED",
+      message: "System callback logs retrieved successfully",
+      data: systemLogs.logs,
+      pagination: {
+        total: systemLogs.total,
+        limit: filters.limit,
+        offset: filters.offset,
+        page: Math.floor(filters.offset / filters.limit) + 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error retrieving filtered system callback logs:", error);
+    log.error("Error retrieving filtered system callback logs:", error);
+    res.status(error.statusCode || 500).send({
+      messageCode: error.messageCode || "ERR_FETCH_SYSTEM_LOGS",
+      message: error.message || "Error retrieving system callback logs",
+    });
+  }
+});
+
+callbackProcessRouter.get('/user-logs', authenticateToken, async (req, res) => {
     try {
         const {
-            userId,
             startDate,
             endDate,
-            status,
             limit = 50,
             offset = 0
         } = req.query;
 
-        const filters = {};
-        
-        if (userId) {
-            const userIdNum = parseInt(userId);
-            if (isNaN(userIdNum)) {
-                return res.status(400).send({
-                    messageCode: 'INVALID_USER_ID',
-                    message: 'Invalid user ID provided'
-                });
-            }
-            filters.userId = userIdNum;
-        }
-
-        if (startDate) {
-            if (!Date.parse(startDate)) {
-                return res.status(400).send({
-                    messageCode: 'INVALID_START_DATE',
-                    message: 'Invalid start date format'
-                });
-            }
-            filters.startDate = new Date(startDate);
-        }
-
-        if (endDate) {
-            if (!Date.parse(endDate)) {
-                return res.status(400).send({
-                    messageCode: 'INVALID_END_DATE',
-                    message: 'Invalid end date format'
-                });
-            }
-            filters.endDate = new Date(endDate);
-        }
-
-        if (status) {
-            filters.status = status.toUpperCase();
-        }
-
-        filters.limit = Math.min(parseInt(limit) || 50, 100); // Max 100 records
-        filters.offset = parseInt(offset) || 0;
-
-        const systemLogs = await callbackProcessDao.getFilteredSystemCallbackLogs(filters);
-        
-        res.send({
-            messageCode: 'SYSTEM_LOGS_RETRIEVED',
-            message: 'System callback logs retrieved successfully',
-            data: systemLogs.logs,
-            pagination: {
-                total: systemLogs.total,
-                limit: filters.limit,
-                offset: filters.offset
-            }
-        });
-
-    } catch (error) {
-        log.error('Error retrieving filtered system callback logs:', error);
-        res.status(error.statusCode || 500).send({
-            messageCode: error.messageCode || 'ERR_FETCH_SYSTEM_LOGS',
-            message: error.message || 'Error retrieving system callback logs'
-        });
-    }
-});
-
-callbackProcessRouter.get('/user-logs', authenticateToken,async (req, res) => {
-    try {
-        // Get userId from authentication (assuming it's passed in req.user.id)
-        const userId = req.user.id;
-        
-        // Get query parameters with defaults
-        const {
-            startDate,
-            endDate,
-            limit = 50,
-            offset = 0
-        } = req.query;
-
-        // Validate query parameters
+        // Initialize filters object with validated parameters
         const filters = {
-            userId  // Adding authenticated userId to filters
+            userId: req.user.userId,
+            limit: Math.min(parseInt(limit) || 50, 100), // Max 100 records
+            offset: parseInt(offset) || 0
         };
         
-        if (startDate) {
-            if (!Date.parse(startDate)) {
-                return res.status(400).send({
-                    messageCode: 'INVALID_START_DATE',
-                    message: 'Invalid start date format'
-                });
-            }
+        // Add optional date filters
+        if (startDate && Date.parse(startDate)) {
             filters.startDate = new Date(startDate);
         }
 
-        if (endDate) {
-            if (!Date.parse(endDate)) {
-                return res.status(400).send({
-                    messageCode: 'INVALID_END_DATE',
-                    message: 'Invalid end date format'
-                });
-            }
+        if (endDate && Date.parse(endDate)) {
             filters.endDate = new Date(endDate);
         }
-
-        filters.limit = Math.min(parseInt(limit) || 50, 100); // Max 100 records
-        filters.offset = parseInt(offset) || 0;
 
         const userLogs = await callbackProcessDao.getFilteredUserCallbackLogs(filters);
         
@@ -194,7 +181,8 @@ callbackProcessRouter.get('/user-logs', authenticateToken,async (req, res) => {
             pagination: {
                 total: userLogs.total,
                 limit: filters.limit,
-                offset: filters.offset
+                offset: filters.offset,
+                pages: Math.ceil(userLogs.total / filters.limit)
             }
         });
 
@@ -206,6 +194,5 @@ callbackProcessRouter.get('/user-logs', authenticateToken,async (req, res) => {
         });
     }
 });
-
 
 module.exports = callbackProcessRouter;

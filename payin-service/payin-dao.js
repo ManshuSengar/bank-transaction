@@ -2,7 +2,7 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Payin-Dao");
 const { db, payinTransactions } = require("./db/schema");
-const { eq, and, sql, desc } = require("drizzle-orm");
+const { eq, and, sql, desc, or, like, gte, lte } = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
 const apiConfigDao = require("../api-config-service/api-config-dao");
@@ -11,7 +11,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
-const {users} =require("../user-service/db/schema");
+const { users } = require("../user-service/db/schema");
 class PayinDao {
   async generateQR(userId, amount, originalUniqueId = null) {
     try {
@@ -133,10 +133,14 @@ class PayinDao {
           reseller_pass: process.env.RESELLER_PASSWORD,
           data: encryptedData,
         });
-        console.log(
-          "chargeCalculation.charges.chargeValue--> ",
-          chargeCalculation
-        );
+        console.log("vendorResponse--> ", vendorResponse);
+        if (!vendorResponse?.Status) {
+          throw {
+            statusCode: 400,
+            messageCode: "TELE",
+            message: "Technical error",
+          };
+        }
         // 10. Record Transaction
         const [transaction] = await tx
           .insert(payinTransactions)
@@ -266,7 +270,6 @@ class PayinDao {
     }
   }
 
-
   async getFilteredTransactions({
     userId,
     startDate,
@@ -376,7 +379,7 @@ class PayinDao {
   }) {
     try {
       const conditions = [];
-  
+
       if (startDate && endDate) {
         conditions.push(
           and(
@@ -385,35 +388,36 @@ class PayinDao {
           )
         );
       }
-  
+
       if (status) {
         conditions.push(eq(payinTransactions.status, status));
       }
-  
+
       if (minAmount) {
         conditions.push(gte(payinTransactions.amount, minAmount));
       }
-  
+
       if (maxAmount) {
         conditions.push(lte(payinTransactions.amount, maxAmount));
       }
-  
+
       if (search) {
         conditions.push(
           or(
             like(payinTransactions.uniqueId, `%${search}%`),
-            like(payinTransactions.vendorTransactionId, `%${search}%`)
+            like(payinTransactions.vendorTransactionId, `%${search}%`),
+            like(payinTransactions.transactionId, `%${search}%`) // Added this line
           )
         );
       }
-  
+
       const offset = (page - 1) * limit;
-  
+
       const [transactions, countResult] = await Promise.all([
         db
           .select({
             id: payinTransactions.id,
-            transactionId:payinTransactions?.transactionId,
+            transactionId: payinTransactions?.transactionId,
             amount: payinTransactions.amount,
             uniqueId: payinTransactions.uniqueId,
             chargeValue: payinTransactions.chargeValue,
@@ -435,7 +439,7 @@ class PayinDao {
           .limit(limit)
           .offset(offset)
           .orderBy(desc(payinTransactions.createdAt)),
-  
+
         db
           .select({
             count: sql`count(*)`,
@@ -443,7 +447,7 @@ class PayinDao {
           .from(payinTransactions)
           .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
-  
+
       const [summary] = await db
         .select({
           totalAmount: sql`SUM(amount)`,
@@ -454,7 +458,7 @@ class PayinDao {
         })
         .from(payinTransactions)
         .where(conditions.length > 0 ? and(...conditions) : undefined);
-  
+
       return {
         data: transactions,
         pagination: {
@@ -477,8 +481,69 @@ class PayinDao {
       throw error;
     }
   }
+  
+
+async processStatusChange(transaction, isSuccess, amount, bankRRN) {
+  try {
+    return await db.transaction(async (tx) => {
+      const [updatedTransaction] = await tx
+        .update(payinTransactions)
+        .set({
+          status: isSuccess ? "SUCCESS" : "FAILED",
+          vendorTransactionId: bankRRN,
+          updatedAt: new Date()
+        })
+        .where(eq(payinTransactions.id, transaction.id))
+        .returning();
+      const userWallets = await walletDao.getUserWallets(transaction.userId);
+      const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
+      const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
+      if (!serviceWallet || !collectionWallet) {
+        throw new Error("Required wallets not found");
+      }
+      if (isSuccess) {
+        await walletDao.updateWalletBalance(
+          collectionWallet.wallet.id,
+          amount,
+          "CREDIT",
+          `Payin Transaction Credit - ${transaction.uniqueId}`,
+          transaction.transactionId,
+          transaction.userId,
+          "PAYIN"
+        );
+      } else {
+        await walletDao.updateWalletBalance(
+          serviceWallet.wallet.id,
+          transaction.totalCharges,
+          "CREDIT",
+          `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
+          transaction.transactionId,
+          transaction.userId,
+          "PAYIN"
+        );
+      }
+      return updatedTransaction;
+    });
+  } catch (error) {
+    log.error("Error processing status change:", error);
+    throw error;
+  }
 }
 
+async getTransactionByUniqueId(uniqueId) {
+  try {
+    const [transaction] = await db
+      .select()
+      .from(payinTransactions)
+      .where(eq(payinTransactions.uniqueId, uniqueId))
+      .limit(1);
+    return transaction;
+  } catch (error) {
+    log.error("Error getting transaction:", error);
+    throw error;
+  }
+}
 
+}
 
 module.exports = new PayinDao();

@@ -46,7 +46,8 @@
     "nodemon": "^3.1.7",
     "pdfmake": "^0.2.10",
     "pg": "^8.11.3",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

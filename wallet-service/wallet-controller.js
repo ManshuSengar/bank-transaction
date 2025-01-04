@@ -403,6 +403,7 @@ walletRouter.get(
         startDate,
         endDate,
         userId,
+        search
       } = req.query;
 
       const filters = {
@@ -411,6 +412,9 @@ walletRouter.get(
       };
       if (type?.trim()) {
         filters.type = type.toUpperCase().trim();
+      }
+      if(search?.trim()){
+        filters.search = search.trim();
       }
 
       if (referenceType?.trim()) {
@@ -442,7 +446,6 @@ walletRouter.get(
         }
         filters.walletIds = allWallets.map((w) => w.id);
       }
-      console.log("Final Filters:", JSON.stringify(filters, null, 2));
       const transactionLogs = await walletDao.getAllWalletTransactionLogs(
         filters
       );

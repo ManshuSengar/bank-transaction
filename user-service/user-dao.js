@@ -221,7 +221,7 @@ async function registerNewUser(userObj) {
       await walletDao.initializeUserWallets(user.id, tx); // Pass the transaction object
 
       // Send welcome email
-      console.log("randomPassword--> ",randomPassword);
+      console.log("randomPassword--> ", randomPassword);
       await emailService.sendWelcomeEmail(
         { ...user, password: randomPassword },
         randomPassword
@@ -721,13 +721,35 @@ async function getAllUsers(page = 1, limit = 10) {
       .leftJoin(addresses, eq(users.id, addresses.userId))
       .limit(limit)
       .offset(offset);
+
+    // Get wallet balances for each user
+    const userDataWithWallets = await Promise.all(
+      userData.map(async (user) => {
+        const wallets = await walletDao.getUserWallets(user.id);
+        const serviceWallet = wallets.find((w) => w.type.name === "SERVICE");
+        const collectionWallet = wallets.find(
+          (w) => w.type.name === "COLLECTION"
+        );
+
+        return {
+          ...user,
+          wallets: {
+            serviceBalance: serviceWallet ? serviceWallet.wallet.balance : 0,
+            collectionBalance: collectionWallet
+              ? collectionWallet.wallet.balance
+              : 0,
+          },
+        };
+      })
+    );
+
     log.info("Retrieved list of users", users);
     // Count total number of users
     const [{ count }] = await db.select({ count: sql`COUNT(*)` }).from(users);
 
     log.info("Retrieved list of users");
     return {
-      userData,
+      userData: userDataWithWallets,
       pagination: {
         currentPage: page,
         totalUsers: Number(count),
@@ -745,6 +767,51 @@ async function getAllUsers(page = 1, limit = 10) {
     throw error;
   }
 }
+
+async function toggleUserStatus(userId) {
+  try {
+    // Get current user status
+    const [currentUser] = await db
+      .select({
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!currentUser) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      error.messageCode = "USER_NOT_FOUND";
+      error.userMessage = "User not found";
+      throw error;
+    }
+
+    // Toggle the status
+    await db
+      .update(users)
+      .set({
+        isActive: !currentUser.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    // Return success response
+    return {
+      success: true,
+      isActive: !currentUser.isActive
+    };
+
+  } catch (error) {
+    log.error("Error toggling user status:", error);
+    throw error;
+  }
+}
+
+
+
+
+
 module.exports = {
   validateLoginUser,
   registerNewUser,
@@ -759,4 +826,5 @@ module.exports = {
   resetPassword,
   changePassword,
   getAllUsers,
+  toggleUserStatus,
 };

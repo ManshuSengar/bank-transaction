@@ -8,13 +8,14 @@ const {
   walletTransactionLogs,
 } = require("./db/schema");
 const { users } = require("../user-service/db/schema");
-const { eq, and, or, between, desc, sql } = require("drizzle-orm");
+const { eq, and, or, between, desc, sql,like } = require("drizzle-orm");
 const crypto = require("crypto");
 
 class WalletDao {
   generateTransactionUniqueId() {
     return crypto.randomBytes(6).toString("hex");
   }
+
   async initializeUserWallets(userId, tx = db) {
     // Make tx parameter optional with default as db
     try {
@@ -43,6 +44,7 @@ class WalletDao {
       throw error;
     }
   }
+
   async getUserWallets(userId) {
     try {
       const wallets = await db
@@ -437,6 +439,7 @@ class WalletDao {
       throw error;
     }
   }
+
   async getAdvancedWalletTransactionLogs(filters) {
     try {
       const {
@@ -577,9 +580,9 @@ class WalletDao {
         startDate,
         endDate,
         userId,
+        search
       } = filters;
-
-      // Start building the query
+  
       let query = db
         .select({
           id: walletTransactionLogs.id,
@@ -596,42 +599,49 @@ class WalletDao {
           balanceBefore: walletTransactionLogs.balanceBefore,
           status: walletTransactionLogs.status,
           transactionId: walletTransactionLogs.transactionId,
-          // Join with users table
           userData: {
             username: users.username,
             firstname: users.firstname,
-            lastname: users.lastname,
+            lastname: users.lastname
           },
-          // Include wallet type information
-          walletTypeInfo: walletTypes.name,
+          walletTypeInfo: walletTypes.name
         })
         .from(walletTransactionLogs)
         .leftJoin(users, eq(walletTransactionLogs.userId, users.id))
-        .leftJoin(
-          userWallets,
-          eq(walletTransactionLogs.walletId, userWallets.id)
-        )
+        .leftJoin(userWallets, eq(walletTransactionLogs.walletId, userWallets.id))
         .leftJoin(walletTypes, eq(userWallets.walletTypeId, walletTypes.id));
-
-      // Build conditions array
+  
       const conditions = [];
-
+  
+      if (search) {
+        conditions.push(
+          or(
+            like(users.username, `%${search}%`),
+            like(users.firstname, `%${search}%`),
+            like(users.lastname, `%${search}%`),
+            like(walletTransactionLogs.transactionUniqueId, `%${search}%`),
+            like(walletTransactionLogs.description, `%${search}%`),
+            like(walletTransactionLogs.referenceId, `%${search}%`)
+          )
+        );
+      }
+  
       if (walletIds?.length) {
         conditions.push(sql`${walletTransactionLogs.walletId} IN ${walletIds}`);
       }
-
+  
       if (type) {
         conditions.push(eq(walletTransactionLogs.type, type));
       }
-
+  
       if (referenceType) {
         conditions.push(eq(walletTransactionLogs.referenceType, referenceType));
       }
-
+  
       if (userId) {
         conditions.push(eq(walletTransactionLogs.userId, userId));
       }
-
+  
       if (startDate && endDate) {
         const parsedStartDate = new Date(startDate);
         const parsedEndDate = new Date(endDate);
@@ -642,15 +652,13 @@ class WalletDao {
           )
         );
       }
-
-      // Apply conditions if any exist
+  
       if (conditions.length > 0) {
         query = query.where(and(...conditions));
       }
-
+  
       const offset = (page - 1) * limit;
-
-      // Execute queries
+  
       const [logs, countResult] = await Promise.all([
         query
           .limit(limit)
@@ -659,31 +667,30 @@ class WalletDao {
         db
           .select({ count: sql`COUNT(*)` })
           .from(walletTransactionLogs)
-          .where(conditions.length > 0 ? and(...conditions) : undefined),
+          .leftJoin(users, eq(walletTransactionLogs.userId, users.id))
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
       ]);
-
-      // Transform the data to match the expected format
+  
       const transformedLogs = logs.map((log) => ({
         ...log,
         user: {
           username: log.userData.username,
           firstname: log.userData.firstname,
-          lastname: log.userData.lastname,
+          lastname: log.userData.lastname
         },
-        walletType: log.walletTypeInfo,
+        walletType: log.walletTypeInfo
       }));
-
+  
       return {
         data: transformedLogs,
         pagination: {
           page,
           limit,
           total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit),
-        },
+          pages: Math.ceil(Number(countResult[0].count) / limit)
+        }
       };
     } catch (error) {
-      console.error("Detailed error:", error);
       log.error("Error getting all wallet transaction logs:", error);
       throw error;
     }
@@ -706,6 +713,7 @@ class WalletDao {
     }
 
   }
+  
   getHrefForWalletType(type) {
     switch(type.toUpperCase()) {
       case 'SERVICE': return '/business/fund-request';
