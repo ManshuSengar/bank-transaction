@@ -37,6 +37,7 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
         username: users.username,
         password: users.password,
         roleId: users.roleId,
+        isActive: users.isActive,
       })
       .from(users)
       .where(eq(users.username, loginInfo.username))
@@ -50,10 +51,26 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       throw error;
     }
 
-    const validPassword = await bcrypt.compare(
-      loginInfo.password,
-      user.password
-    );
+    // Check if user is active before proceeding
+    if (!user.isActive) {
+      await db.insert(userLoginHistory).values({
+        userId: user.id,
+        ipAddress,
+        userAgent,
+        loginStatus: "FAILED",
+        failureReason: "Account is inactive",
+        latitude: loginInfo.location?.latitude || null,
+        longitude: loginInfo.location?.longitude || null,
+      });
+
+      const error = new Error("Account inactive");
+      error.statusCode = 403;
+      error.messageCode = "ACCOUNT_INACTIVE";
+      error.userMessage = "Your account is currently inactive. Please contact support.";
+      throw error;
+    }
+
+    const validPassword = await bcrypt.compare(loginInfo.password, user.password);
 
     if (!validPassword) {
       await db.insert(userLoginHistory).values({
@@ -128,17 +145,18 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       longitude: loginInfo.location?.longitude || null,
     });
 
-    log.info(loginInfo.username + " has been validated");
-
     const jwtToken = jwt.sign(
       {
         username: user.username,
         userId: user.id,
         roleId: user.roleId,
-        sessionId: session.id, // Include session ID in token
+        sessionId: session.id,
+        isActive: user.isActive
       },
       secretKey
     );
+
+    // Get user role
     const [role] = await db
       .select({
         id: roles.id,
@@ -148,7 +166,7 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    // Fetch user's permissions
+    // Get user permissions
     const userPermissions = await db
       .select({
         name: permissions.name,
@@ -157,17 +175,21 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
       .where(eq(rolePermissions.roleId, user.roleId));
 
+    log.info(`User ${loginInfo.username} logged in successfully`);
+
     return {
       token: jwtToken,
-      username: loginInfo.username,
+      username: user.username,
       role: {
         id: role.id,
         name: role.name,
       },
       permissions: userPermissions.map((p) => p.name),
+      isActive: user.isActive,
       messageCode: "USRV",
       message: "Valid credential.",
     };
+
   } catch (error) {
     log.error("Error in validateLoginUser:", error);
     if (!error.statusCode) {
@@ -825,7 +847,6 @@ async function getAllUsers(page = 1, limit = 10) {
 
 async function toggleUserStatus(userId) {
   try {
-    // Get current user status
     const [currentUser] = await db
       .select({
         isActive: users.isActive,

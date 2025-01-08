@@ -98,7 +98,6 @@ userrouter.post("/change-password", authenticateToken, async (req, res) => {
 // user-controller.js - Updated login endpoint
 userrouter.post("/validateuser", async (req, res) => {
   try {
-    console.log("req.body-> ", req.body);
     let loginInfo = req.body;
     let { error } = userValidator.validateLoginUserSchema(loginInfo);
     if (isNotValidSchema(error, res)) return;
@@ -129,7 +128,6 @@ userrouter.post("/validateuser", async (req, res) => {
       ipAddress,
       JSON.stringify(deviceInfo)
     );
-    console.log("Vlofofof--> ",result);
 
     return res.header("x-auth-token", result.token).send({
       username: result.username,
@@ -137,9 +135,20 @@ userrouter.post("/validateuser", async (req, res) => {
       message: result.message,
       role: result?.role?.name,
       permissions: result.permissions,
+      isActive: result.isActive
     });
   } catch (err) {
     log.error(`Error in login for username : ${err}`);
+    
+    // Special handling for inactive account
+    if (err.messageCode === 'ACCOUNT_INACTIVE') {
+      return res.status(err.statusCode).send({
+        messageCode: err.messageCode,
+        message: err.userMessage,
+        error: err.message,
+      });
+    }
+
     return res.status(err.statusCode || 500).send({
       messageCode: err.messageCode || "INTERNAL_ERROR",
       message: err.userMessage || "An error occurred during login",
@@ -147,7 +156,6 @@ userrouter.post("/validateuser", async (req, res) => {
     });
   }
 });
-
 // Protected routes with role-based access
 userrouter.post("/updatepassword", authenticateToken, async (req, res) => {
   try {
