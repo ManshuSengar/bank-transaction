@@ -4,6 +4,7 @@ const log = new Logger("API-Token-Dao");
 const { db, apiTokens, apiTokenLogs } = require("./db/schema");
 const { eq, and, like, or, sql } = require("drizzle-orm");
 const crypto = require("crypto");
+const {users}=require("../user-service/db/schema")
 
 class ApiTokenDao {
   generateToken() {
@@ -53,7 +54,6 @@ class ApiTokenDao {
 
   async getTokens({ page = 1, limit = 10, status = null, search = null }) {
     try {
-      // Build conditions array
       const conditions = [];
 
       if (status) {
@@ -69,25 +69,43 @@ class ApiTokenDao {
         );
       }
 
-      // Build query
       const offset = (page - 1) * limit;
+      const baseQuery = db
+        .select({
+          token: {
+            id: apiTokens.id,
+            userId: apiTokens.userId,
+            name: apiTokens.name,
+            description: apiTokens.description,
+            ipAddresses: apiTokens.ipAddresses,
+            status: apiTokens.status,
+            lastUsedAt: apiTokens.lastUsedAt,
+            expiresAt: apiTokens.expiresAt,
+            rejectionReason: apiTokens.rejectionReason,
+            approvedBy: apiTokens.approvedBy,
+            approvedAt: apiTokens.approvedAt,
+            createdAt: apiTokens.createdAt,
+            updatedAt: apiTokens.updatedAt,
+          },
+          user: {
+            username: users.username,
+            firstname: users.firstname,
+            lastname: users.lastname,
+            emailId: users.emailId,
+            phoneNo: users.phoneNo,
+          },
+        })
+        .from(apiTokens)
+        .leftJoin(users, eq(apiTokens.userId, users.id));
 
-      // Execute query with or without conditions
       const [tokens, countResult] = await Promise.all([
         conditions.length > 0
-          ? db
-              .select()
-              .from(apiTokens)
+          ? baseQuery
               .where(and(...conditions))
               .limit(limit)
               .offset(offset)
               .orderBy(apiTokens.createdAt)
-          : db
-              .select()
-              .from(apiTokens)
-              .limit(limit)
-              .offset(offset)
-              .orderBy(apiTokens.createdAt),
+          : baseQuery.limit(limit).offset(offset).orderBy(apiTokens.createdAt),
 
         conditions.length > 0
           ? db
@@ -98,7 +116,11 @@ class ApiTokenDao {
       ]);
 
       return {
-        data: tokens.map((t) => ({ ...t, token: undefined })),
+        data: tokens.map((t) => ({
+          ...t.token,
+          token: undefined,
+          user: t.user,
+        })),
         pagination: {
           page,
           limit,
@@ -111,7 +133,6 @@ class ApiTokenDao {
       throw error;
     }
   }
-
   async getUserTokens(userId) {
     try {
       const tokens = await db
@@ -133,14 +154,13 @@ class ApiTokenDao {
         .from(apiTokens)
         .where(eq(apiTokens.token, token))
         .orderBy(apiTokens.createdAt);
-        console.log("token--> ",tokens);
+      console.log("token--> ", tokens);
       return tokens;
     } catch (error) {
       log.error("Error getting user tokens:", error);
       throw error;
     }
   }
-
 
   async getTokenById(id) {
     try {
@@ -228,6 +248,33 @@ class ApiTokenDao {
       return token;
     } catch (error) {
       log.error("Error updating token status:", error);
+      throw error;
+    }
+  }
+
+  async getValidToken(token, ipAddress) {
+    console.log("token,token", token, "--> ", ipAddress);
+    try {
+      const tokens = await db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.token, token))
+        .orderBy(apiTokens.createdAt);
+      console.log("tokens--> ", tokens);
+      if (!tokens.length) {
+        return null;
+      }
+      const validToken = tokens.find((token) => {
+        if (token.status !== "ACTIVE") return false;
+        if (!token.ipAddresses) return true;
+        const whitelistedIps = token.ipAddresses
+          .split(",")
+          .map((ip) => ip.trim());
+        return whitelistedIps.includes(ipAddress);
+      });
+      return validToken || null;
+    } catch (error) {
+      log.error("Error getting valid token:", error);
       throw error;
     }
   }

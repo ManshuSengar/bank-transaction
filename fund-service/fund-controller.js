@@ -56,33 +56,35 @@ const upload = multer({
 
 // Validation schemas
 const fundRequestSchema = Joi.object({
-  transferType: Joi.string().valid('BANK_TO_WALLET', 'WALLET_TO_WALLET').default('BANK_TO_WALLET'),
-  
+  transferType: Joi.string()
+    .valid("BANK_TO_WALLET", "WALLET_TO_WALLET")
+    .default("BANK_TO_WALLET"),
+
   // Bank to wallet specific fields
   // bankId: Joi.number().when('transferType', {
-  //   is: 'BANK_TO_WALLET', 
+  //   is: 'BANK_TO_WALLET',
   //   then: Joi.required(),
   //   otherwise: Joi.optional()
   // }),
   // walletType: Joi.string().valid('SERVICE', 'PAYOUT').when('transferType', {
-  //   is: 'BANK_TO_WALLET', 
-  //   then: Joi.required(), 
+  //   is: 'BANK_TO_WALLET',
+  //   then: Joi.required(),
   //   otherwise: Joi.optional()
   // }),
   // paymentMode: Joi.string().valid('IMPS', 'NEFT', 'RTGS', 'UPI').when('transferType', {
-  //   is: 'BANK_TO_WALLET', 
+  //   is: 'BANK_TO_WALLET',
   //   then: Joi.required(),
   //   otherwise: Joi.optional()
   // }),
 
   // // Wallet to wallet specific fields
   // sourceWalletType: Joi.string().valid('SERVICE', 'PAYOUT').when('transferType', {
-  //   is: 'WALLET_TO_WALLET', 
+  //   is: 'WALLET_TO_WALLET',
   //   then: Joi.required(),
   //   otherwise: Joi.optional()
   // }),
   // targetWalletType: Joi.string().valid('SERVICE', 'PAYOUT').when('transferType', {
-  //   is: 'WALLET_TO_WALLET', 
+  //   is: 'WALLET_TO_WALLET',
   //   then: Joi.required(),
   //   otherwise: Joi.optional()
   // }),
@@ -98,14 +100,14 @@ const fundRequestSchema = Joi.object({
 fundRouter.get("/wallets", authenticateToken, async (req, res) => {
   try {
     const userWallets = await walletDao.getUserWallets(req.user.userId);
-    
+
     res.send({
       messageCode: "WALLETS_FETCHED",
       message: "User wallets retrieved successfully",
-      wallets: userWallets.map(w => ({
+      wallets: userWallets.map((w) => ({
         type: w.type.name,
-        balance: w.wallet.balance
-      }))
+        balance: w.wallet.balance,
+      })),
     });
   } catch (error) {
     log.error("Error getting user wallets:", error);
@@ -166,7 +168,7 @@ fundRouter.post(
 fundRouter.put(
   "/:requestId/status",
   authenticateToken,
-//   authorize(["manage_funds"]),
+  //   authorize(["manage_funds"]),
   async (req, res) => {
     try {
       const { status, remarks } = req.body;
@@ -200,9 +202,11 @@ fundRouter.put(
       log.error("Error updating fund request status:", error);
       res.status(error.statusCode || 500).send({
         messageCode: error.messageCode || "ERR_UPDATE_STATUS",
-      message: error.message || "Error updating request status",
-    });
-  }});
+        message: error.message || "Error updating request status",
+      });
+    }
+  }
+);
 
 // Get user's fund requests
 fundRouter.get("/my-requests", authenticateToken, async (req, res) => {
@@ -232,7 +236,7 @@ fundRouter.get("/my-requests", authenticateToken, async (req, res) => {
 fundRouter.get(
   "/",
   authenticateToken,
-//   authorize(["manage_funds"]),
+  //   authorize(["manage_funds"]),
   async (req, res) => {
     try {
       const { page = 1, limit = 10, status, transferType, userId } = req.query;
@@ -244,6 +248,8 @@ fundRouter.get(
         page: parseInt(page),
         limit: parseInt(limit),
       });
+
+      console.log("requests--> ", requests);
 
       res.send(requests);
     } catch (error) {
@@ -276,7 +282,7 @@ fundRouter.get("/:requestId", authenticateToken, async (req, res) => {
     res.send({
       messageCode: "REQUEST_FETCHED",
       message: "Fund request retrieved successfully",
-      request
+      request,
     });
   } catch (error) {
     log.error("Error getting fund request details:", error);
@@ -323,14 +329,14 @@ fundRouter.get("/:requestId/document", authenticateToken, async (req, res) => {
 fundRouter.get(
   "/stats/summary",
   authenticateToken,
-//   authorize(["manage_funds"]),
+  //   authorize(["manage_funds"]),
   async (req, res) => {
     try {
       const stats = await fundDao.getFundRequestStats();
       res.send({
         messageCode: "STATS_FETCHED",
         message: "Fund request statistics retrieved successfully",
-        stats
+        stats,
       });
     } catch (error) {
       log.error("Error getting fund request statistics:", error);

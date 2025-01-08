@@ -4,7 +4,8 @@ const log = new Logger("Fund-Dao");
 const { db, fundRequests, fundRequestLogs } = require("./db/schema");
 const { eq, and, desc,sql } = require("drizzle-orm");
 const walletDao = require("../wallet-service/wallet-dao");
-
+const {users}=require("../user-service/db/schema");
+const {banks}=require("../bank-service/db/schema");
 class FundDao {
   async createFundRequest(requestData, userId) {
     try {
@@ -146,7 +147,7 @@ class FundDao {
                 "CREDIT",
                 `Fund request #${requestId} approved`,
                 requestId,
-                userId,
+                currentRequest?.userId,
                 "FUND_REQUEST"
               );
             }
@@ -170,7 +171,7 @@ class FundDao {
                 "DEBIT",
                 `Internal Wallet Transfer #${requestId}`,
                 requestId,
-                userId,
+                currentRequest?.userId,
                 "FUND_REQUEST"
               );
 
@@ -181,7 +182,7 @@ class FundDao {
                 "CREDIT",
                 `Internal Wallet Transfer #${requestId}`,
                 requestId,
-                userId,
+                currentRequest?.userId,
                 "FUND_REQUEST"
               );
             }
@@ -204,7 +205,6 @@ class FundDao {
     limit = 10,
   }) {
     try {
-      // Build where conditions
       const whereConditions = [];
       if (userId) {
         whereConditions.push(eq(fundRequests.userId, userId));
@@ -213,8 +213,47 @@ class FundDao {
         whereConditions.push(eq(fundRequests.status, status));
       }
 
-      // Main query
-      let query = db.select().from(fundRequests);
+      let query = db
+        .select({
+          request: {
+            id: fundRequests.id,
+            userId: fundRequests.userId,
+            bankId: fundRequests.bankId,
+            walletType: fundRequests.walletType,
+            sourceWalletType: fundRequests.sourceWalletType,
+            targetWalletType: fundRequests.targetWalletType,
+            transferType: fundRequests.transferType,
+            amount: fundRequests.amount,
+            paymentMode: fundRequests.paymentMode,
+            paymentDate: fundRequests.paymentDate,
+            referenceNumber: fundRequests.referenceNumber,
+            documentPath: fundRequests.documentPath,
+            remarks: fundRequests.remarks,
+            status: fundRequests.status,
+            approvedBy: fundRequests.approvedBy,
+            approvedAt: fundRequests.approvedAt,
+            rejectionReason: fundRequests.rejectionReason,
+            createdAt: fundRequests.createdAt,
+            updatedAt: fundRequests.updatedAt
+          },
+          user: {
+            username: users.username,
+            firstname: users.firstname,
+            lastname: users.lastname,
+            emailId: users.emailId,
+            phoneNo: users.phoneNo
+          },
+          bank: {
+            name: banks.name,
+            accountNumber: banks.accountNumber,
+            ifsc: banks.ifsc,
+            branch: banks.branch
+          }
+        })
+        .from(fundRequests)
+        .leftJoin(users, eq(fundRequests.userId, users.id))
+        .leftJoin(banks, eq(fundRequests.bankId, banks.id));
+
       if (whereConditions.length > 0) {
         query = query.where(and(...whereConditions));
       }
@@ -225,7 +264,6 @@ class FundDao {
         .limit(limit)
         .offset(offset);
 
-      // Count query
       let countQuery = db
         .select({ count: sql`count(*)` })
         .from(fundRequests);
@@ -238,8 +276,14 @@ class FundDao {
         countQuery,
       ]);
 
+      const formattedRequests = requests.map(r => ({
+        ...r.request,
+        user: r.user,
+        bank: r.bank
+      }));
+
       return {
-        data: requests,
+        data: formattedRequests,
         pagination: {
           page,
           limit,

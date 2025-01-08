@@ -11,7 +11,11 @@ const {
   userActivityLogs,
   userLoginHistory,
   permissions,
-  rolePermissions
+  rolePermissions,
+  schemes,
+  schemeCharges,
+  products,
+  apiConfigs
 } = require("./db/schema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -33,6 +37,7 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
         username: users.username,
         password: users.password,
         roleId: users.roleId,
+        isActive: users.isActive,
       })
       .from(users)
       .where(eq(users.username, loginInfo.username))
@@ -46,10 +51,26 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       throw error;
     }
 
-    const validPassword = await bcrypt.compare(
-      loginInfo.password,
-      user.password
-    );
+    // Check if user is active before proceeding
+    if (!user.isActive) {
+      await db.insert(userLoginHistory).values({
+        userId: user.id,
+        ipAddress,
+        userAgent,
+        loginStatus: "FAILED",
+        failureReason: "Account is inactive",
+        latitude: loginInfo.location?.latitude || null,
+        longitude: loginInfo.location?.longitude || null,
+      });
+
+      const error = new Error("Account inactive");
+      error.statusCode = 403;
+      error.messageCode = "ACCOUNT_INACTIVE";
+      error.userMessage = "Your account is currently inactive. Please contact support.";
+      throw error;
+    }
+
+    const validPassword = await bcrypt.compare(loginInfo.password, user.password);
 
     if (!validPassword) {
       await db.insert(userLoginHistory).values({
@@ -124,17 +145,18 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       longitude: loginInfo.location?.longitude || null,
     });
 
-    log.info(loginInfo.username + " has been validated");
-
     const jwtToken = jwt.sign(
       {
         username: user.username,
         userId: user.id,
         roleId: user.roleId,
-        sessionId: session.id, // Include session ID in token
+        sessionId: session.id,
+        isActive: user.isActive
       },
       secretKey
     );
+
+    // Get user role
     const [role] = await db
       .select({
         id: roles.id,
@@ -144,7 +166,7 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    // Fetch user's permissions
+    // Get user permissions
     const userPermissions = await db
       .select({
         name: permissions.name,
@@ -153,17 +175,21 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
       .where(eq(rolePermissions.roleId, user.roleId));
 
+    log.info(`User ${loginInfo.username} logged in successfully`);
+
     return {
       token: jwtToken,
-      username: loginInfo.username,
+      username: user.username,
       role: {
         id: role.id,
         name: role.name,
       },
       permissions: userPermissions.map((p) => p.name),
+      isActive: user.isActive,
       messageCode: "USRV",
       message: "Valid credential.",
     };
+
   } catch (error) {
     log.error("Error in validateLoginUser:", error);
     if (!error.statusCode) {
@@ -221,7 +247,7 @@ async function registerNewUser(userObj) {
       await walletDao.initializeUserWallets(user.id, tx); // Pass the transaction object
 
       // Send welcome email
-      console.log("randomPassword--> ",randomPassword);
+      console.log("randomPassword--> ", randomPassword);
       await emailService.sendWelcomeEmail(
         { ...user, password: randomPassword },
         randomPassword
@@ -721,13 +747,86 @@ async function getAllUsers(page = 1, limit = 10) {
       .leftJoin(addresses, eq(users.id, addresses.userId))
       .limit(limit)
       .offset(offset);
-    log.info("Retrieved list of users", users);
-    // Count total number of users
+
+    // Import required schemas from scheme service
+    const { schemes, userSchemes, schemeCharges, apiConfigs } = require('../scheme-service/db/schema');
+    const { products } = require('../product-service/db/schema');
+
+    // Get wallet balances and schemes for each user
+    const userDataWithDetails = await Promise.all(
+      userData.map(async (user) => {
+        // Get wallet information
+        const wallets = await walletDao.getUserWallets(user.id);
+        const serviceWallet = wallets.find((w) => w.type.name === "SERVICE");
+        const collectionWallet = wallets.find(
+          (w) => w.type.name === "COLLECTION"
+        );
+
+        // Get user schemes with complete details
+        const userSchemeResults = await db
+          .select()
+          .from(userSchemes)
+          .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+          .leftJoin(products, eq(schemes.productId, products.id))
+          .leftJoin(
+            schemeCharges,
+            and(
+              eq(schemes.id, schemeCharges.schemeId),
+              eq(schemeCharges.status, "ACTIVE")
+            )
+          )
+          .leftJoin(apiConfigs, eq(schemeCharges.apiConfigId, apiConfigs.id))
+          .where(
+            and(
+              eq(userSchemes.userId, user.id),
+              eq(userSchemes.status, "ACTIVE")
+            )
+          );
+
+        // Process and group schemes
+        const schemesMap = new Map();
+        
+        userSchemeResults.forEach((row) => {
+          if (!schemesMap.has(row.schemes.id)) {
+            schemesMap.set(row.schemes.id, {
+              ...row.schemes,
+              product: {
+                id: row.products.id,
+                name: row.products.name
+              },
+              assignmentId: row.user_schemes.id,
+              assignedAt: row.user_schemes.createdAt,
+              charges: []
+            });
+          }
+
+          const scheme = schemesMap.get(row.schemes.id);
+          if (row.scheme_charges && !scheme.charges.some(c => c.id === row.scheme_charges.id)) {
+            scheme.charges.push({
+              ...row.scheme_charges,
+              api: row.api_configs
+            });
+          }
+        });
+
+        return {
+          ...user,
+          wallets: {
+            serviceBalance: serviceWallet ? serviceWallet.wallet.balance : 0,
+            collectionBalance: collectionWallet
+              ? collectionWallet.wallet.balance
+              : 0,
+          },
+          schemes: Array.from(schemesMap.values())
+        };
+      })
+    );
+
     const [{ count }] = await db.select({ count: sql`COUNT(*)` }).from(users);
 
-    log.info("Retrieved list of users");
+    log.info("Retrieved list of users with schemes");
     return {
-      userData,
+      userData: userDataWithDetails,
       pagination: {
         currentPage: page,
         totalUsers: Number(count),
@@ -745,6 +844,50 @@ async function getAllUsers(page = 1, limit = 10) {
     throw error;
   }
 }
+
+async function toggleUserStatus(userId) {
+  try {
+    const [currentUser] = await db
+      .select({
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!currentUser) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      error.messageCode = "USER_NOT_FOUND";
+      error.userMessage = "User not found";
+      throw error;
+    }
+
+    // Toggle the status
+    await db
+      .update(users)
+      .set({
+        isActive: !currentUser.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    // Return success response
+    return {
+      success: true,
+      isActive: !currentUser.isActive
+    };
+
+  } catch (error) {
+    log.error("Error toggling user status:", error);
+    throw error;
+  }
+}
+
+
+
+
+
 module.exports = {
   validateLoginUser,
   registerNewUser,
@@ -759,4 +902,5 @@ module.exports = {
   resetPassword,
   changePassword,
   getAllUsers,
+  toggleUserStatus,
 };
