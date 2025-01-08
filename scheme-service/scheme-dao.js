@@ -550,6 +550,8 @@ class SchemeDao {
       throw error;
     }
   }
+
+  
   async getUsersWithSchemes({
     page = 1,
     limit = 10,

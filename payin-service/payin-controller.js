@@ -100,6 +100,7 @@ payinRouter.post("/qr", async (req, res) => {
       createdAt: result.transaction.createdAt,
       updatedAt: result.transaction.updatedAt,
     });
+    
   } catch (error) {
     log.error("Error generating public QR:", error);
     res.status(error.statusCode || 500).send({

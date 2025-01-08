@@ -11,7 +11,11 @@ const {
   userActivityLogs,
   userLoginHistory,
   permissions,
-  rolePermissions
+  rolePermissions,
+  schemes,
+  schemeCharges,
+  products,
+  apiConfigs
 } = require("./db/schema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -722,14 +726,66 @@ async function getAllUsers(page = 1, limit = 10) {
       .limit(limit)
       .offset(offset);
 
-    // Get wallet balances for each user
-    const userDataWithWallets = await Promise.all(
+    // Import required schemas from scheme service
+    const { schemes, userSchemes, schemeCharges, apiConfigs } = require('../scheme-service/db/schema');
+    const { products } = require('../product-service/db/schema');
+
+    // Get wallet balances and schemes for each user
+    const userDataWithDetails = await Promise.all(
       userData.map(async (user) => {
+        // Get wallet information
         const wallets = await walletDao.getUserWallets(user.id);
         const serviceWallet = wallets.find((w) => w.type.name === "SERVICE");
         const collectionWallet = wallets.find(
           (w) => w.type.name === "COLLECTION"
         );
+
+        // Get user schemes with complete details
+        const userSchemeResults = await db
+          .select()
+          .from(userSchemes)
+          .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+          .leftJoin(products, eq(schemes.productId, products.id))
+          .leftJoin(
+            schemeCharges,
+            and(
+              eq(schemes.id, schemeCharges.schemeId),
+              eq(schemeCharges.status, "ACTIVE")
+            )
+          )
+          .leftJoin(apiConfigs, eq(schemeCharges.apiConfigId, apiConfigs.id))
+          .where(
+            and(
+              eq(userSchemes.userId, user.id),
+              eq(userSchemes.status, "ACTIVE")
+            )
+          );
+
+        // Process and group schemes
+        const schemesMap = new Map();
+        
+        userSchemeResults.forEach((row) => {
+          if (!schemesMap.has(row.schemes.id)) {
+            schemesMap.set(row.schemes.id, {
+              ...row.schemes,
+              product: {
+                id: row.products.id,
+                name: row.products.name
+              },
+              assignmentId: row.user_schemes.id,
+              assignedAt: row.user_schemes.createdAt,
+              charges: []
+            });
+          }
+
+          const scheme = schemesMap.get(row.schemes.id);
+          if (row.scheme_charges && !scheme.charges.some(c => c.id === row.scheme_charges.id)) {
+            scheme.charges.push({
+              ...row.scheme_charges,
+              api: row.api_configs
+            });
+          }
+        });
 
         return {
           ...user,
@@ -739,17 +795,16 @@ async function getAllUsers(page = 1, limit = 10) {
               ? collectionWallet.wallet.balance
               : 0,
           },
+          schemes: Array.from(schemesMap.values())
         };
       })
     );
 
-    log.info("Retrieved list of users", users);
-    // Count total number of users
     const [{ count }] = await db.select({ count: sql`COUNT(*)` }).from(users);
 
-    log.info("Retrieved list of users");
+    log.info("Retrieved list of users with schemes");
     return {
-      userData: userDataWithWallets,
+      userData: userDataWithDetails,
       pagination: {
         currentPage: page,
         totalUsers: Number(count),
