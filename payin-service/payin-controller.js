@@ -553,4 +553,68 @@ payinRouter.get("/admin/transactions/download", async (req, res) => {
   }
 });
 
+// Admin endpoint to manually mark pending transactions as failed
+payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
+  try {
+    const { uniqueId } = req.body;
+
+    if (!uniqueId) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Unique ID is required"
+      });
+    }
+
+    // Verify user has permission to perform this action
+    // if (!req.user.permissions.includes('manage_transactions')) {
+    //   return res.status(403).send({
+    //     messageCode: "FORBIDDEN",
+    //     message: "You do not have permission to mark transactions as failed"
+    //   });
+    // }
+
+    const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
+    
+    if (!transaction) {
+      return res.status(404).send({
+        messageCode: "TRANSACTION_NOT_FOUND",
+        message: "Transaction not found"
+      });
+    }
+
+    // Only allow marking pending transactions as failed
+    if (transaction.status !== "PENDING") {
+      return res.status(400).send({
+        messageCode: "INVALID_STATUS",
+        message: "Only pending transactions can be marked as failed"
+      });
+    }
+
+    const updatedTransaction = await payinDao.processStatusChange(
+      transaction, 
+      false, // isSuccess = false (marking as failed)
+      transaction.amount, 
+      null // No bank RRN
+    );
+
+    res.send({
+      messageCode: "TRANSACTION_MARKED_FAILED",
+      message: "Transaction successfully marked as failed",
+      transaction: {
+        uniqueId: updatedTransaction.uniqueId,
+        status: updatedTransaction.status,
+        amount: updatedTransaction.amount
+      }
+    });
+  } catch (error) {
+    log.error("Error marking transaction as failed:", error);
+    res.status(500).send({
+      messageCode: "ERR_MARK_FAILED",
+      message: "Error marking transaction as failed"
+    });
+  }
+});
+
+
+
 module.exports = payinRouter;

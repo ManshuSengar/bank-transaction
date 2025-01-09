@@ -12,10 +12,7 @@ const {
   userLoginHistory,
   permissions,
   rolePermissions,
-  schemes,
-  schemeCharges,
-  products,
-  apiConfigs
+  
 } = require("./db/schema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -26,6 +23,8 @@ const { generateRandomPassword } = require("./utlis/password-utlis");
 const { eq, like, and, or, between, sql, desc } = require("drizzle-orm");
 const secretKey = getJwtSecretKey();
 const { getUserPermissions } = require("../middleware/auth-token-validator");
+const {  userSchemes ,schemes,schemeCharges,apiConfigs} = require('../scheme-service/db/schema');
+const {products} =require('../product-service/db/schema');
 
 const walletDao = require("../wallet-service/wallet-dao");
 
@@ -748,10 +747,7 @@ async function getAllUsers(page = 1, limit = 10) {
       .limit(limit)
       .offset(offset);
 
-    // Import required schemas from scheme service
-    const { schemes, userSchemes, schemeCharges, apiConfigs } = require('../scheme-service/db/schema');
-    const { products } = require('../product-service/db/schema');
-
+  
     // Get wallet balances and schemes for each user
     const userDataWithDetails = await Promise.all(
       userData.map(async (user) => {
@@ -783,7 +779,6 @@ async function getAllUsers(page = 1, limit = 10) {
             )
           );
 
-        // Process and group schemes
         const schemesMap = new Map();
         
         userSchemeResults.forEach((row) => {
