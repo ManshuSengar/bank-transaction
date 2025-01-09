@@ -1,4 +1,4 @@
-// payin-service/db/schema.js
+// payout-service/db/schema.js
 const { pgTable, serial, varchar, timestamp, decimal, integer, text, jsonb } = require('drizzle-orm/pg-core');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { users } = require('../../user-service/db/schema');
@@ -17,8 +17,8 @@ const pool = new Pool({
 
 const db = drizzle(pool);
 
-// Payin Transactions Table
-const payinTransactions = pgTable('payin_transactions', {
+// payout Transactions Table
+const payoutTransactions = pgTable('payout_transactions', {
     id: serial('id').primaryKey(),
     userId: integer('user_id').references(() => users.id).notNull(),
     schemeId: integer('scheme_id').references(() => schemes.id).notNull(),
@@ -43,5 +43,5 @@ const payinTransactions = pgTable('payin_transactions', {
 
 module.exports = {
     db,
-    payinTransactions
+    payoutTransactions
 };
