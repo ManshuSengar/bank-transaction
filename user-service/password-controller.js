@@ -2,7 +2,7 @@
 const express = require('express');
 const passwordRouter = express.Router();
 const { db, users } = require('../user-service/db/schema');
-const { eq } = require('drizzle-orm');
+const { eq ,and,sql} = require('drizzle-orm');
 const bcrypt = require('bcryptjs');
 const Logger = require('../logger/logger');
 const log = new Logger('Password-Controller');
@@ -51,7 +51,7 @@ passwordRouter.post('/setup', async (req, res) => {
             .where(
                 and(
                     eq(users.passwordResetToken, token),
-                    sql`${users.passwordResetExpires} > NOW()`
+                    sql`${users.passwordResetExpires} > CURRENT_TIMESTAMP`
                 )
             )
             .limit(1);
@@ -94,6 +94,7 @@ passwordRouter.post('/setup', async (req, res) => {
         });
 
     } catch (error) {
+        console.log('Error in password setup:', error);
         log.error('Error in password setup:', error);
         return res.status(500).send({
             messageCode: 'INTERNAL_ERROR',

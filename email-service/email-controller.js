@@ -180,7 +180,7 @@ class EmailController {
       }
 
       const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-      const resetLink = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+      const resetLink = `${baseUrl}/auth/setup-password?token=${resetToken}`;
 
       const emailTemplate = `
             <!DOCTYPE html>
