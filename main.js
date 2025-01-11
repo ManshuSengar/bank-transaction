@@ -3,6 +3,7 @@ const app = express();
 const morgan = require('morgan');
 require('dotenv').config();
 const cors = require('cors');
+const paymentStatusScheduler = require('./scheduler/payment-status-scheduler');
 
 const environment = app.get('env');
 app.use(express.json());
@@ -54,4 +55,11 @@ const port = process.env.PORT || 5000;
 app.listen(port, () => {
     console.log(`Application running in ${environment} environment, listening to port ${port}....`);
 });
+
+// try {
+//     paymentStatusScheduler.start();
+//     console.log('Payment status scheduler started successfully');
+// } catch (error) {
+//     console.error('Failed to start payment status scheduler:', error);
+// }
 
