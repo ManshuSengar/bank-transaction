@@ -31,6 +31,7 @@ const payinRouter = require('./payin-service/payin-controller');
 const callbackProcessRouter = require('./callback-service/callback-process-controller');
 const walletRouter = require('./wallet-service/wallet-controller');
 const passwordRouter=require('./user-service/password-controller');
+const payoutRouter = require('./payout-service/payout-controller');
 app.use('/user', userservicerouter);
 app.use('/permissions', permissionRouter);
 app.use('/roles', roleRouter);
@@ -47,6 +48,7 @@ app.use('/payin', payinRouter);
 app.use('/callback-process', callbackProcessRouter);
 app.use('/wallet', walletRouter);
 app.use('/password', passwordRouter);
+app.use('/payout', payoutRouter);
 if(environment === 'development'){
     app.use(morgan('tiny'));
     console.log('Morgan is enabled...');

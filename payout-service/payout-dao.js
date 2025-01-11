@@ -1,8 +1,7 @@
-// payout-service/payout-dao.js
 const Logger = require("../logger/logger");
-const log = new Logger("payout-Dao");
+const log = new Logger("Payout-Dao");
 const { db, payoutTransactions } = require("./db/schema");
-const { eq, and, sql, desc, or, like, gte, lte } = require("drizzle-orm");
+const { eq, and, sql, desc } = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
 const apiConfigDao = require("../api-config-service/api-config-dao");
@@ -11,52 +10,88 @@ const axios = require("axios");
 const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
-const { users } = require("../user-service/db/schema");
+const callBackDao=require("../callback-service/callback-dao");
+
 
 class PayoutDao {
+  generatePayoutId() {
+    return crypto.randomBytes(16).toString("hex");
+  }
+  async verifyAccount(userId, verificationData) {
+    try {
+      const apiConfig = await apiConfigDao.getDefaultApiConfig(2);
+      if (!apiConfig) {
+        throw {
+          statusCode: 500,
+          messageCode: "NO_API_CONFIG",
+          message: "No API configuration found for Payout",
+        };
+      }
 
-  async generatePayout(userId, amount, bankAccountNo , ifsc, mobile , beneficiaryName, vpaId, originalUniqueId = null) {
+      const vendorPayload = {
+        clientId: apiConfig.username,
+        secretKey: apiConfig.password,
+        number: verificationData.phoneNumber,
+        accountNo: verificationData.accountNumber,
+        ifscCode: verificationData.ifscCode,
+        clientOrderId: verificationData.clientOrderId,
+      };
+  
+      const response = await axios.post(
+        `${apiConfig.baseUrl}/account-validate`,
+        vendorPayload
+      );
+      const verificationId = this.generatePayoutId();
+  
+      const isVerified = response.data.statusCode === 1; // 1 means success
+  
+      // Save verification record with precise status
+      const [verification] = await db
+        .insert(accountVerifications)
+        .values({
+          id: verificationId,
+          userId,
+          accountNumber: verificationData.accountNumber,
+          ifscCode: verificationData.ifscCode,
+          phoneNumber: verificationData.phoneNumber,
+          clientOrderId: verificationData.clientOrderId,
+          orderId: response.data.orderId,
+          status: isVerified ? "VERIFIED" : "FAILED", // Explicit status based on vendor response
+          beneficiaryName: isVerified ? response.data.beneficiaryName : null,
+          vendorResponse: response.data,
+          ipAddress: verificationData.ipAddress,
+        })
+        .returning();
+  
+      return {
+        verification,
+        vendorResponse: {
+          ...response.data,
+          success: isVerified, // Ensure consistent success flag
+        },
+      };
+    } catch (error) {
+      log.error("Error verifying account:", error);
+      throw error;
+    }
+  }
+
+  async initiatePayout(userId, payoutData, userToken) {
     try {
       return await db.transaction(async (tx) => {
-        // 1. Get User's Default payout Scheme
-        if (originalUniqueId) {
-          const existingUniqueId = await uniqueIdDao.checkOriginalUniqueId(
-            userId,
-            originalUniqueId
-          );
-          if (existingUniqueId) {
-            throw {
-              statusCode: 400,
-              messageCode: "DUPLICATE_UNIQUE_ID",
-              message: "Unique ID already used for this user",
-            };
-          }
-        } else {
-          throw {
-            statusCode: 400,
-            messageCode: "UNIQUE_ID_EXISTED",
-            message: "Pass Unique ID",
-          };
-        }
-
-        const finalOriginalUniqueId = originalUniqueId;
-
-        const userSchemes = await schemeDao.getUserSchemes(userId, 1);
-        console.log("userSchemes--> ", userSchemes);
-        // Product ID 1 for payout
+        const payoutId = this.generatePayoutId();
+        const userSchemes = await schemeDao.getUserSchemes(userId, 2); // Product ID 2 for Payout
         if (!userSchemes.length) {
           throw {
             statusCode: 400,
-            messageCode: "NO_payout_SCHEME",
+            messageCode: "NO_PAYOUT_SCHEME",
             message: "No payout scheme assigned to user",
           };
         }
         const scheme = userSchemes[0];
-
-        // 2. Validate Scheme Limits
         if (
           scheme.minTransactionLimit &&
-          +amount < +scheme.minTransactionLimit
+          scheme.minTransactionLimit > payoutData.amount
         ) {
           throw {
             statusCode: 400,
@@ -64,10 +99,9 @@ class PayoutDao {
             message: `Amount must be at least ${scheme.minTransactionLimit}`,
           };
         }
-        console.log("scheme--> ", scheme, "--> ", amount);
         if (
           scheme.maxTransactionLimit &&
-          +amount > +scheme.maxTransactionLimit
+          scheme.maxTransactionLimit < payoutData.amount
         ) {
           throw {
             statusCode: 400,
@@ -76,149 +110,140 @@ class PayoutDao {
           };
         }
 
-        // 3. Get Default API Configuration for payout
         const apiConfig = await apiConfigDao.getDefaultApiConfig(2);
-        console.log("apiConfig--> ", apiConfig);
-        // Product ID 1 for payout
         if (!apiConfig) {
           throw {
             statusCode: 500,
             messageCode: "NO_API_CONFIG",
-            message: "No API configuration found for payout",
+            message: "No API configuration found for Payout",
           };
         }
-
-        // 4. Calculate Charges
         const chargeCalculation = await schemeDao.calculateCharges(
-          amount,
+          payoutData.amount,
           scheme.id,
-          1
+          2
         );
 
-        // 5. Check Payout Wallet Balance
         const userWallets = await walletDao.getUserWallets(userId);
-        const payoutWallet = userWallets.find(
-          (w) => w.type.name === "PAYOUT"
-        );
-        console.log("payoutWallet--> ", payoutWallet);
-        if (
-          !payoutWallet ||
-          +payoutWallet.wallet.balance <
-            +chargeCalculation.charges.totalCharges
-        ) {
+        const payoutWallet = userWallets.find((w) => w.type.name === "PAYOUT");
+
+        const totalAmount =
+          parseFloat(payoutData.amount) +
+          parseFloat(chargeCalculation.charges.totalCharges);
+
+        if (!payoutWallet || payoutWallet.wallet.balance < totalAmount) {
           throw {
             statusCode: 400,
-            messageCode: "INSUFFICIENT_WALLET_BALANCE",
-            message: "Insufficient balance in payout wallet to cover charges",
+            messageCode: "INSUFFICIENT_BALANCE",
+            message: "Insufficient balance in payout wallet",
           };
         }
 
-        // 6. Generate Unique Transaction ID if not provided
-        const uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
-          userId,
-          finalOriginalUniqueId,
-          amount
-        );
-
-        // 7. Prepare Payload for Third-Party API
-        const payload = {
-            clientId: apiConfig.apiKey,
-            secretKey: apiConfig.secretKey,
-            number: mobile,
-            transferMode: "IMPS",
-            accountNo: bankAccountNo,
-            ifscCode: ifsc,
-            amount: amount.toString(),
-            beneficiaryName: beneficiaryName,
-            vpa: vpaId,
-            clientOrderId: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
-        };
-        
-      
-        console.log("payload--> ", payload);
-        // 9. Make Vendor API Call
-
-        const vendorResponse = await axios.post(apiConfig.baseUrl, {
-          payload
-        });
-        console.log("vendorResponse--> ", vendorResponse);
-        if (!vendorResponse?.statusCode) {
-          throw {
-            statusCode: 400,
-            messageCode: "TELE",
-            message: "Technical error",
-          };
-        }
-        // 10. Record Transaction
         const [transaction] = await tx
           .insert(payoutTransactions)
           .values({
+            id: payoutId,
             userId,
             schemeId: scheme.id,
             apiConfigId: apiConfig.id,
-            amount,
-            uniqueId: finalOriginalUniqueId,
-            utrString: vendorResponse.data.utr,
-            baseAmount: +amount,
+            clientOrderId: payoutData.clientOrderId,
+            vendorOrderId: payoutId,
+            amount: payoutData.amount,
+            transferMode: payoutData.transferMode,
+            accountNumber: payoutData.accountNumber,
+            ifscCode: payoutData.ifscCode,
+            beneficiaryName: payoutData.beneficiaryName,
+            phoneNumber: payoutData.phoneNumber,
+            vpa: payoutData.vpa,
+            baseAmount: payoutData.amount,
             chargeType: chargeCalculation.charges.chargeType,
-            chargeValue: +chargeCalculation.charges.chargeValue,
+            chargeValue: chargeCalculation.charges.chargeValue,
             gstPercentage: chargeCalculation.charges.gst.percentage,
             gstAmount: chargeCalculation.charges.gst.amount,
             totalCharges: chargeCalculation.charges.totalCharges,
-            status: "PENDING",
-            vendorResponse: vendorResponse.data,
-            transactionId: uniqueIdRecord?.generatedUniqueId,
+            status: "INITIATED",
+            ipAddress: payoutData.ipAddress,
+            processedAt: new Date(),
           })
           .returning();
 
-        // 11. Deduct Charges from Service Wallet
-        const walletTransaction = await walletDao.updateWalletBalance(
-          serviceWallet.wallet.id,
-          chargeCalculation.charges.totalCharges,
+        await walletDao.updateWalletBalance(
+          payoutWallet.wallet.id,
+          totalAmount,
           "DEBIT",
-          `Payout Transaction Charges - ${finalOriginalUniqueId}`,
+          `Payout Transaction #${transaction.id}`,
           transaction.id,
           userId,
-          "payout"
+          "PAYOUT"
         );
 
-        // 12. Log Scheme Transaction
-        const schemeTransactionLog = await schemeTransactionLogDao.createLog({
-          schemeId: scheme.id,
-          userId,
-          apiConfigId: apiConfig.id,
-          amount,
-          charges: chargeCalculation.charges.totalCharges,
-          gst: chargeCalculation.charges.gst.amount,
-          tds: chargeCalculation.charges.tds?.amount || 0,
-          status: "PENDING",
-          transactionId: transaction.id,
-          referenceId: finalOriginalUniqueId,
-          remarks: `payout Generation - ${finalOriginalUniqueId}`,
-        });
-        // await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
+        const vendorPayload = {
+          clientId: process.env.PAYOUT_CLIENT_ID,
+          secretKey: process.env.PAYOUT_SECRET_KEY,
+          number: payoutData.phoneNumber,
+          amount: payoutData.amount.toString(),
+          transferMode: payoutData.transferMode,
+          accountNo: payoutData.accountNumber,
+          ifscCode: payoutData.ifscCode,
+          beneficiaryName: payoutData.beneficiaryName,
+          vpa: payoutData.vpa,
+          clientOrderId: payoutId,
+        };
+
+        const vendorResponse = await axios.post(
+          `${apiConfig.baseUrl}/api/api/api-module/payout/payout`,
+          vendorPayload,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        const payoutStatus = vendorResponse.data.statusCode === 1 
+        ? "SUCCESS" 
+        : (vendorResponse.data.statusCode === 0 ? "FAILED" : "PENDING");
+        console.log("vendorResponse--> ",vendorResponse);
+
+        // 9. Update Transaction with Vendor Response
+        const [updatedTransaction] = await tx
+        .update(payoutTransactions)
+        .set({
+          orderId: vendorResponse.data.orderId,
+          status: payoutStatus,
+          utrNumber: vendorResponse.data.utr,
+          vendorResponse: vendorResponse.data,
+          updatedAt: new Date(),
+        })
+        .where(eq(payoutTransactions.id, payoutId))
+        .returning();
+
         return {
-          transaction,
-          walletTransaction,
-          schemeTransactionLog,
-          uniqueIdRecord,
-          utrString: vendorResponse.data.utr,
-          chargeDetails: chargeCalculation.charges,
+          transaction: {
+            ...updatedTransaction,
+            internalId: payoutId,
+            clientOrderId: payoutData.clientOrderId,
+          },
+          vendorResponse: vendorResponse.data,
         };
       });
     } catch (error) {
-      console.log("Error generating for payout:", error);
-      log.error("Error generating for payout:", error);
+      log.error("Error initiating payout:", error);
       throw error;
     }
   }
 
-  async verifyTransaction(transactionId) {
+  async checkStatus(userId, clientOrderId, userToken) {
     try {
       const [transaction] = await db
         .select()
         .from(payoutTransactions)
-        .where(eq(payoutTransactions.id, transactionId));
+        .where(
+          and(
+            eq(payoutTransactions.userId, userId),
+            eq(payoutTransactions.clientOrderId, clientOrderId)
+          )
+        )
+        .limit(1);
 
       if (!transaction) {
         throw {
@@ -228,154 +253,348 @@ class PayoutDao {
         };
       }
 
-      // TODO: Implement actual verification with vendor API
-      return transaction;
+      // Get API config
+      const apiConfig = await apiConfigDao.getDefaultApiConfig(2); // Product ID 2 for Payout
+      if (!apiConfig) {
+        throw {
+          statusCode: 500,
+          messageCode: "NO_API_CONFIG",
+          message: "No API configuration found for Payout",
+        };
+      }
+
+      // Make status check API call
+      const vendorPayload = {
+        clientId: apiConfig.username,
+        secretKey: apiConfig.password,
+        clientOrderId: clientOrderId,
+      };
+
+      const response = await axios.post(
+        `${apiConfig.baseUrl}/status-check`,
+        vendorPayload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${userToken}`,
+          },
+        }
+      );
+
+      // Update transaction if status has changed
+      if (
+        response.data.statusCode !== this.getVendorStatusCode(transaction.status)
+      ) {
+        const newStatus = this.mapVendorStatus(response.data.statusCode);
+
+        const [updatedTransaction] = await db
+          .update(payoutTransactions)
+          .set({
+            status: newStatus,
+            utrNumber: response.data.utr || transaction.utrNumber,
+            vendorResponse: response.data,
+            updatedAt: new Date(),
+            completedAt: ["SUCCESS", "FAILED"].includes(newStatus)
+              ? new Date()
+              : null,
+          })
+          .where(eq(payoutTransactions.id, transaction.id))
+          .returning();
+
+        // Process refund if failed
+        if (newStatus === "FAILED" && transaction.status !== "FAILED") {
+          await this.processRefund(updatedTransaction);
+        }
+
+        return {
+          transaction: updatedTransaction,
+          vendorResponse: response.data,
+        };
+      }
+
+      return {
+        transaction,
+        vendorResponse: response.data,
+      };
     } catch (error) {
-      log.error("Error verifying payout transaction:", error);
+      console.log("error--> ",error);
+      log.error("Error checking payout status:", error);
       throw error;
     }
   }
 
-  async getUserpayoutTransactions(
-    userId,
-    { page = 1, limit = 10, status = null }
-  ) {
+  async processCallback(encryptedData) {
     try {
-      const conditions = [eq(payoutTransactions.userId, userId)];
-
-      if (status) {
-        conditions.push(eq(payoutTransactions.status, status));
+      // Decrypt callback data
+      const decryptedData = await encryptionService.decrypt(encryptedData);
+  
+      // Log raw callback
+      const [systemLog] = await db
+        .insert(systemCallbackLogs)
+        .values({
+          encryptedData,
+          decryptedData,
+          status: "RECEIVED",
+          receivedAt: new Date()
+        })
+        .returning();
+  
+      // Find transaction using vendor order ID from callback
+      const [transaction] = await db
+        .select()
+        .from(payoutTransactions)
+        .where(eq(payoutTransactions.vendorOrderId, decryptedData.ClientOrderId))
+        .limit(1);
+  
+      if (!transaction) {
+        // Log error but don't throw to send 200 response to vendor
+        log.error(`Transaction not found for vendor order ID: ${decryptedData.ClientOrderId}`);
+        await db
+          .update(systemCallbackLogs)
+          .set({
+            status: "FAILED",
+            errorMessage: "Transaction not found",
+            processedAt: new Date()
+          })
+          .where(eq(systemCallbackLogs.id, systemLog.id));
+        return null;
       }
-
-      const offset = (page - 1) * limit;
-
-      const [transactions, countResult] = await Promise.all([
-        db
-          .select()
-          .from(payoutTransactions)
-          .where(and(...conditions))
-          .limit(limit)
-          .offset(offset)
-          .orderBy(payoutTransactions.createdAt),
-        db
-          .select({ count: sql`count(*)` })
-          .from(payoutTransactions)
-          .where(and(...conditions)),
-      ]);
-
-      return {
-        data: transactions,
-        pagination: {
-          page,
-          limit,
-          total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit),
-        },
-      };
+  
+      // Update system log with transaction ID
+      await db
+        .update(systemCallbackLogs)
+        .set({
+          payoutTransactionId: transaction.id,
+          status: "PROCESSING"
+        })
+        .where(eq(systemCallbackLogs.id, systemLog.id));
+  
+      // Map vendor status to internal status
+      const newStatus = this.mapVendorStatus(decryptedData.Status);
+  
+      // Start transaction for status update and related operations
+      return await db.transaction(async (tx) => {
+        // Update transaction status
+        const [updatedTransaction] = await tx
+          .update(payoutTransactions)
+          .set({
+            status: newStatus,
+            utrNumber: decryptedData.UTR,
+            vendorResponse: decryptedData,
+            updatedAt: new Date(),
+            completedAt: ["SUCCESS", "FAILED"].includes(newStatus) ? new Date() : null,
+          })
+          .where(eq(payoutTransactions.id, transaction.id))
+          .returning();
+  
+        // Log status change
+        await tx
+          .insert(payoutStatusLogs)
+          .values({
+            payoutTransactionId: transaction.id,
+            oldStatus: transaction.status,
+            newStatus,
+            vendorResponse: decryptedData,
+            source: "CALLBACK"
+          });
+  
+        // Handle failed transactions
+        if (newStatus === "FAILED" && transaction.status !== "FAILED") {
+          await this.processRefund(updatedTransaction, tx);
+        }
+  
+        // Prepare callback data for user with original client order ID
+        const userCallbackData = {
+          ...decryptedData,
+          ClientOrderId: transaction.clientOrderId, // Replace with client's order ID
+          TransactionId: transaction.id,
+          Amount: transaction.amount,
+          Status: newStatus,
+          UTR: decryptedData.UTR || null,
+          Message: decryptedData.Message || "",
+          TransactionTime: decryptedData.TransactionTime || new Date().toISOString()
+        };
+  
+        // Forward to user's callback URL
+        const callbackResult = await this.forwardCallback(updatedTransaction, userCallbackData);
+  
+        // Update system log status
+        await tx
+          .update(systemCallbackLogs)
+          .set({
+            status: "COMPLETED",
+            processedAt: new Date()
+          })
+          .where(eq(systemCallbackLogs.id, systemLog.id));
+  
+        return {
+          systemLog,
+          transaction: updatedTransaction,
+          callbackResult
+        };
+      });
+  
     } catch (error) {
-      log.error("Error getting user payout transactions:", error);
+      log.error("Error processing callback:", error);
+      // Update system log with error
+      if (systemLog) {
+        await db
+          .update(systemCallbackLogs)
+          .set({
+            status: "FAILED",
+            errorMessage: error.message,
+            processedAt: new Date()
+          })
+          .where(eq(systemCallbackLogs.id, systemLog.id))
+          .catch(err => log.error("Error updating system log:", err));
+      }
       throw error;
     }
+  }
+
+  async processRefund(transaction, tx = db) {
+    try {
+      // Get user's payout wallet
+      const userWallets = await walletDao.getUserWallets(transaction.userId);
+      const payoutWallet = userWallets.find((w) => w.type.name === "PAYOUT");
+  
+      if (!payoutWallet) {
+        throw new Error("Payout wallet not found");
+      }
+  
+      // Calculate total refund amount
+      const totalAmount = parseFloat(transaction.amount) + parseFloat(transaction.totalCharges);
+  
+      // Refund to payout wallet
+      await walletDao.updateWalletBalance(
+        payoutWallet.wallet.id,
+        totalAmount,
+        "CREDIT",
+        `Refund for failed payout #${transaction.clientOrderId}`,
+        transaction.id,
+        transaction.userId,
+        "PAYOUT_REFUND",
+        tx
+      );
+  
+      // Log refund
+      await tx
+        .insert(payoutRefundLogs)
+        .values({
+          payoutTransactionId: transaction.id,
+          amount: totalAmount,
+          walletId: payoutWallet.wallet.id,
+          status: "COMPLETED"
+        });
+  
+    } catch (error) {
+      log.error("Error processing refund:", error);
+      throw error;
+    }
+  }
+
+  async forwardCallback(transaction, callbackData) {
+    try {
+      const callbackConfigs = await callBackDao.getUserCallbackConfigs(
+        transaction.userId
+      );
+      
+      // If no callback configs, log and return null
+      if (!callbackConfigs.length) {
+        await db.insert(userCallbackLogs).values({
+          transactionId: transaction.clientOrderId,
+          userId: transaction.userId,
+          status: "SKIPPED",
+          isSuccessful: false,
+          errorMessage: "No active callback configuration found"
+        });
+        return null;
+      }
+  
+      const activeConfig = callbackConfigs.find((c) => c.status === "ACTIVE");
+      
+      // If no active config, log and return null
+      if (!activeConfig) {
+        await db.insert(userCallbackLogs).values({
+          transactionId: transaction.clientOrderId,
+          userId: transaction.userId,
+          status: "SKIPPED",
+          isSuccessful: false,
+          errorMessage: "No active callback configuration"
+        });
+        return null;
+      }
+  
+      // Send callback
+      let response;
+      try {
+        response = await axios.post(activeConfig.callbackUrl, callbackData, {
+          timeout: 10000, // 10 seconds timeout
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (axiosError) {
+        // Log callback failure
+        const errorLog = {
+          transactionId: transaction.clientOrderId,
+          userId: transaction.userId,
+          configId: activeConfig.id,
+          originalPayload: callbackData,
+          status: "FAILED",
+          isSuccessful: false,
+          callbackUrl: activeConfig.callbackUrl,
+          errorMessage: axiosError.message,
+          errorDetails: {
+            status: axiosError.response?.status,
+            data: axiosError.response?.data
+          }
+        };
+  
+        await db.insert(userCallbackLogs).values(errorLog);
+  
+        // Throw to trigger potential retry mechanism
+        throw axiosError;
+      }
+  
+      // Log successful callback
+      await db.insert(userCallbackLogs).values({
+        transactionId: transaction.clientOrderId,
+        userId: transaction.userId,
+        configId: activeConfig.id,
+        originalPayload: callbackData,
+        status: "COMPLETED",
+        isSuccessful: true,
+        callbackUrl: activeConfig.callbackUrl,
+        callbackResponse: JSON.stringify(response.data),
+      });
+  
+      return response.data;
+    } catch (error) {
+      log.error("Unhandled error in forwardCallback:", error);
+      throw error;
+    }
+  }
+
+  mapVendorStatus(vendorStatus) {
+    const statusMap = {
+      0: "FAILED",
+      1: "SUCCESS",
+    };
+    return statusMap[vendorStatus] || "PENDING";
+  }
+
+  getVendorStatusCode(status) {
+    const statusMap = {
+      SUCCESS: 1,
+      PENDING: 2,
+      FAILED: 0,
+    };
+    return statusMap[status] || 2;
   }
 
   async getFilteredTransactions({
-    userId,
-    startDate,
-    endDate,
-    status,
-    search,
-    minAmount,
-    maxAmount,
-    page = 1,
-    limit = 10,
-  }) {
-    try {
-      const conditions = [eq(payoutTransactions.userId, userId)];
-
-      if (startDate && endDate) {
-        conditions.push(
-          and(
-            gte(payoutTransactions.createdAt, new Date(startDate)),
-            lte(payoutTransactions.createdAt, new Date(endDate))
-          )
-        );
-      }
-
-      if (status) {
-        conditions.push(eq(payoutTransactions.status, status));
-      }
-
-      if (minAmount) {
-        conditions.push(gte(payoutTransactions.amount, minAmount));
-      }
-
-      if (maxAmount) {
-        conditions.push(lte(payoutTransactions.amount, maxAmount));
-      }
-
-      if (search) {
-        conditions.push(
-          or(
-            like(payoutTransactions.uniqueId, `%${search}%`),
-            like(payoutTransactions.vendorTransactionId, `%${search}%`)
-          )
-        );
-      }
-
-      const offset = (page - 1) * limit;
-
-      const [transactions, countResult] = await Promise.all([
-        db
-          .select()
-          .from(payoutTransactions)
-          .where(and(...conditions))
-          .limit(limit)
-          .offset(offset)
-          .orderBy(desc(payoutTransactions.createdAt)),
-
-        db
-          .select({
-            count: sql`count(*)`,
-          })
-          .from(payoutTransactions)
-          .where(and(...conditions)),
-      ]);
-
-      const [summary] = await db
-        .select({
-          totalAmount: sql`SUM(amount)`,
-          totalCharges: sql`SUM(total_charges)`,
-          successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
-          failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
-          pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
-        })
-        .from(payoutTransactions)
-        .where(and(...conditions));
-
-      return {
-        data: transactions,
-        pagination: {
-          page,
-          limit,
-          total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit),
-        },
-        summary: {
-          totalAmount: Number(summary.totalAmount) || 0,
-          totalCharges: Number(summary.totalCharges) || 0,
-          successCount: Number(summary.successCount) || 0,
-          failedCount: Number(summary.failedCount) || 0,
-          pendingCount: Number(summary.pendingCount) || 0,
-        },
-      };
-    } catch (error) {
-      console.log("Error getting filtered transactions:", error);
-      log.error("Error getting filtered transactions:", error);
-      throw error;
-    }
-  }
-
-  async getAdminFilteredTransactions({
+    userId = null,
     startDate,
     endDate,
     status,
@@ -388,6 +607,10 @@ class PayoutDao {
     try {
       const conditions = [];
 
+      if (userId) {
+        conditions.push(eq(payoutTransactions.userId, userId));
+      }
+
       if (startDate && endDate) {
         conditions.push(
           and(
@@ -412,9 +635,9 @@ class PayoutDao {
       if (search) {
         conditions.push(
           or(
-            like(payoutTransactions.uniqueId, `%${search}%`),
-            like(payoutTransactions.vendorTransactionId, `%${search}%`),
-            like(payoutTransactions.transactionId, `%${search}%`) // Added this line
+            like(payoutTransactions.clientOrderId, `%${search}%`),
+            like(payoutTransactions.orderId, `%${search}%`),
+            like(payoutTransactions.utrNumber, `%${search}%`)
           )
         );
       }
@@ -423,26 +646,8 @@ class PayoutDao {
 
       const [transactions, countResult] = await Promise.all([
         db
-          .select({
-            id: payoutTransactions.id,
-            transactionId: payoutTransactions?.transactionId,
-            amount: payoutTransactions.amount,
-            uniqueId: payoutTransactions.uniqueId,
-            chargeValue: payoutTransactions.chargeValue,
-            gstAmount: payoutTransactions.gstAmount,
-            status: payoutTransactions.status,
-            createdAt: payoutTransactions.createdAt,
-            userId: payoutTransactions.userId,
-            user: {
-              username: users.username,
-              firstname: users.firstname,
-              lastname: users.lastname,
-              emailId: users.emailId,
-              phoneNo: users.phoneNo,
-            },
-          })
+          .select()
           .from(payoutTransactions)
-          .leftJoin(users, eq(payoutTransactions.userId, users.id))
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .limit(limit)
           .offset(offset)
@@ -450,7 +655,7 @@ class PayoutDao {
 
         db
           .select({
-            count: sql`count(*)`,
+            count: sql`COUNT(*)`,
           })
           .from(payoutTransactions)
           .where(conditions.length > 0 ? and(...conditions) : undefined),
@@ -484,74 +689,10 @@ class PayoutDao {
         },
       };
     } catch (error) {
-      console.log("Error getting admin transactions:", error);
-      log.error("Error getting admin transactions:", error);
+      log.error("Error getting filtered transactions:", error);
       throw error;
     }
   }
-  
-
-async processStatusChange(transaction, isSuccess, amount, bankRRN) {
-  try {
-    return await db.transaction(async (tx) => {
-      const [updatedTransaction] = await tx
-        .update(payoutTransactions)
-        .set({
-          status: isSuccess ? "SUCCESS" : "FAILED",
-          vendorTransactionId: bankRRN,
-          updatedAt: new Date()
-        })
-        .where(eq(payoutTransactions.id, transaction.id))
-        .returning();
-      const userWallets = await walletDao.getUserWallets(transaction.userId);
-      const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
-      const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
-      if (!serviceWallet || !collectionWallet) {
-        throw new Error("Required wallets not found");
-      }
-      if (isSuccess) {
-        await walletDao.updateWalletBalance(
-          collectionWallet.wallet.id,
-          amount,
-          "CREDIT",
-          `payout Transaction Credit - ${transaction.uniqueId}`,
-          transaction.transactionId,
-          transaction.userId,
-          "payout"
-        );
-      } else {
-        await walletDao.updateWalletBalance(
-          serviceWallet.wallet.id,
-          transaction.totalCharges,
-          "CREDIT",
-          `payout Transaction Charge Refund - ${transaction.uniqueId}`,
-          transaction.transactionId,
-          transaction.userId,
-          "payout"
-        );
-      }
-      return updatedTransaction;
-    });
-  } catch (error) {
-    log.error("Error processing status change:", error);
-    throw error;
-  }
-}
-
-async getTransactionByUniqueId(uniqueId) {
-  try {
-    const [transaction] = await db
-      .select()
-      .from(payoutTransactions)
-      .where(eq(payoutTransactions.uniqueId, uniqueId))
-      .limit(1);
-    return transaction;
-  } catch (error) {
-    log.error("Error getting transaction:", error);
-    throw error;
-  }
-}
-
 }
 
 module.exports = new PayoutDao();

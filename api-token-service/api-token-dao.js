@@ -260,7 +260,6 @@ class ApiTokenDao {
         .from(apiTokens)
         .where(eq(apiTokens.token, token))
         .orderBy(apiTokens.createdAt);
-      console.log("tokens--> ", tokens);
       if (!tokens.length) {
         return null;
       }
