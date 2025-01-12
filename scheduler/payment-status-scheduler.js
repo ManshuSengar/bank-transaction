@@ -116,10 +116,8 @@ class PaymentStatusScheduler {
                 log.error(`Error checking transaction ${transaction.uniqueId} status (Attempt ${attempt}):`, error);
                 
                 if (attempt === this.retryAttempts) {
-                    // Log final failure
                     log.error(`Failed to check status for transaction ${transaction.uniqueId} after ${this.retryAttempts} attempts`);
                 } else {
-                    // Wait before next retry (exponential backoff)
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
                 }
             }

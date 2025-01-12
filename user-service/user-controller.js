@@ -135,13 +135,13 @@ userrouter.post("/validateuser", async (req, res) => {
       message: result.message,
       role: result?.role?.name,
       permissions: result.permissions,
-      isActive: result.isActive
+      isActive: result.isActive,
     });
   } catch (err) {
     log.error(`Error in login for username : ${err}`);
-    
+
     // Special handling for inactive account
-    if (err.messageCode === 'ACCOUNT_INACTIVE') {
+    if (err.messageCode === "ACCOUNT_INACTIVE") {
       return res.status(err.statusCode).send({
         messageCode: err.messageCode,
         message: err.userMessage,
@@ -333,7 +333,7 @@ userrouter.get(
 userrouter.post(
   "/assignrole",
   authenticateToken,
-//   authorize(["manage_roles"]),
+  //   authorize(["manage_roles"]),
   async (req, res) => {
     try {
       const { username, roleId } = req.body;
@@ -374,33 +374,31 @@ userrouter.get(
 );
 
 // Get authenticated user details
-userrouter.get('/me', 
-  authenticateToken,
-  async (req, res) => {
-      try {
-          const user = await userDao.getUserByUsername(req.user.username);
-          
-          // Remove sensitive information
-          delete user.password;
-          
-          return res.send({
-              messageCode: 'USER_FETCHED',
-              message: 'User details retrieved successfully',
-              user: {
-                  ...user,
-                  permissions: req.user.permissions // Include permissions from token
-              }
-          });
-      } catch (err) {
-          log.error(`Error retrieving authenticated user details: ${err}`);
-          return res.status(err.statusCode || 500).send({
-              messageCode: err.messageCode || 'INTERNAL_ERROR',
-              message: err.userMessage || 'An error occurred while retrieving user details',
-              error: err.message
-          });
-      }
+userrouter.get("/me", authenticateToken, async (req, res) => {
+  try {
+    const user = await userDao.getUserByUsername(req.user.username);
+
+    // Remove sensitive information
+    delete user.password;
+
+    return res.send({
+      messageCode: "USER_FETCHED",
+      message: "User details retrieved successfully",
+      user: {
+        ...user,
+        permissions: req.user.permissions, // Include permissions from token
+      },
+    });
+  } catch (err) {
+    log.error(`Error retrieving authenticated user details: ${err}`);
+    return res.status(err.statusCode || 500).send({
+      messageCode: err.messageCode || "INTERNAL_ERROR",
+      message:
+        err.userMessage || "An error occurred while retrieving user details",
+      error: err.message,
+    });
   }
-);
+});
 
 function isNotValidSchema(error, res) {
   if (error) {
@@ -431,23 +429,22 @@ userrouter.get(
       const result = await userDao.toggleUserStatus(userId);
       return res.send({
         messageCode: "STATUS_UPDATED",
-        message: `User ${result.isActive ? 'activated' : 'deactivated'} successfully`,
+        message: `User ${
+          result.isActive ? "activated" : "deactivated"
+        } successfully`,
         success: result.success,
-        isActive: result.isActive
+        isActive: result.isActive,
       });
     } catch (err) {
       log.error(`Error toggling user status: ${err}`);
       return res.status(err.statusCode || 500).send({
         messageCode: err.messageCode || "INTERNAL_ERROR",
-        message: err.userMessage || "An error occurred while updating user status",
+        message:
+          err.userMessage || "An error occurred while updating user status",
         error: err.message,
       });
     }
   }
 );
-
-
-
-
 
 module.exports = userrouter;
