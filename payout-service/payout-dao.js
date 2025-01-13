@@ -1,6 +1,12 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Payout-Dao");
-const { db, payoutTransactions } = require("./db/schema");
+const {
+  db,
+  accountVerifications,
+  payoutTransactions,
+  systemCallbackLogs,
+  userCallbackLogs,
+} = require("./db/schema");
 const { eq, and, sql, desc } = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
@@ -11,7 +17,7 @@ const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
 const callBackDao = require("../callback-service/callback-dao");
-const {users} =require("../user-service/db/schema")
+const { users } = require("../user-service/db/schema");
 class PayoutDao {
   generatePayoutId() {
     return crypto.randomBytes(16).toString("hex");
@@ -257,7 +263,7 @@ class PayoutDao {
         )
         .limit(1);
 
-        console.log("transaction--> ",transaction);
+      console.log("transaction--> ", transaction);
 
       if (!transaction) {
         throw {
@@ -341,7 +347,6 @@ class PayoutDao {
       throw error;
     }
   }
- 
 
   mapVendorStatus(vendorStatusCode, statusParam = null) {
     switch (vendorStatusCode) {
@@ -387,7 +392,7 @@ class PayoutDao {
     minAmount,
     maxAmount,
     page = 1,
-    limit = 10
+    limit = 10,
   }) {
     try {
       const conditions = [eq(payoutTransactions.userId, userId)];
@@ -439,7 +444,7 @@ class PayoutDao {
         db
           .select({ count: sql`count(*)` })
           .from(payoutTransactions)
-          .where(and(...conditions))
+          .where(and(...conditions)),
       ]);
 
       const [summary] = await db
@@ -449,7 +454,7 @@ class PayoutDao {
           successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
           failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
           pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
-          reversedCount: sql`COUNT(CASE WHEN status = 'REVERSED' THEN 1 END)`
+          reversedCount: sql`COUNT(CASE WHEN status = 'REVERSED' THEN 1 END)`,
         })
         .from(payoutTransactions)
         .where(and(...conditions));
@@ -460,7 +465,7 @@ class PayoutDao {
           page,
           limit,
           total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit)
+          pages: Math.ceil(Number(countResult[0].count) / limit),
         },
         summary: {
           totalAmount: Number(summary.totalAmount) || 0,
@@ -468,8 +473,8 @@ class PayoutDao {
           successCount: Number(summary.successCount) || 0,
           failedCount: Number(summary.failedCount) || 0,
           pendingCount: Number(summary.pendingCount) || 0,
-          reversedCount: Number(summary.reversedCount) || 0
-        }
+          reversedCount: Number(summary.reversedCount) || 0,
+        },
       };
     } catch (error) {
       log.error("Error getting filtered transactions:", error);
@@ -485,7 +490,7 @@ class PayoutDao {
     minAmount,
     maxAmount,
     page = 1,
-    limit = 10
+    limit = 10,
   }) {
     try {
       const conditions = [];
@@ -538,8 +543,8 @@ class PayoutDao {
               firstname: users.firstname,
               lastname: users.lastname,
               emailId: users.emailId,
-              phoneNo: users.phoneNo
-            }
+              phoneNo: users.phoneNo,
+            },
           })
           .from(payoutTransactions)
           .leftJoin(users, eq(payoutTransactions.userId, users.id))
@@ -552,7 +557,7 @@ class PayoutDao {
           .select({ count: sql`count(*)` })
           .from(payoutTransactions)
           .leftJoin(users, eq(payoutTransactions.userId, users.id))
-          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
 
       const [summary] = await db
@@ -562,21 +567,21 @@ class PayoutDao {
           successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
           failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
           pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
-          reversedCount: sql`COUNT(CASE WHEN status = 'REVERSED' THEN 1 END)`
+          reversedCount: sql`COUNT(CASE WHEN status = 'REVERSED' THEN 1 END)`,
         })
         .from(payoutTransactions)
         .where(conditions.length > 0 ? and(...conditions) : undefined);
 
       return {
-        data: transactions.map(t => ({
+        data: transactions.map((t) => ({
           ...t.transaction,
-          user: t.user
+          user: t.user,
         })),
         pagination: {
           page,
           limit,
           total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit)
+          pages: Math.ceil(Number(countResult[0].count) / limit),
         },
         summary: {
           totalAmount: Number(summary.totalAmount) || 0,
@@ -584,8 +589,8 @@ class PayoutDao {
           successCount: Number(summary.successCount) || 0,
           failedCount: Number(summary.failedCount) || 0,
           pendingCount: Number(summary.pendingCount) || 0,
-          reversedCount: Number(summary.reversedCount) || 0
-        }
+          reversedCount: Number(summary.reversedCount) || 0,
+        },
       };
     } catch (error) {
       log.error("Error getting admin filtered transactions:", error);
@@ -608,55 +613,6 @@ class PayoutDao {
     }
   }
 
-  async checkStatusWithVendor(transaction) {
-    try {
-      const apiConfig = await apiConfigDao.getDefaultApiConfig(2); // Product ID 2 for Payout
-      if (!apiConfig) {
-        throw new Error("No API configuration found for Payout");
-      }
-      console.log("newStatus11--> ",transaction);
-      const response = await axios.post(
-        `${apiConfig.baseUrl}/api/api/api-module/payout/status-check`,
-        {
-          clientId: process.env.PAYOUT_CLIENT_ID,
-          secretKey: process.env.PAYOUT_SECRET_KEY,
-          clientOrderId: transaction.id
-        },
-        {
-          headers: {
-            "Content-Type": "application/json"
-          }
-        }
-      );
-      console.log("newStatus11--> ",response.data);
-      const newStatus = this.mapVendorStatus(response.data);
-      let description = this.getStatusDescription(transaction.status, newStatus);
-      console.log("newStatus--> ",newStatus);
-      if (newStatus !== transaction.status) {
-        await this.updateTransactionStatus(
-          transaction.id,
-          newStatus,
-          response.data.utr,
-          response.data
-        );
-
-        if (["FAILED", "REVERSED"].includes(newStatus) && transaction.status !== "FAILED") {
-          await this.processRefund(transaction);
-        }
-      }
-
-      return {
-        status: newStatus,
-        utrNumber: response.data.utr || transaction.utrNumber,
-        description
-      };
-    } catch (error) {
-      console.log("error--> ",error);
-      log.error("Error checking status with vendor:", error);
-      throw error;
-    }
-  }
-
   async processCallback(callbackData) {
     try {
       // Log raw callback
@@ -668,21 +624,34 @@ class PayoutDao {
         })
         .returning();
 
-      const transaction = await this.getTransactionByClientOrderId(callbackData.ClientOrderId);
+      const transaction = await this.getTransactionByClientOrderId(
+        callbackData.ClientOrderId
+      );
       if (!transaction) {
-        await this.updateSystemLog(systemLog.id, "FAILED", "Transaction not found");
-        log.error(`Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`);
+        await this.updateSystemLog(
+          systemLog.id,
+          "FAILED",
+          "Transaction not found"
+        );
+        log.error(
+          `Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`
+        );
         return null;
       }
 
-      await this.updateSystemLog(systemLog.id, "PROCESSING", null, transaction.id);
+      await this.updateSystemLog(
+        systemLog.id,
+        "PROCESSING",
+        null,
+        transaction.id
+      );
 
       // Map vendor status codes to internal status
       const statusCode = parseInt(callbackData.StatusCode);
       const statusNum = parseInt(callbackData.Status);
-      const newStatus = this.mapVendorStatus({ 
-        statusCode: statusCode, 
-        status: statusNum 
+      const newStatus = this.mapVendorStatus({
+        statusCode: statusCode,
+        status: statusNum,
       });
 
       return await db.transaction(async (tx) => {
@@ -690,7 +659,7 @@ class PayoutDao {
         const updatedTransaction = await this.updateTransactionStatus(
           transaction.id,
           newStatus,
-          callbackData.UTR,  // Use UTR from callback
+          callbackData.UTR,
           {
             orderId: callbackData.OrderId,
             amount: parseFloat(callbackData.Amount),
@@ -699,13 +668,16 @@ class PayoutDao {
             status: newStatus,
             statusCode: statusCode,
             checksum: callbackData.Checksum,
-            rawResponse: callbackData
+            rawResponse: callbackData,
           },
           tx
         );
 
         // Process refund if needed
-        if (["FAILED", "REVERSED"].includes(newStatus) && transaction.status !== "FAILED") {
+        if (
+          ["FAILED", "REVERSED"].includes(newStatus) &&
+          transaction.status !== "FAILED"
+        ) {
           await this.processRefund(transaction, tx);
         }
 
@@ -720,7 +692,7 @@ class PayoutDao {
           status: newStatus,
           utrNumber: callbackData.UTR,
           transactionDate: callbackData.Date,
-          rawStatus: statusNum
+          rawStatus: statusNum,
         };
 
         await this.forwardCallback(updatedTransaction, userCallbackData);
@@ -728,7 +700,7 @@ class PayoutDao {
 
         return {
           systemLog,
-          transaction: updatedTransaction
+          transaction: updatedTransaction,
         };
       });
     } catch (error) {
@@ -740,7 +712,13 @@ class PayoutDao {
     }
   }
 
-  async updateTransactionStatus(transactionId, status, utrNumber, vendorResponse, tx = db) {
+  async updateTransactionStatus(
+    transactionId,
+    status,
+    utrNumber,
+    vendorResponse,
+    tx = db
+  ) {
     const [updatedTransaction] = await tx
       .update(payoutTransactions)
       .set({
@@ -750,7 +728,7 @@ class PayoutDao {
         updatedAt: new Date(),
         completedAt: ["SUCCESS", "FAILED", "REVERSED"].includes(status)
           ? new Date()
-          : null
+          : null,
       })
       .where(eq(payoutTransactions.id, transactionId))
       .returning();
@@ -758,30 +736,39 @@ class PayoutDao {
     return updatedTransaction;
   }
 
-  async updateSystemLog(logId, status, errorMessage = null, transactionId = null) {
+  async updateSystemLog(
+    logId,
+    status,
+    errorMessage = null,
+    transactionId = null
+  ) {
     await db
       .update(systemCallbackLogs)
       .set({
         status,
         errorMessage,
         payoutTransactionId: transactionId,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       })
       .where(eq(systemCallbackLogs.id, logId));
   }
 
   async processRefund(transaction, tx = db) {
     try {
+      // Get user's wallets
       const userWallets = await walletDao.getUserWallets(transaction.userId);
-      const payoutWallet = userWallets.find(w => w.type.name === "PAYOUT");
+      const payoutWallet = userWallets.find((w) => w.type.name === "PAYOUT");
 
       if (!payoutWallet) {
         throw new Error("Payout wallet not found");
       }
 
-      const totalAmount = parseFloat(transaction.amount) + parseFloat(transaction.totalCharges);
+      // Calculate total refund amount (transaction amount + charges)
+      const totalAmount =
+        parseFloat(transaction.amount) + parseFloat(transaction.totalCharges);
 
-      await walletDao.updateWalletBalance(
+      // Process the wallet update and wait for it to complete
+      const walletUpdate = await walletDao.updateWalletBalance(
         payoutWallet.wallet.id,
         totalAmount,
         "CREDIT",
@@ -789,28 +776,41 @@ class PayoutDao {
         transaction.id,
         transaction.userId,
         "PAYOUT_REFUND",
+        null,
         tx
       );
+
+      // Return the wallet update result
+      return walletUpdate;
     } catch (error) {
       log.error("Error processing refund:", error);
-      throw error;
+      throw error; // Re-throw the error to be handled by the caller
     }
   }
 
   async forwardCallback(transaction, callbackData) {
     try {
-      const callbackConfigs = await callbackDao.getUserCallbackConfigs(transaction.userId);
-      const activeConfig = callbackConfigs.find(c => c.status === "ACTIVE");
+      const callbackConfigs = await callbackDao.getUserCallbackConfigs(
+        transaction.userId
+      );
+      const activeConfig = callbackConfigs.find((c) => c.status === "ACTIVE");
 
       if (!activeConfig) {
-        return await this.logCallbackSkipped(transaction.clientOrderId, transaction.userId);
+        return await this.logCallbackSkipped(
+          transaction.clientOrderId,
+          transaction.userId
+        );
       }
 
       try {
-        const response = await axios.post(activeConfig.callbackUrl, callbackData, {
-          timeout: 10000,
-          headers: { "Content-Type": "application/json" }
-        });
+        const response = await axios.post(
+          activeConfig.callbackUrl,
+          callbackData,
+          {
+            timeout: 10000,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
 
         await this.logCallbackSuccess(
           transaction.clientOrderId,
@@ -843,7 +843,7 @@ class PayoutDao {
       userId,
       status: "SKIPPED",
       isSuccessful: false,
-      errorMessage: "No active callback configuration"
+      errorMessage: "No active callback configuration",
     });
     return null;
   }
@@ -856,7 +856,7 @@ class PayoutDao {
       originalPayload: payload,
       status: "COMPLETED",
       isSuccessful: true,
-      callbackResponse: JSON.stringify(response)
+      callbackResponse: JSON.stringify(response),
     });
   }
 
@@ -868,55 +868,457 @@ class PayoutDao {
       originalPayload: payload,
       status: "FAILED",
       isSuccessful: false,
-      errorMessage: error.message
+      errorMessage: error.message,
     });
   }
 
+  async checkVendorBalance() {
+    try {
+      const apiConfig = await apiConfigDao.getDefaultApiConfig(2);
+      if (!apiConfig) {
+        throw new Error("No API configuration found for Payout");
+      }
+
+      const response = await axios.post(
+        `${apiConfig.baseUrl}/api/api/api-module/payout/balance`,
+        {
+          clientId: process.env.PAYOUT_CLIENT_ID,
+          secretKey: process.env.PAYOUT_SECRET_KEY,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data.statusCode !== 1) {
+        throw new Error(
+          response.data.message || "Failed to fetch vendor balance"
+        );
+      }
+
+      return response.data.balance;
+    } catch (error) {
+      log.error("Error checking vendor balance:", error);
+      throw error;
+    }
+  }
+
+  async checkStatusWithVendor(transaction) {
+    try {
+      const apiConfig = await apiConfigDao.getDefaultApiConfig(2);
+      if (!apiConfig) {
+        throw new Error("No API configuration found for Payout");
+      }
+
+      const response = await axios.post(
+        `${apiConfig.baseUrl}/api/api/api-module/payout/status-check`,
+        {
+          clientId: process.env.PAYOUT_CLIENT_ID,
+          secretKey: process.env.PAYOUT_SECRET_KEY,
+          clientOrderId: transaction.id,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("response--> ", response);
+
+      // Get status based on status code and status parameter
+      const newStatus = this.mapStatusCheckResponse(
+        response.data.statusCode,
+        response.data.status,
+        transaction.createdAt
+      );
+
+      let description = this.getStatusDescription(
+        transaction.status,
+        newStatus
+      );
+
+      if (newStatus !== transaction.status) {
+        await this.updateTransactionStatus(
+          transaction.id,
+          newStatus,
+          response.data.utr,
+          response.data
+        );
+
+        if (
+          ["FAILED", "REVERSED"].includes(newStatus) &&
+          transaction.status !== "FAILED"
+        ) {
+          await this.processRefund(transaction);
+        }
+      }
+
+      return {
+        status: newStatus,
+        utrNumber: response.data.utr || transaction.utrNumber,
+        description,
+      };
+    } catch (error) {
+      log.error("Error checking status with vendor:", error);
+      throw error;
+    }
+  }
+
+  mapStatusCheckResponse(statusCode, status, createdAt) {
+    switch (statusCode) {
+      case 0:
+        return null;
+
+      case 1:
+        switch (status) {
+          case 1:
+            return "SUCCESS";
+          case 0:
+            return "FAILED";
+          case 4:
+            return "REVERSED";
+          default:
+            return "PENDING";
+        }
+
+      case 6:
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        if (new Date(createdAt) < twoMinutesAgo) {
+          return "FAILED";
+        }
+        return "PENDING";
+
+      default:
+        return "PENDING";
+    }
+  }
+
   getStatusDescription(oldStatus, newStatus) {
-    if (oldStatus === newStatus) {
+    if (!newStatus || oldStatus === newStatus) {
       return "No status change";
     }
 
     const descriptions = {
-      SUCCESS: "Transaction completed successfully - Amount transferred to beneficiary",
+      SUCCESS:
+        "Transaction completed successfully - Amount transferred to beneficiary",
       FAILED: "Transaction failed - Amount will be refunded",
       REVERSED: "Transaction reversed - Amount will be refunded",
-      PENDING: "Transaction is being processed"
+      PENDING: "Transaction is being processed",
     };
 
     return `Status changed from ${oldStatus} to ${newStatus}. ${descriptions[newStatus]}`;
   }
 
-  async checkVendorBalance() {
-    try {
-        const apiConfig = await apiConfigDao.getDefaultApiConfig(2); 
-        if (!apiConfig) {
-            throw new Error("No API configuration found for Payout");
-        }
 
-        const response = await axios.post(
-            `${apiConfig.baseUrl}/api/api/api-module/payout/balance`,
-            {
-                clientId: process.env.PAYOUT_CLIENT_ID,
-                secretKey: process.env.PAYOUT_SECRET_KEY
-            },
-            {
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }
+  async getFilteredSystemLogs(filters) {
+    try {
+      // Initialize conditions array
+      const conditions = [];
+
+      // Base query with joins
+      const baseQuery = db
+        .select({
+          systemLog: systemCallbackLogs,
+          payoutTransaction: payoutTransactions,
+        })
+        .from(systemCallbackLogs)
+        .leftJoin(
+          payoutTransactions,
+          eq(systemCallbackLogs.payoutTransactionId, payoutTransactions.id)
         );
 
-        if (response.data.statusCode !== 1) {
-            throw new Error(response.data.message || "Failed to fetch vendor balance");
+      // Add date filters
+      if (filters.startDate) {
+        conditions.push(gte(systemCallbackLogs.createdAt, filters.startDate));
+      }
+
+      if (filters.endDate) {
+        conditions.push(lte(systemCallbackLogs.createdAt, filters.endDate));
+      }
+
+      // Add status filter
+      if (filters.status) {
+        conditions.push(eq(systemCallbackLogs.status, filters.status));
+      }
+
+      // Add user ID filter
+      if (filters.userId) {
+        conditions.push(eq(payoutTransactions.userId, filters.userId));
+      }
+
+      // Add search conditions only if search term is not empty
+      if (filters.search && filters.search.trim()) {
+        const searchTerm = filters.search.trim();
+        const searchConditions = [];
+
+        switch (filters.searchType) {
+          case "transactionId":
+            searchConditions.push(
+              or(
+                sql`CAST(${
+                  payoutTransactions.clientOrderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.vendorOrderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.orderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.utrNumber
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`
+              )
+            );
+            break;
+
+          case "beneficiaryDetails":
+            searchConditions.push(
+              or(
+                sql`CAST(${
+                  payoutTransactions.beneficiaryName
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.accountNumber
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.ifscCode
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`
+              )
+            );
+            break;
+
+          default: // 'all'
+            searchConditions.push(
+              or(
+                sql`CAST(${
+                  payoutTransactions.clientOrderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.vendorOrderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.orderId
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.utrNumber
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.beneficiaryName
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.accountNumber
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`,
+                sql`CAST(${
+                  payoutTransactions.ifscCode
+                } AS TEXT) ILIKE ${`%${searchTerm}%`}`
+              )
+            );
         }
 
-        return response.data.balance;
+        if (searchConditions.length > 0) {
+          conditions.push(or(...searchConditions));
+        }
+      }
+
+      // Build the where clause only if there are conditions
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Get total count with conditions
+      const [{ count }] = await db
+        .select({
+          count: sql`count(*)`,
+        })
+        .from(systemCallbackLogs)
+        .leftJoin(
+          payoutTransactions,
+          eq(systemCallbackLogs.payoutTransactionId, payoutTransactions.id)
+        )
+        .where(whereClause);
+
+      // Get paginated results with conditions
+      const logs = await baseQuery
+        .where(whereClause)
+        .orderBy(desc(systemCallbackLogs.createdAt))
+        .limit(filters.limit)
+        .offset(filters.offset);
+
+      // Transform and return results
+      return {
+        total: parseInt(count),
+        logs: logs.map((log) => ({
+          id: log.systemLog.id,
+          status: log.systemLog.status,
+          createdAt: log.systemLog.createdAt,
+          payoutTransactionId: log.systemLog.payoutTransactionId,
+          transactionDetails: log.payoutTransaction
+            ? {
+                clientOrderId: log.payoutTransaction.clientOrderId,
+                orderId: log.payoutTransaction.orderId,
+                status: log.payoutTransaction.status,
+                amount: log.payoutTransaction.amount,
+                beneficiaryName: log.payoutTransaction.beneficiaryName,
+                accountNumber: log.payoutTransaction.accountNumber,
+                ifscCode: log.payoutTransaction.ifscCode,
+                utrNumber: log.payoutTransaction.utrNumber,
+                userId: log.payoutTransaction.userId,
+              }
+            : null,
+        })),
+      };
     } catch (error) {
-        log.error("Error checking vendor balance:", error);
-        throw error;
+      console.error("Error fetching filtered system logs:", error);
+      log.error("Error fetching filtered system logs:", error);
+      throw error;
     }
-}
+  }
+
+  async getFilteredUserCallbackLogs(filters) {
+    try {
+      const conditions = [eq(userCallbackLogs.userId, filters.userId)];
+
+      if (filters.startDate) {
+        conditions.push(gte(userCallbackLogs.createdAt, filters.startDate));
+      }
+
+      if (filters.endDate) {
+        conditions.push(lte(userCallbackLogs.createdAt, filters.endDate));
+      }
+
+      const baseQuery = db
+        .select({
+          id: userCallbackLogs.id,
+          transactionId: userCallbackLogs.transactionId,
+          modifiedPayload: userCallbackLogs.modifiedPayload,
+          status: userCallbackLogs.status,
+          isSuccessful: userCallbackLogs.isSuccessful,
+          errorMessage: userCallbackLogs.errorMessage,
+          callbackUrl: userCallbackLogs.callbackUrl,
+          callbackResponse: userCallbackLogs.callbackResponse,
+          createdAt: userCallbackLogs.createdAt,
+        })
+        .from(userCallbackLogs);
+
+      // Get total count with conditions
+      const [{ count }] = await db
+        .select({
+          count: sql`count(*)`,
+        })
+        .from(userCallbackLogs)
+        .where(and(...conditions));
+
+      // Get paginated results with conditions
+      const logs = await baseQuery
+        .where(and(...conditions))
+        .orderBy(desc(userCallbackLogs.createdAt))
+        .limit(filters.limit)
+        .offset(filters.offset);
+
+      return {
+        total: parseInt(count),
+        logs: logs.map((log) => ({
+          id: log.id,
+          transactionId: log.transactionId,
+          status: log.status,
+          isSuccessful: log.isSuccessful,
+          callbackUrl: log.callbackUrl,
+          errorMessage: log.errorMessage,
+          callbackResponse: log.callbackResponse,
+          createdAt: log.createdAt,
+          // Parse and include relevant fields from payoutTransaction
+          amount: log.modifiedPayload?.amount,
+          orderId: log.modifiedPayload?.orderId,
+          clientOrderId: log.modifiedPayload?.clientOrderId,
+          utrNumber: log.modifiedPayload?.utrNumber,
+        })),
+      };
+    } catch (error) {
+      console.error("Error fetching filtered user callback logs:", error);
+      log.error("Error fetching filtered user callback logs:", error);
+      throw error;
+    }
+  }
+
+  async logSystemCallback(rawData, payoutTransactionId = null) {
+    try {
+      // Insert into system callback logs
+      const [systemLog] = await db
+        .insert(systemCallbackLogs)
+        .values({
+          payoutTransactionId,
+          status: "RECEIVED",
+        })
+        .returning();
+
+      return {
+        systemLog,
+        rawData,
+      };
+    } catch (error) {
+      log.error("Error in logSystemCallback:", error);
+      throw error;
+    }
+  }
+
+  async logUserCallback(
+    userId,
+    transactionId,
+    configId,
+    payload,
+    isSuccessful,
+    errorMessage = null,
+    callbackUrl = null,
+    callbackResponse = null
+  ) {
+    try {
+      const [userCallbackLog] = await db
+        .insert(userCallbackLogs)
+        .values({
+          userId,
+          transactionId,
+          configId,
+          originalPayload: payload,
+          status: isSuccessful ? "COMPLETED" : "FAILED",
+          isSuccessful,
+          errorMessage,
+          callbackUrl,
+          callbackResponse,
+        })
+        .returning();
+
+      return userCallbackLog;
+    } catch (error) {
+      log.error("Error in logUserCallback:", error);
+      throw error;
+    }
+  }
+
+  async manuallyMarkFailed(transaction) {
+    try {
+      return await db.transaction(async (tx) => {
+        const [updatedTransaction] = await tx
+          .update(payoutTransactions)
+          .set({
+            status: "FAILED",
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            errorMessage: "Manually marked as failed by admin"
+          })
+          .where(eq(payoutTransactions.id, transaction.id))
+          .returning();
+  
+        await this.processRefund(transaction, tx);
+        return updatedTransaction;
+      });
+    } catch (error) {
+      console.log("error--> ",error);
+      log.error("Error manually marking transaction as failed:", error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new PayoutDao();

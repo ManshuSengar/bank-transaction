@@ -40,10 +40,10 @@ const payoutTransactions = pgTable('payout_transactions', {
     schemeId: integer('scheme_id').references(() => schemes.id).notNull(),
     apiConfigId: integer('api_config_id').references(() => apiConfigs.id).notNull(),
     clientOrderId: varchar('client_order_id', { length: 100 }).notNull().unique(),
-    vendorOrderId: varchar('vendor_order_id', { length: 32 }).notNull().unique(), // Our reference used with vendor
+    vendorOrderId: varchar('vendor_order_id', { length: 32 }).notNull().unique(), 
     orderId: varchar('order_id', { length: 100 }),
     amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
-    transferMode: varchar('transfer_mode', { length: 20 }).notNull(), // IMPS, NEFT, RTGS
+    transferMode: varchar('transfer_mode', { length: 20 }).notNull(), 
     accountNumber: varchar('account_number', { length: 50 }).notNull(),
     ifscCode: varchar('ifsc_code', { length: 20 }).notNull(),
     beneficiaryName: varchar('beneficiary_name', { length: 100 }),

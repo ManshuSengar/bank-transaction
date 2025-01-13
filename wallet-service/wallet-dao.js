@@ -206,10 +206,12 @@ class WalletDao {
     referenceId = null,
     userId,
     referenceType = "UNKNOWN",
-    transactionUniqueId = null
+    transactionUniqueId = null,
+    trasaction=null
   ) {
     try {
       return await db.transaction(async (tx) => {
+        tx=trasaction?trasaction:tx;
         const [wallet] = await tx
           .select()
           .from(userWallets)

@@ -9,7 +9,6 @@ const log = new Logger('Password-Controller');
 const Joi = require('joi');
 const crypto=require('crypto');
 const emailService=require("../email-service/email-controller");
-// Validation schemas
 const setupPasswordSchema = Joi.object({
     token: Joi.string().required(),
     newPassword: Joi.string()
@@ -30,10 +29,8 @@ const setupPasswordSchema = Joi.object({
         })
 });
 
-// Setup/Reset password endpoint (works for both welcome email and password reset)
 passwordRouter.post('/setup', async (req, res) => {
     try {
-        // Validate request body
         const { error } = setupPasswordSchema.validate(req.body);
         if (error) {
             return res.status(400).send({
@@ -43,8 +40,6 @@ passwordRouter.post('/setup', async (req, res) => {
         }
 
         const { token, newPassword } = req.body;
-
-        // Find user with valid reset token
         const [user] = await db
             .select()
             .from(users)
@@ -63,10 +58,8 @@ passwordRouter.post('/setup', async (req, res) => {
             });
         }
 
-        // Hash new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // Update user's password and clear reset token
         await db
             .update(users)
             .set({
@@ -77,7 +70,6 @@ passwordRouter.post('/setup', async (req, res) => {
             })
             .where(eq(users.id, user.id));
 
-        // Log the password change
         await db
             .insert(userActivityLogs)
             .values({
@@ -103,7 +95,6 @@ passwordRouter.post('/setup', async (req, res) => {
     }
 });
 
-// Request password reset (when user forgets password)
 passwordRouter.post('/request-reset', async (req, res) => {
     try {
         const { emailId } = req.body;
@@ -122,18 +113,15 @@ passwordRouter.post('/request-reset', async (req, res) => {
             .limit(1);
 
         if (!user) {
-            // For security, don't reveal whether email exists
             return res.send({
                 messageCode: 'RESET_EMAIL_SENT',
                 message: 'If an account exists with this email, you will receive password reset instructions.'
             });
         }
 
-        // Generate reset token
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetExpires = new Date(Date.now() + 3600000); // 1 hour
 
-        // Update user with reset token
         await db
             .update(users)
             .set({
@@ -161,11 +149,9 @@ passwordRouter.post('/request-reset', async (req, res) => {
     }
 });
 
-// Verify reset token (optional - to verify token before showing password reset form)
 passwordRouter.get('/verify-token/:token', async (req, res) => {
     try {
         const { token } = req.params;
-
         const [user] = await db
             .select()
             .from(users)
@@ -180,7 +166,7 @@ passwordRouter.get('/verify-token/:token', async (req, res) => {
         if (!user) {
             return res.status(400).send({
                 messageCode: 'INVALID_TOKEN',
-                message: 'Password reset token is invalid or has expired'
+                message: 'Password reset link has expired or is invalid. Please request a new link.'
             });
         }
 

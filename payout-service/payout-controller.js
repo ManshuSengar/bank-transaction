@@ -14,6 +14,9 @@ const telegramDao = require("../telegram-service/telegram-dao");
 const walletDao = require("../wallet-service/wallet-dao");
 const apiConfigDao=require("../api-config-service/api-config-dao");
 const axios=require("axios");
+const XLSX = require('xlsx');
+const fs = require('fs').promises;
+const path = require('path');
 // Validation Schemas
 const accountValidateSchema = Joi.object({
   clientId: Joi.string().required(), // username
@@ -195,18 +198,6 @@ payoutRouter.post("/account-validate", async (req, res) => {
 
 payoutRouter.post("/payout", async (req, res) => {
   try {
-    // const { error } = payoutSchema.validate(req.body);
-    // if (error) {
-    //     return res.status(400).send({
-    //         statusCode: 0,
-    //         message: error.details[0].message,
-    //         clientOrderId: req.body.clientOrderId,
-    //         orderId: null,
-    //         beneficiaryName: null,
-    //         utr: null,
-    //         status: null
-    //     });
-    // }
     const user = await userDao.getUserByUsername(req.body.clientId);
     if (!user) {
       return res.status(401).send({
@@ -245,35 +236,69 @@ payoutRouter.post("/payout", async (req, res) => {
       req.body.secretKey
     );
 
-    const statusCode =
-      result.vendorResponse.statusCode === 1
-        ? 1
-        : result.vendorResponse.statusCode === 0
-        ? 0
-        : 2;
+    let responseStatus;
+    if (result.vendorResponse.statusCode === 0) {
+      responseStatus = {
+        statusCode: 0,
+        status: 0, 
+        message: "failed"
+      };
+    } else if (result.vendorResponse.statusCode === 1) {
+      switch (result.vendorResponse.status) {
+        case 1:
+          responseStatus = {
+            statusCode: 1,
+            status: 1, 
+            message: "success"
+          };
+          break;
+        case 0:
+          responseStatus = {
+            statusCode: 1,
+            status: 0, 
+            message: "failed"
+          };
+          break;
+        case 4:
+          responseStatus = {
+            statusCode: 1,
+            status: 4,
+            message: "reversed"
+          };
+          break;
+        default:
+          responseStatus = {
+            statusCode: 1,
+            status: 2, 
+            message: "pending"
+          };
+      }
+    } else {
+      responseStatus = {
+        statusCode: 2,
+        status: 2,
+        message: "initiate"
+      };
+    }
 
     res.send({
-      statusCode: statusCode,
-      message:
-        statusCode === 1 ? "success" : statusCode === 0 ? "failed" : "initiate",
+      statusCode: responseStatus.statusCode,
+      message: responseStatus.message,
       clientOrderId: req.body.clientOrderId,
-      orderId: result.transaction.orderId,
+      orderId: result.transaction.internalId,
       beneficiaryName: result.transaction.beneficiaryName,
       utr: result.transaction.utrNumber,
-      status: statusCode,
+      status: responseStatus.status,
       amount: result.transaction.amount,
     });
+    return;
   } catch (error) {
     console.log("error--> ", error);
 
     if (error instanceof DatabaseError) {
-      return handleDatabaseError(
-        error,
-        req,
-        res,
-        "Error in account validation"
-      );
+      return handleDatabaseError(error, req, res, "Error in account validation");
     }
+    
     log.error("Error initiating payout:", error);
     res.status(500).send({
       statusCode: 0,
@@ -284,6 +309,7 @@ payoutRouter.post("/payout", async (req, res) => {
       utr: null,
       status: null,
     });
+    return;
   }
 });
 
@@ -463,6 +489,7 @@ payoutRouter.get(
         await fs.unlink(filepath).catch(() => {});
       });
     } catch (error) {
+      console.log("Error downloading transactions:", error);
       log.error("Error downloading transactions:", error);
       res.status(500).send({
         messageCode: "ERR_DOWNLOAD_TRANSACTIONS",
@@ -504,8 +531,7 @@ payoutRouter.post(
         PENDING: "pending",
         REVERSED: "reversed",
       };
-
-      res.send({
+       res.send({
         messageCode: "STATUS_CHECKED",
         message: `Transaction status: ${statusMapping[result.status]}`,
         data: {
@@ -519,10 +545,11 @@ payoutRouter.post(
           statusDescription: result.description,
         },
       });
+      return;
     } catch (error) {
       console.log("error--> ", error);
       log.error("Error checking status:", error);
-      res.status(500).send({
+     return res.status(500).send({
         messageCode: "ERR_CHECK_STATUS",
         message: "Error checking transaction status",
       });
@@ -642,16 +669,16 @@ payoutRouter.get(
       }
       const balance = response.data.balance;
 
-      if (balance < 1000) {
-        const alertMessage =
-          `🚨 *LOW VENDOR BALANCE ALERT*\n\n` +
-          `*Current Balance:* ₹${balance.toLocaleString("en-IN")}\n` +
-          `*Status:* Critical - Below minimum threshold\n` +
-          `*Action Required:* Immediate top-up needed\n\n` +
-          `Please add funds to avoid service interruption.`;
+      // if (balance < 1000) {
+      //   const alertMessage =
+      //     `🚨 *LOW VENDOR BALANCE ALERT*\n\n` +
+      //     `*Current Balance:* ₹${balance.toLocaleString("en-IN")}\n` +
+      //     `*Status:* Critical - Below minimum threshold\n` +
+      //     `*Action Required:* Immediate top-up needed\n\n` +
+      //     `Please add funds to avoid service interruption.`;
 
-        await telegramDao.sendMessage(alertMessage);
-      }
+      //   await telegramDao.sendMessage(alertMessage);
+      // }
 
       res.send({
         messageCode: "VENDOR_BALANCE_FETCHED",
@@ -669,5 +696,170 @@ payoutRouter.get(
     }
   }
 );
+
+
+payoutRouter.get("/system-logs", authenticateToken, async (req, res) => {
+  try {
+    const {
+      userId,
+      startDate,
+      endDate,
+      status,
+      search,
+      searchType = "all",
+      limit = 50,
+      offset = 0,
+    } = req.query;
+
+    // Initialize filters object
+    const filters = {
+      limit: Math.min(parseInt(limit) || 50, 100),
+      offset: parseInt(offset) || 0,
+    };
+
+    // Add optional filters only if they exist and are valid
+    if (userId) {
+      const userIdNum = parseInt(userId);
+      if (!isNaN(userIdNum)) {
+        filters.userId = userIdNum;
+      }
+    }
+
+    if (startDate && Date.parse(startDate)) {
+      filters.startDate = new Date(startDate);
+    }
+
+    if (endDate && Date.parse(endDate)) {
+      filters.endDate = new Date(endDate);
+    }
+
+    if (status) {
+      filters.status = status.toUpperCase();
+    }
+
+    // Add search parameters only if search is not empty
+    if (search && search.trim()) {
+      filters.search = search.trim();
+      filters.searchType = ["all", "transactionId", "orderId"].includes(searchType)
+        ? searchType
+        : "all";
+    }
+
+    const systemLogs = await payoutDao.getFilteredSystemLogs(filters);
+
+    res.send({
+      messageCode: "SYSTEM_LOGS_RETRIEVED",
+      message: "System callback logs retrieved successfully",
+      data: systemLogs.logs,
+      pagination: {
+        total: systemLogs.total,
+        limit: filters.limit,
+        offset: filters.offset,
+        page: Math.floor(filters.offset / filters.limit) + 1,
+      },
+    });
+  } catch (error) {
+    log.error("Error retrieving filtered system logs:", error);
+    res.status(error.statusCode || 500).send({
+      messageCode: error.messageCode || "ERR_FETCH_SYSTEM_LOGS",
+      message: error.message || "Error retrieving system logs",
+    });
+  }
+});
+
+payoutRouter.get('/user-logs', authenticateToken, async (req, res) => {
+  try {
+    const {
+      startDate,
+      endDate,
+      limit = 50,
+      offset = 0
+    } = req.query;
+
+    const filters = {
+      userId: req.user.userId,
+      limit: Math.min(parseInt(limit) || 50, 100), 
+      offset: parseInt(offset) || 0
+    };
+    
+    if (startDate && Date.parse(startDate)) {
+      filters.startDate = new Date(startDate);
+    }
+
+    if (endDate && Date.parse(endDate)) {
+      filters.endDate = new Date(endDate);
+    }
+
+    const userLogs = await payoutDao.getFilteredUserCallbackLogs(filters);
+    
+    res.send({
+      messageCode: 'USER_LOGS_RETRIEVED',
+      message: 'User callback logs retrieved successfully',
+      data: userLogs.logs,
+      pagination: {
+        total: userLogs.total,
+        limit: filters.limit,
+        offset: filters.offset,
+        pages: Math.ceil(userLogs.total / filters.limit)
+      }
+    });
+
+  } catch (error) {
+    log.error('Error retrieving filtered user callback logs:', error);
+    res.status(error.statusCode || 500).send({
+      messageCode: error.messageCode || 'ERR_FETCH_USER_LOGS', 
+      message: error.message || 'Error retrieving user callback logs'
+    });
+  }
+});
+
+payoutRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
+  try {
+    const { clientOrderId } = req.body;
+
+    if (!clientOrderId) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Client Order ID is required"
+      });
+    }
+
+    const transaction = await payoutDao.getTransactionByClientOrderId(clientOrderId);
+    
+    if (!transaction) {
+      return res.status(404).send({
+        messageCode: "TRANSACTION_NOT_FOUND",
+        message: "Transaction not found"
+      });
+    }
+
+    if (transaction.status !== "PENDING") {
+      return res.status(400).send({
+        messageCode: "INVALID_STATUS",
+        message: "Only pending transactions can be marked as failed"
+      });
+    }
+
+    const updatedTransaction = await payoutDao.manuallyMarkFailed(transaction);
+
+    res.send({
+      messageCode: "TRANSACTION_MARKED_FAILED",
+      message: "Transaction successfully marked as failed",
+      transaction: {
+        clientOrderId: updatedTransaction.clientOrderId,
+        status: updatedTransaction.status,
+        amount: updatedTransaction.amount,
+        orderId: updatedTransaction.orderId,
+        utrNumber: updatedTransaction.utrNumber
+      }
+    });
+  } catch (error) {
+    log.error("Error marking transaction as failed:", error);
+    res.status(500).send({
+      messageCode: "ERR_MARK_FAILED",
+      message: "Error marking transaction as failed"
+    });
+  }
+});
 
 module.exports = payoutRouter;
