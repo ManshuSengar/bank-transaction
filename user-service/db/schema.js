@@ -167,6 +167,8 @@ const users = pgTable('users', {
     roleId: integer('role_id').references(() => roles.id).notNull(),
     passwordResetToken: varchar('password_reset_token', { length: 255 }),
     passwordResetExpires: timestamp('password_reset_expires'),
+    failedLoginAttempts: integer('failed_login_attempts').default(0),
+    accountLockTime: timestamp('account_lock_time'),
     lastLogin: timestamp('last_login'),
     lastLoginIp: varchar('last_login_ip', { length: 45 }),
     lastLoginLocation: text('last_login_location'),

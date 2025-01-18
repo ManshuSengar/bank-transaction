@@ -132,17 +132,34 @@ class PayoutDao {
         const userWallets = await walletDao.getUserWallets(userId);
         const payoutWallet = userWallets.find((w) => w.type.name === "PAYOUT");
 
+        if (!payoutWallet) {
+          throw {
+              statusCode: 400,
+              messageCode: 'WALLET_NOT_FOUND',
+              message: 'Payout wallet not found'
+          };
+      }
+
         const totalAmount =
           parseFloat(payoutData.amount) +
           parseFloat(chargeCalculation.charges.totalCharges);
 
-        if (!payoutWallet || payoutWallet.wallet.balance < totalAmount) {
-          throw {
-            statusCode: 400,
-            messageCode: "INSUFFICIENT_BALANCE",
-            message: "Insufficient balance in payout wallet",
-          };
-        }
+          const availableBalance = await walletDao.getAvailableBalance(payoutWallet.wallet.id);
+          if (availableBalance < totalAmount) {
+              throw {
+                  statusCode: 400,
+                  messageCode: 'INSUFFICIENT_BALANCE',
+                  message: 'Insufficient available balance in payout wallet (some funds may be locked)'
+              };
+          }
+
+        // if (!payoutWallet || payoutWallet.wallet.balance < totalAmount) {
+        //   throw {
+        //     statusCode: 400,
+        //     messageCode: "INSUFFICIENT_BALANCE",
+        //     message: "Insufficient balance in payout wallet",
+        //   };
+        // }
 
         const [transaction] = await tx
           .insert(payoutTransactions)
@@ -615,102 +632,106 @@ class PayoutDao {
 
   async processCallback(callbackData) {
     try {
-      // Log raw callback
-      const [systemLog] = await db
-        .insert(systemCallbackLogs)
-        .values({
-          callbackData: callbackData,
-          status: "RECEIVED",
-        })
-        .returning();
+        // Log raw callback
+        const [systemLog] = await db
+            .insert(systemCallbackLogs)
+            .values({
+                callbackData: callbackData,
+                status: "RECEIVED",
+            })
+            .returning();
 
-      const transaction = await this.getTransactionByClientOrderId(
-        callbackData.ClientOrderId
-      );
-      if (!transaction) {
-        await this.updateSystemLog(
-          systemLog.id,
-          "FAILED",
-          "Transaction not found"
-        );
-        log.error(
-          `Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`
-        );
-        return null;
-      }
-
-      await this.updateSystemLog(
-        systemLog.id,
-        "PROCESSING",
-        null,
-        transaction.id
-      );
-
-      // Map vendor status codes to internal status
-      const statusCode = parseInt(callbackData.StatusCode);
-      const statusNum = parseInt(callbackData.Status);
-      const newStatus = this.mapVendorStatus({
-        statusCode: statusCode,
-        status: statusNum,
-      });
-
-      return await db.transaction(async (tx) => {
-        // Update transaction status
-        const updatedTransaction = await this.updateTransactionStatus(
-          transaction.id,
-          newStatus,
-          callbackData.UTR,
-          {
-            orderId: callbackData.OrderId,
-            amount: parseFloat(callbackData.Amount),
-            paymentMode: callbackData.PaymentMode,
-            transactionDate: callbackData.Date,
-            status: newStatus,
-            statusCode: statusCode,
-            checksum: callbackData.Checksum,
-            rawResponse: callbackData,
-          },
-          tx
-        );
-
-        // Process refund if needed
-        if (
-          ["FAILED", "REVERSED"].includes(newStatus) &&
-          transaction.status !== "FAILED"
-        ) {
-          await this.processRefund(transaction, tx);
+        const transaction = await this.getTransactionByClientOrderId(callbackData.ClientOrderId);
+        if (!transaction) {
+            await this.updateSystemLog(systemLog.id, "FAILED", "Transaction not found");
+            log.error(`Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`);
+            return null;
         }
 
-        // Format user callback data
-        const userCallbackData = {
-          statusCode: statusCode,
-          message: callbackData.Message,
-          clientOrderId: callbackData.ClientOrderId,
-          orderId: callbackData.OrderId,
-          amount: callbackData.Amount,
-          paymentMode: callbackData.PaymentMode,
-          status: newStatus,
-          utrNumber: callbackData.UTR,
-          transactionDate: callbackData.Date,
-          rawStatus: statusNum,
-        };
+        await this.updateSystemLog(systemLog.id, "PROCESSING", null, transaction.id);
 
-        await this.forwardCallback(updatedTransaction, userCallbackData);
-        await this.updateSystemLog(systemLog.id, "COMPLETED");
+        // Map vendor status codes to internal status
+        const statusCode = parseInt(callbackData.StatusCode);
+        const statusNum = parseInt(callbackData.Status);
+        const newStatus = this.mapVendorStatus(statusCode, statusNum);
 
-        return {
-          systemLog,
-          transaction: updatedTransaction,
-        };
-      });
+        return await db.transaction(async (tx) => {
+            // Update transaction status
+            const updatedTransaction = await this.updateTransactionStatus(
+                transaction.id,
+                newStatus,
+                callbackData.UTR,
+                {
+                    orderId: callbackData.OrderId,
+                    amount: parseFloat(callbackData.Amount),
+                    paymentMode: callbackData.PaymentMode,
+                    transactionDate: callbackData.Date,
+                    status: newStatus,
+                    statusCode: statusCode,
+                    checksum: callbackData.Checksum,
+                    rawResponse: callbackData
+                },
+                tx
+            );
+
+            // Process refund if needed
+            if (["FAILED", "REVERSED"].includes(newStatus) && transaction.status !== "FAILED") {
+                // Get user's payout wallet
+                const userWallets = await walletDao.getUserWallets(transaction.userId);
+                const payoutWallet = userWallets.find(w => w.type.name === "PAYOUT");
+
+                if (!payoutWallet) {
+                    throw new Error("Payout wallet not found");
+                }
+
+                // Calculate total refund amount (transaction amount + charges)
+                const totalAmount = parseFloat(transaction.amount) + parseFloat(transaction.totalCharges);
+
+                // No need to check locks when refunding
+                await walletDao.updateWalletBalance(
+                    payoutWallet.wallet.id,
+                    totalAmount,
+                    "CREDIT",
+                    `Refund for failed payout #${transaction.clientOrderId}`,
+                    transaction.id,
+                    transaction.userId,
+                    "PAYOUT_REFUND",
+                    null,
+                    tx
+                );
+            }
+
+            // Format and forward user callback data
+            const userCallbackData = {
+                statusCode: statusCode,
+                message: callbackData.Message,
+                clientOrderId: callbackData.ClientOrderId,
+                orderId: callbackData.OrderId,
+                amount: callbackData.Amount,
+                paymentMode: callbackData.PaymentMode,
+                status: newStatus,
+                utrNumber: callbackData.UTR,
+                transactionDate: callbackData.Date,
+                rawStatus: statusNum
+            };
+
+            // Forward callback to user's callback URL
+            await this.forwardCallback(updatedTransaction, userCallbackData);
+            await this.updateSystemLog(systemLog.id, "COMPLETED");
+
+            return {
+                systemLog,
+                transaction: updatedTransaction
+            };
+        });
     } catch (error) {
-      log.error("Error processing callback:", error);
-      if (systemLog) {
-        await this.updateSystemLog(systemLog.id, "FAILED", error.message);
-      }
-      throw error;
+        log.error("Error processing callback:", error);
+        if (systemLog) {
+            await this.updateSystemLog(systemLog.id, "FAILED", error.message);
+        }
+        throw error;
     }
-  }
+}
 
   async updateTransactionStatus(
     transactionId,

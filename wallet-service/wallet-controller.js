@@ -29,6 +29,11 @@ const topupSchema = Joi.object({
   reference: Joi.string().max(100),
 });
 
+const lockAmountSchema = Joi.object({
+  amount: Joi.number().positive().required(),
+  reason: Joi.string().required(),
+});
+
 walletRouter.get("/wallet-type", authenticateToken, async (req, res) => {
   try {
     console.log("testing-->");
@@ -202,37 +207,42 @@ walletRouter.get("/:walletId", authenticateToken, async (req, res) => {
 });
 
 // Get wallet balance
-walletRouter.get("/:walletId/balance", authenticateToken, async (req, res) => {
+walletRouter.get('/:walletId/balance', authenticateToken, async (req, res) => {
   try {
-    // Verify wallet belongs to user
-    const wallets = await walletDao.getUserWallets(req.user.userId);
-    const wallet = wallets.find(
-      (w) => w.wallet.id === parseInt(req.params.walletId)
-    );
+      // Verify wallet belongs to user
+      const wallets = await walletDao.getUserWallets(req.user.userId);
+      const wallet = wallets.find(w => w.wallet.id === parseInt(req.params.walletId));
 
-    if (!wallet) {
-      return res.status(404).send({
-        messageCode: "WALLET_NOT_FOUND",
-        message: "Wallet not found or access denied",
+      if (!wallet) {
+          return res.status(404).send({
+              messageCode: 'WALLET_NOT_FOUND',
+              message: 'Wallet not found or access denied'
+          });
+      }
+
+      const totalBalance = parseFloat(wallet.wallet.balance);
+      const lockedAmount = await walletDao.getTotalLockedAmount(wallet.wallet.id);
+      const availableBalance = totalBalance - lockedAmount;
+
+      res.send({
+          messageCode: 'BALANCE_FETCHED',
+          message: 'Balance retrieved successfully',
+          data: {
+              totalBalance,
+              lockedAmount,
+              availableBalance,
+              walletType: wallet.type.name,
+              lastUpdate: wallet.wallet.updatedAt
+          }
       });
-    }
-
-    const balance = await walletDao.getWalletBalance(req.params.walletId);
-    res.send({
-      messageCode: "BALANCE_FETCHED",
-      message: "Balance retrieved successfully",
-      balance,
-      walletType: wallet.type.name,
-    });
   } catch (error) {
-    log.error("Error fetching wallet balance:", error);
-    res.status(500).send({
-      messageCode: "ERR_FETCH_BALANCE",
-      message: "Error retrieving wallet balance",
-    });
+      log.error('Error fetching wallet balance:', error);
+      res.status(500).send({
+          messageCode: 'ERR_FETCH_BALANCE',
+          message: 'Error retrieving wallet balance'
+      });
   }
 });
-
 // Transfer between wallets
 walletRouter.post("/transfer", authenticateToken, async (req, res) => {
   try {
@@ -573,5 +583,227 @@ walletRouter.get("/admin/excel-transaction/download",
       }
   }
 );
+
+walletRouter.post(
+  '/:walletId/lock',
+  authenticateToken,
+  // authorize(['manage_wallets']),
+  async (req, res) => {
+      try {
+          const { error } = lockAmountSchema.validate(req.body);
+          if (error) {
+              return res.status(400).send({
+                  messageCode: 'VALIDATION_ERROR',
+                  message: error.details[0].message
+              });
+          }
+
+          const walletId = parseInt(req.params.walletId);
+          if (isNaN(walletId)) {
+              return res.status(400).send({
+                  messageCode: 'INVALID_WALLET_ID',
+                  message: 'Invalid wallet ID'
+              });
+          }
+
+          const lock = await walletDao.lockWalletAmount(
+              walletId,
+              req.body.amount,
+              req.body.reason,
+              req.user.userId
+          );
+
+          res.send({
+              messageCode: 'AMOUNT_LOCKED',
+              message: 'Wallet amount locked successfully',
+              lock
+          });
+      } catch (error) {
+          log.error('Error locking wallet amount:', error);
+          res.status(error.statusCode || 500).send({
+              messageCode: error.messageCode || 'ERR_LOCK_AMOUNT',
+              message: error.message || 'Error locking wallet amount'
+          });
+      }
+  }
+);
+
+walletRouter.post(
+  '/locks/:lockId/unlock',
+  authenticateToken,
+  // authorize(['manage_wallets']),
+  async (req, res) => {
+      try {
+          const lockId = parseInt(req.params.lockId);
+          if (isNaN(lockId)) {
+              return res.status(400).send({
+                  messageCode: 'INVALID_LOCK_ID',
+                  message: 'Invalid lock ID'
+              });
+          }
+
+          const lock = await walletDao.unlockWalletAmount(
+              lockId,
+              req.user.userId,
+              req.body.reason || 'Lock released by admin'
+          );
+
+          res.send({
+              messageCode: 'AMOUNT_UNLOCKED',
+              message: 'Wallet amount unlocked successfully',
+              lock
+          });
+      } catch (error) {
+          log.error('Error unlocking wallet amount:', error);
+          res.status(error.statusCode || 500).send({
+              messageCode: error.messageCode || 'ERR_UNLOCK_AMOUNT',
+              message: error.message || 'Error unlocking wallet amount'
+          });
+      }
+  }
+);
+
+// Get wallet locks
+walletRouter.get(
+  '/:walletId/locks',
+  authenticateToken,
+  async (req, res) => {
+      try {
+          const walletId = parseInt(req.params.walletId);
+          if (isNaN(walletId)) {
+              return res.status(400).send({
+                  messageCode: 'INVALID_WALLET_ID',
+                  message: 'Invalid wallet ID'
+              });
+          }
+
+          // Verify wallet belongs to user or user has admin permission
+          const userWallets = await walletDao.getUserWallets(req.user.userId);
+          const hasAccess = userWallets.some(w => w.wallet.id === walletId) || 
+                          req.user.permissions?.includes('manage_wallets');
+
+          if (!hasAccess) {
+              return res.status(403).send({
+              // Add these routes to wallet-controller.js (continued)
+
+              messageCode: 'ACCESS_DENIED',
+              message: 'You do not have access to this wallet'
+          });
+      }
+
+      const locks = await walletDao.getLocksByWalletId(walletId);
+      const totalLocked = await walletDao.getTotalLockedAmount(walletId);
+      const availableBalance = await walletDao.getAvailableBalance(walletId);
+
+      res.send({
+          messageCode: 'LOCKS_FETCHED',
+          message: 'Wallet locks retrieved successfully',
+          data: {
+              locks,
+              summary: {
+                  totalLocked,
+                  availableBalance
+              }
+          }
+      });
+  } catch (error) {
+      log.error('Error getting wallet locks:', error);
+      res.status(500).send({
+          messageCode: 'ERR_GET_LOCKS',
+          message: 'Error retrieving wallet locks'
+      });
+  }
+}
+);
+
+// Get wallet lock history
+walletRouter.get(
+'/:walletId/lock-history',
+authenticateToken,
+async (req, res) => {
+  try {
+      const walletId = parseInt(req.params.walletId);
+      const { page = 1, limit = 10 } = req.query;
+
+      if (isNaN(walletId)) {
+          return res.status(400).send({
+              messageCode: 'INVALID_WALLET_ID',
+              message: 'Invalid wallet ID'
+          });
+      }
+
+      // Verify access rights
+      const userWallets = await walletDao.getUserWallets(req.user.userId);
+      const hasAccess = userWallets.some(w => w.wallet.id === walletId) || 
+                      req.user.permissions?.includes('manage_wallets');
+
+      if (!hasAccess) {
+          return res.status(403).send({
+              messageCode: 'ACCESS_DENIED',
+              message: 'You do not have access to this wallet'
+          });
+      }
+
+      const history = await walletDao.getWalletLockHistory(walletId, {
+          page: parseInt(page),
+          limit: parseInt(limit)
+      });
+
+      res.send({
+          messageCode: 'LOCK_HISTORY_FETCHED',
+          message: 'Wallet lock history retrieved successfully',
+          ...history
+      });
+  } catch (error) {
+      log.error('Error getting wallet lock history:', error);
+      res.status(500).send({
+          messageCode: 'ERR_GET_LOCK_HISTORY',
+          message: 'Error retrieving wallet lock history'
+      });
+  }
+}
+);
+
+// Get all wallet locks (admin only)
+walletRouter.get(
+'/admin/locks',
+authenticateToken,
+// authorize(['manage_wallets']),
+async (req, res) => {
+  try {
+      const {
+          userId,
+          walletType,
+          status = 'ACTIVE',
+          page = 1,
+          limit = 10
+      } = req.query;
+
+      const filters = {
+          status,
+          userId: userId ? parseInt(userId) : null,
+          walletType,
+          page: parseInt(page),
+          limit: parseInt(limit)
+      };
+
+      const locks = await walletDao.getAllWalletLocks(filters);
+
+      res.send({
+          messageCode: 'ALL_LOCKS_FETCHED',
+          message: 'All wallet locks retrieved successfully',
+          ...locks
+      });
+  } catch (error) {
+      log.error('Error getting all wallet locks:', error);
+      res.status(500).send({
+          messageCode: 'ERR_GET_ALL_LOCKS',
+          message: 'Error retrieving all wallet locks'
+      });
+  }
+}
+);
+
+
 
 module.exports = walletRouter;

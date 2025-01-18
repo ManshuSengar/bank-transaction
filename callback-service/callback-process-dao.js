@@ -51,175 +51,190 @@ class CallbackProcessDao {
     }
   }
 
-  async processUserCallback(decryptedData) {
-    try {
+// In callback-process-dao.js
+
+async processUserCallback(decryptedData) {
+  try {
       return await db.transaction(async (tx) => {
-        const uniqueIdRecord = await uniqueIdDao.getUniqueIdByGeneratedId(
-          decryptedData.OrderId
-        );
-
-        if (!uniqueIdRecord) {
-          throw {
-            statusCode: 404,
-            messageCode: "UNIQUE_ID_NOT_FOUND",
-            message: "Unique ID not found",
-          };
-        }
-        await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
-        // 2. Find the original payin transaction
-        const [payinTransaction] = await tx
-          .select()
-          .from(payinTransactions)
-          .where(
-            eq(payinTransactions.uniqueId, uniqueIdRecord.originalUniqueId)
-          )
-          .limit(1);
-
-        if (!payinTransaction) {
-          throw {
-            statusCode: 404,
-            messageCode: "PAYIN_TRANSACTION_NOT_FOUND",
-            message: "Original payin transaction not found",
-          };
-        }
-
-        // 3. Prepare variables
-        const userId = uniqueIdRecord.userId;
-        const amount = parseFloat(decryptedData.amount);
-        const status = decryptedData.status;
-        const chargeAmount = parseFloat(payinTransaction.totalCharges);
-
-        // 4. Get user's wallets
-        const userWallets = await walletDao.getUserWallets(userId);
-        const serviceWallet = userWallets.find(
-          (w) => w.type.name === "SERVICE"
-        );
-        const collectionWallet = userWallets.find(
-          (w) => w.type.name === "COLLECTION"
-        );
-
-        if (!serviceWallet || !collectionWallet) {
-          throw {
-            statusCode: 400,
-            messageCode: "WALLET_NOT_FOUND",
-            message: "Service or Collection wallet not found",
-          };
-        }
-
-        // 5. Process based on transaction status
-        if (status === "APPROVED") {
-          // Credit amount to collection wallet
-          await walletDao.updateWalletBalance(
-            collectionWallet.wallet.id,
-            amount,
-            "CREDIT",
-            `Payin Transaction Credit - ${payinTransaction.uniqueId}`,
-            payinTransaction.transactionId,
-            userId,
-            "PAYIN"
+          // 1. Validate and get unique ID record
+          const uniqueIdRecord = await uniqueIdDao.getUniqueIdByGeneratedId(
+              decryptedData.OrderId
           );
-        } else if (status === "REJECTED") {
-          // Refund charges to service wallet
-          await walletDao.updateWalletBalance(
-            serviceWallet.wallet.id,
-            chargeAmount,
-            "CREDIT",
-            `Payin Transaction Charge Refund - ${payinTransaction.uniqueId}`,
-            payinTransaction.transactionId,
-            userId,
-            "PAYIN"
+
+          if (!uniqueIdRecord) {
+              throw {
+                  statusCode: 404,
+                  messageCode: "UNIQUE_ID_NOT_FOUND",
+                  message: "Unique ID not found",
+              };
+          }
+          await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
+
+          // 2. Find the original payin transaction
+          const [payinTransaction] = await tx
+              .select()
+              .from(payinTransactions)
+              .where(
+                  eq(payinTransactions.uniqueId, uniqueIdRecord.originalUniqueId)
+              )
+              .limit(1);
+
+          if (!payinTransaction) {
+              throw {
+                  statusCode: 404,
+                  messageCode: "PAYIN_TRANSACTION_NOT_FOUND",
+                  message: "Original payin transaction not found",
+              };
+          }
+
+          // 3. Prepare variables
+          const userId = uniqueIdRecord.userId;
+          const amount = parseFloat(decryptedData.amount);
+          const status = decryptedData.status;
+          const chargeAmount = parseFloat(payinTransaction.totalCharges);
+
+          // 4. Get user's wallets
+          const userWallets = await walletDao.getUserWallets(userId);
+          const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
+          const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
+
+          if (!serviceWallet || !collectionWallet) {
+              throw {
+                  statusCode: 400,
+                  messageCode: "WALLET_NOT_FOUND",
+                  message: "Service or Collection wallet not found",
+              };
+          }
+
+          // 5. Process based on transaction status
+          if (status === "APPROVED") {
+              // No need to check locks for credits
+              await walletDao.updateWalletBalance(
+                  collectionWallet.wallet.id,
+                  amount,
+                  "CREDIT",
+                  `Payin Transaction Credit - ${payinTransaction.uniqueId}`,
+                  payinTransaction.transactionId,
+                  userId,
+                  "PAYIN",
+                  null,
+                  tx
+              );
+          } else if (status === "REJECTED") {
+              // No need to check locks for refunds
+              await walletDao.updateWalletBalance(
+                  serviceWallet.wallet.id,
+                  chargeAmount,
+                  "CREDIT",
+                  `Payin Transaction Charge Refund - ${payinTransaction.uniqueId}`,
+                  payinTransaction.transactionId,
+                  userId,
+                  "PAYIN",
+                  null,
+                  tx
+              );
+          }
+
+          // 6. Update payin transaction status
+          const [updatedTransaction] = await tx
+              .update(payinTransactions)
+              .set({
+                  status: status === "APPROVED" ? "SUCCESS" : "FAILED",
+                  vendorTransactionId: decryptedData.BankRRN,
+                  errorMessage: status === "REJECTED" ? "Transaction Rejected" : null,
+                  completedAt: new Date()
+              })
+              .where(eq(payinTransactions.id, payinTransaction.id))
+              .returning();
+
+          // 7. Modify payload with original unique ID
+          const modifiedPayload = {
+              ...decryptedData,
+              OrderId: uniqueIdRecord.originalUniqueId,
+              txnid: uniqueIdRecord.generatedUniqueId,
+          };
+
+          // 8. Get user's callback configurations
+          const userCallbackConfigs = await callbackDao.getUserCallbackConfigs(userId);
+
+          // 9. If no callback configs, skip
+          if (!userCallbackConfigs.length) {
+              log.warn(`No callback configurations for user ${userId}`);
+              return {
+                  transaction: updatedTransaction,
+                  userCallbackLog: null,
+                  walletOperations: {
+                      collectionWalletCredit: status === "APPROVED" ? amount : null,
+                      serviceWalletRefund: status === "REJECTED" ? chargeAmount : null,
+                  }
+              };
+          }
+
+          // 10. Use the first active callback configuration
+          const callbackConfig = userCallbackConfigs.find(
+              config => config.status === "ACTIVE"
           );
-        }
 
-        // 6. Update payin transaction status
-        const [updatedTransaction] = await tx
-          .update(payinTransactions)
-          .set({
-            status: status === "APPROVED" ? "SUCCESS" : "FAILED",
-            vendorTransactionId: decryptedData.BankRRN,
-            errorMessage: status === "REJECTED" ? "Transaction Rejected" : null,
-          })
-          .where(eq(payinTransactions.id, payinTransaction.id))
-          .returning();
+          if (!callbackConfig) {
+              log.warn(`No active callback configuration for user ${userId}`);
+              return {
+                  transaction: updatedTransaction,
+                  userCallbackLog: null,
+                  walletOperations: {
+                      collectionWalletCredit: status === "APPROVED" ? amount : null,
+                      serviceWalletRefund: status === "REJECTED" ? chargeAmount : null,
+                  }
+              };
+          }
 
-        // 7. Modify payload with original unique ID
-        const modifiedPayload = {
-          ...decryptedData,
-          OrderId: uniqueIdRecord.originalUniqueId,
-          txnid: uniqueIdRecord.generatedUniqueId,
-        };
+          // 11. Send callback
+          let callbackResponse = null;
+          let isSuccessful = false;
+          let errorMessage = null;
 
-        // 8. Get user's callback configurations
-        const userCallbackConfigs = await callbackDao.getUserCallbackConfigs(
-          userId
-        );
+          try {
+              const response = await axios.post(
+                  callbackConfig.callbackUrl,
+                  modifiedPayload
+              );
+              callbackResponse = JSON.stringify(response.data);
+              isSuccessful = true;
+          } catch (callbackError) {
+              errorMessage = callbackError.message;
+              log.error("Callback failed:", callbackError);
+          }
 
-        // 9. If no callback configs, skip
-        if (!userCallbackConfigs.length) {
-          log.warn(`No callback configurations for user ${userId}`);
-          return null;
-        }
+          // 12. Log user callback
+          const [userCallbackLog] = await tx
+              .insert(userCallbackLogs)
+              .values({
+                  userId,
+                  transactionId: uniqueIdRecord.generatedUniqueId,
+                  configId: callbackConfig.id,
+                  originalPayload: decryptedData,
+                  modifiedPayload,
+                  status: isSuccessful ? "COMPLETED" : "FAILED",
+                  isSuccessful,
+                  errorMessage,
+                  callbackUrl: callbackConfig.callbackUrl,
+                  callbackResponse,
+              })
+              .returning();
 
-        // 10. Use the first active callback configuration
-        const callbackConfig = userCallbackConfigs.find(
-          (config) => config.status === "ACTIVE"
-        );
-
-        if (!callbackConfig) {
-          log.warn(`No active callback configuration for user ${userId}`);
-          return null;
-        }
-
-        // 11. Send callback
-        let callbackResponse = null;
-        let isSuccessful = false;
-        let errorMessage = null;
-
-        try {
-          const response = await axios.post(
-            callbackConfig.callbackUrl,
-            modifiedPayload
-          );
-          callbackResponse = JSON.stringify(response.data);
-          isSuccessful = true;
-        } catch (callbackError) {
-          console.log("callbackError--> ", callbackError);
-          errorMessage = callbackError.message;
-          log.error("Callback failed:", callbackError);
-        }
-
-        // 12. Log user callback
-        const [userCallbackLog] = await tx
-          .insert(userCallbackLogs)
-          .values({
-            userId,
-            transactionId: uniqueIdRecord.generatedUniqueId,
-            configId: callbackConfig.id,
-            originalPayload: decryptedData,
-            modifiedPayload,
-            status: isSuccessful ? "COMPLETED" : "FAILED",
-            isSuccessful,
-            errorMessage,
-            callbackUrl: callbackConfig.callbackUrl,
-            callbackResponse,
-          })
-          .returning();
-
-        return {
-          transaction: updatedTransaction,
-          userCallbackLog,
-          walletOperations: {
-            collectionWalletCredit: status === "APPROVED" ? amount : null,
-            serviceWalletRefund: status === "REJECTED" ? chargeAmount : null,
-          },
-        };
+          return {
+              transaction: updatedTransaction,
+              userCallbackLog,
+              walletOperations: {
+                  collectionWalletCredit: status === "APPROVED" ? amount : null,
+                  serviceWalletRefund: status === "REJECTED" ? chargeAmount : null,
+              },
+          };
       });
-    } catch (error) {
-      console.log("error last--> ", error);
+  } catch (error) {
       log.error("Error processing user callback:", error);
       throw error;
-    }
   }
+}
 
   async getFilteredSystemCallbackLogs(filters) {
     try {

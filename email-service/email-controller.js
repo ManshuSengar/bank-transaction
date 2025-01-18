@@ -252,9 +252,9 @@ class EmailController {
       );
 
       // For development environment, log preview URL
-    //   if (process.env.NODE_ENV !== "production") {
-    //     log.info(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-    //   }
+      //   if (process.env.NODE_ENV !== "production") {
+      //     log.info(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+      //   }
 
       // Update user record with reset token
       await db
@@ -277,6 +277,97 @@ class EmailController {
     } catch (error) {
       log.error("Error sending password reset email:", error);
       throw new Error("Failed to send password reset email");
+    }
+  }
+
+  async sendAccountLockEmail(user) {
+    try {
+      if (!this.transporter) {
+        await this.initializeTransporter();
+      }
+
+      const mailOptions = {
+        from: '"Fonexpay" <Support@fonexpay.com>',
+        to: user.emailId,
+        subject: "Account Security Alert - Account Locked",
+        html: `
+                <h1>Account Security Alert</h1>
+                <p>Dear ${user.firstname} ${user.lastname},</p>
+                
+                <p>Your account has been temporarily locked due to multiple failed login attempts.</p>
+                
+                <p><strong>Account Details:</strong></p>
+                <ul>
+                    <li>Username: ${user.username}</li>
+                    <li>Lock Time: ${new Date(
+                      user.lockTime
+                    ).toLocaleString()}</li>
+                    <li>Lock Duration: 2 hours</li>
+                </ul>
+                
+                <p>You have the following options to regain access:</p>
+                <ol>
+                    <li>Use the "Forgot Password" option to reset your password</li>
+                    <li>Wait for 2 hours and try again</li>
+                    <li>Contact support for immediate assistance</li>
+                </ol>
+                
+                <p>If you did not attempt to log in, please contact our support team immediately as your account security might be compromised.</p>
+                
+                <p>Best regards,<br>Fonexpay Security Team</p>
+            `,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      log.info(`Account lock email sent to ${user.emailId}`);
+      return info;
+    } catch (error) {
+      log.error("Error sending account lock email:", error);
+      throw error;
+    }
+  }
+
+  async sendAccountUnlockEmail(user) {
+    try {
+      if (!this.transporter) {
+        await this.initializeTransporter();
+      }
+
+      const mailOptions = {
+        from: '"Fonexpay" <Support@fonexpay.com>',
+        to: user.emailId,
+        subject: "Account Unlocked - Access Restored",
+        html: `
+                <h1>Account Access Restored</h1>
+                <p>Dear ${user.firstname} ${user.lastname},</p>
+                
+                <p>Your account has been unlocked by our administrator. You can now log in to your account.</p>
+                
+                <p><strong>Account Details:</strong></p>
+                <ul>
+                    <li>Username: ${user.username}</li>
+                    <li>Unlock Time: ${new Date().toLocaleString()}</li>
+                </ul>
+                
+                <p><strong>Security Recommendations:</strong></p>
+                <ul>
+                    <li>Consider changing your password for additional security</li>
+                    <li>Ensure you're using a strong, unique password</li>
+                    <li>Keep your login credentials confidential</li>
+                </ul>
+                
+                <p>If you did not request this account unlock, please contact our support team immediately.</p>
+                
+                <p>Best regards,<br>Fonexpay Security Team</p>
+            `,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      log.info(`Account unlock email sent to ${user.emailId}`);
+      return info;
+    } catch (error) {
+      log.error("Error sending account unlock email:", error);
+      throw error;
     }
   }
 }

@@ -6,18 +6,36 @@ const { eq, and, desc, sql } = require("drizzle-orm");
 const walletDao = require("../wallet-service/wallet-dao");
 const { users } = require("../user-service/db/schema");
 const { banks } = require("../bank-service/db/schema");
-const telegramService=require('../telegram-service/telegram-dao')
+const telegramService = require("../telegram-service/telegram-dao");
 class FundDao {
   async createFundRequest(requestData, userId) {
     try {
       return await db.transaction(async (tx) => {
         // Validate wallet types for wallet-to-wallet transfer
         if (requestData.transferType === "WALLET_TO_WALLET") {
-          if (requestData.sourceWalletType === requestData.targetWalletType) {
+          const userWallets = await walletDao.getUserWallets(userId);
+          const sourceWallet = userWallets.find(
+            (w) => w.type.name === requestData.sourceWalletType
+          );
+
+          if (!sourceWallet) {
+            throw {
+              statusCode: 404,
+              messageCode: "SOURCE_WALLET_NOT_FOUND",
+              message: `Source wallet (${requestData.sourceWalletType}) not found`,
+            };
+          }
+
+          // Check available balance considering locks
+          const availableBalance = await walletDao.getAvailableBalance(
+            sourceWallet.wallet.id
+          );
+          if (availableBalance < parseFloat(requestData.amount)) {
             throw {
               statusCode: 400,
-              messageCode: "INVALID_WALLET_TYPES",
-              message: "Source and target wallet types must be different",
+              messageCode: "INSUFFICIENT_BALANCE",
+              message:
+                "Insufficient available balance in source wallet (some funds may be locked)",
             };
           }
         }
@@ -107,7 +125,7 @@ class FundDao {
         telegramService
           .sendFundRequestNotification(requestWithUser)
           .catch((error) => {
-            console.log("error--> ",error);
+            console.log("error--> ", error);
             log.error("Error sending Telegram notification:", error);
           });
 
