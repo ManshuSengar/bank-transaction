@@ -862,4 +862,55 @@ payoutRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
   }
 });
 
+payoutRouter.post("/admin/mark-success", authenticateToken, async (req, res) => {
+  try {
+    const { clientOrderId, utrNumber } = req.body;
+
+    if (!clientOrderId) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Client Order ID is required"
+      });
+    }
+
+    const transaction = await payoutDao.getTransactionByClientOrderId(clientOrderId);
+    
+    if (!transaction) {
+      return res.status(404).send({
+        messageCode: "TRANSACTION_NOT_FOUND",
+        message: "Transaction not found"
+      });
+    }
+
+    if (transaction.status !== "PENDING") {
+      return res.status(400).send({
+        messageCode: "INVALID_STATUS",
+        message: "Only pending transactions can be marked as success"
+      });
+    }
+
+    // Use the provided UTR or generate one if not provided
+    const finalUtrNumber = utrNumber || `AUTO${Date.now()}`;
+    const updatedTransaction = await payoutDao.manuallyMarkSuccess(transaction, finalUtrNumber);
+
+    res.send({
+      messageCode: "TRANSACTION_MARKED_SUCCESS",
+      message: "Transaction successfully marked as success",
+      transaction: {
+        clientOrderId: updatedTransaction.clientOrderId,
+        status: updatedTransaction.status,
+        amount: updatedTransaction.amount,
+        orderId: updatedTransaction.orderId,
+        utrNumber: updatedTransaction.utrNumber
+      }
+    });
+  } catch (error) {
+    log.error("Error marking transaction as success:", error);
+    res.status(500).send({
+      messageCode: "ERR_MARK_SUCCESS",
+      message: "Error marking transaction as success"
+    });
+  }
+});
+
 module.exports = payoutRouter;

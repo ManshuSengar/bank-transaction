@@ -932,7 +932,7 @@ class PayoutDao {
       if (!apiConfig) {
         throw new Error("No API configuration found for Payout");
       }
-
+  
       const response = await axios.post(
         `${apiConfig.baseUrl}/api/api/api-module/payout/status-check`,
         {
@@ -946,21 +946,29 @@ class PayoutDao {
           },
         }
       );
-
-      console.log("response--> ", response);
-
-      // Get status based on status code and status parameter
+  
+      // Check if response indicates an error (like IP not whitelisted)
+      if (response.data.statusCode === 0 && !response.data.clientOrderId) {
+        // Return existing transaction status without making any changes
+        return {
+          status: transaction.status,
+          utrNumber: transaction.utrNumber,
+          description: `Status check failed: ${response.data.message}. Maintaining previous status.`
+        };
+      }
+  
+      // If valid response, proceed with normal status mapping
       const newStatus = this.mapStatusCheckResponse(
         response.data.statusCode,
         response.data.status,
         transaction.createdAt
       );
-
+  
       let description = this.getStatusDescription(
         transaction.status,
         newStatus
       );
-
+  
       if (newStatus !== transaction.status) {
         await this.updateTransactionStatus(
           transaction.id,
@@ -968,7 +976,7 @@ class PayoutDao {
           response.data.utr,
           response.data
         );
-
+  
         if (
           ["FAILED", "REVERSED"].includes(newStatus) &&
           transaction.status !== "FAILED"
@@ -976,7 +984,7 @@ class PayoutDao {
           await this.processRefund(transaction);
         }
       }
-
+  
       return {
         status: newStatus,
         utrNumber: response.data.utr || transaction.utrNumber,
@@ -984,7 +992,12 @@ class PayoutDao {
       };
     } catch (error) {
       log.error("Error checking status with vendor:", error);
-      throw error;
+      // In case of any error, maintain existing transaction status
+      return {
+        status: transaction.status,
+        utrNumber: transaction.utrNumber,
+        description: `Status check error: ${error.message}. Maintaining previous status.`
+      };
     }
   }
 
@@ -1337,6 +1350,27 @@ class PayoutDao {
     } catch (error) {
       console.log("error--> ",error);
       log.error("Error manually marking transaction as failed:", error);
+      throw error;
+    }
+  }
+  async manuallyMarkSuccess(transaction, utrNumber) {
+    try {
+      const [updatedTransaction] = await db
+        .update(payoutTransactions)
+        .set({
+          status: "SUCCESS",
+          updatedAt: new Date(),
+          completedAt: new Date(),
+          utrNumber: utrNumber,
+          errorMessage: null
+        })
+        .where(eq(payoutTransactions.id, transaction.id))
+        .returning();
+  
+      return updatedTransaction;
+    } catch (error) {
+      console.log("error--> ", error);
+      log.error("Error manually marking transaction as success:", error);
       throw error;
     }
   }

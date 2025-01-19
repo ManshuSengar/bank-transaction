@@ -868,7 +868,7 @@ class WalletDao {
           .select()
           .from(walletLocks)
           .where(
-            and(eq(walletLocks.id, lockId), eq(walletLocks.status, "ACTIVE"))
+            and(eq(walletLocks.walletId, lockId), eq(walletLocks.status, "ACTIVE"))
           )
           .limit(1);
 
@@ -888,18 +888,18 @@ class WalletDao {
             unlockedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(walletLocks.id, lockId))
+          .where(eq(walletLocks.walletId, lockId))
           .returning();
 
         // Create lock history record
-        await tx.insert(walletLockHistory).values({
-          walletId: lock.walletId,
-          lockId,
-          action: "UNLOCKED",
-          amount: lock.amount,
-          reason,
-          performedBy: userId,
-        });
+        // await tx.insert(walletLockHistory).values({
+        //   walletId: lock.walletId,
+        //   lockId,
+        //   action: "UNLOCKED",
+        //   amount: lock.amount,
+        //   reason,
+        //   performedBy: userId,
+        // });
 
         return updatedLock;
       });

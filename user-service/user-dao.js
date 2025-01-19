@@ -534,7 +534,10 @@ async function getUserByUsername(username) {
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id))
       .leftJoin(addresses, eq(users.id, addresses.userId))
-      .where(eq(users.username, username))
+      .where( and(
+        eq(users.username, username),
+        eq(users.isActive, true)
+      ))
       .limit(1);
 
     if (!user) {
