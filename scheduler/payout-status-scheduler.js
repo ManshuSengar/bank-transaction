@@ -107,15 +107,31 @@ class PayoutStatusScheduler {
 
     async fetchPendingTransactions() {
         try {
-            const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+            const now = new Date();
+            const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+            const localTime = new Date(now.getTime() + istOffset);
+            const twentyMinutesAgo = new Date(localTime.getTime() - (20 * 60 * 1000));
+            const formattedDate = twentyMinutesAgo.toISOString()
+                .replace('T', ' ')
+                .replace('Z', '')
+                .slice(0, 19);
             
+            log.info('Fetching transactions before:', {
+                twentyMinutesAgo: formattedDate,
+                currentLocalTime: localTime.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19)
+            });
+            
+            console.log('Fetching transactions before:', {
+                twentyMinutesAgo: formattedDate,
+                currentTime: new Date().toISOString()
+            });
             return await db
                 .select()
                 .from(payoutTransactions)
                 .where(
                     and(
                         eq(payoutTransactions.status, 'PENDING'),
-                        lte(payoutTransactions.createdAt, twentyMinutesAgo)
+                        lte(payoutTransactions.createdAt, sql`${formattedDate}`)
                     )
                 )
                 .orderBy(sql`created_at ASC`);
