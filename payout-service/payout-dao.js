@@ -134,24 +134,27 @@ class PayoutDao {
 
         if (!payoutWallet) {
           throw {
-              statusCode: 400,
-              messageCode: 'WALLET_NOT_FOUND',
-              message: 'Payout wallet not found'
+            statusCode: 400,
+            messageCode: "WALLET_NOT_FOUND",
+            message: "Payout wallet not found",
           };
-      }
+        }
 
         const totalAmount =
           parseFloat(payoutData.amount) +
           parseFloat(chargeCalculation.charges.totalCharges);
 
-          const availableBalance = await walletDao.getAvailableBalance(payoutWallet.wallet.id);
-          if (availableBalance < totalAmount) {
-              throw {
-                  statusCode: 400,
-                  messageCode: 'INSUFFICIENT_BALANCE',
-                  message: 'Insufficient available balance in payout wallet (some funds may be locked)'
-              };
-          }
+        const availableBalance = await walletDao.getAvailableBalance(
+          payoutWallet.wallet.id
+        );
+        if (availableBalance < totalAmount) {
+          throw {
+            statusCode: 400,
+            messageCode: "INSUFFICIENT_BALANCE",
+            message:
+              "Insufficient available balance in payout wallet (some funds may be locked)",
+          };
+        }
 
         // if (!payoutWallet || payoutWallet.wallet.balance < totalAmount) {
         //   throw {
@@ -632,106 +635,128 @@ class PayoutDao {
 
   async processCallback(callbackData) {
     try {
-        // Log raw callback
-        const [systemLog] = await db
-            .insert(systemCallbackLogs)
-            .values({
-                callbackData: callbackData,
-                status: "RECEIVED",
-            })
-            .returning();
+      // Log raw callback
+      const [systemLog] = await db
+        .insert(systemCallbackLogs)
+        .values({
+          callbackData: callbackData,
+          status: "RECEIVED",
+        })
+        .returning();
 
-        const transaction = await this.getTransactionByClientOrderId(callbackData.ClientOrderId);
-        if (!transaction) {
-            await this.updateSystemLog(systemLog.id, "FAILED", "Transaction not found");
-            log.error(`Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`);
-            return null;
+      const transaction = await this.getTransactionByClientOrderId(
+        callbackData.ClientOrderId
+      );
+      if (!transaction) {
+        await this.updateSystemLog(
+          systemLog.id,
+          "FAILED",
+          "Transaction not found"
+        );
+        log.error(
+          `Transaction not found for ClientOrderId: ${callbackData.ClientOrderId}`
+        );
+        return null;
+      }
+
+      await this.updateSystemLog(
+        systemLog.id,
+        "PROCESSING",
+        null,
+        transaction.id
+      );
+
+      // Map vendor status codes to internal status
+      const statusCode = parseInt(callbackData.StatusCode);
+      const statusNum = parseInt(callbackData.Status);
+      const newStatus = this.mapVendorStatus(statusCode, statusNum);
+
+      return await db.transaction(async (tx) => {
+        // Update transaction status
+        const updatedTransaction = await this.updateTransactionStatus(
+          transaction.id,
+          newStatus,
+          callbackData.UTR,
+          {
+            orderId: callbackData.OrderId,
+            amount: parseFloat(callbackData.Amount),
+            paymentMode: callbackData.PaymentMode,
+            transactionDate: callbackData.Date,
+            status: newStatus,
+            statusCode: statusCode,
+            checksum: callbackData.Checksum,
+            rawResponse: callbackData,
+          },
+          tx
+        );
+
+        // Process refund if needed
+        if (
+          ["FAILED", "REVERSED"].includes(newStatus) &&
+          transaction.status !== "FAILED"
+        ) {
+          // Get user's payout wallet
+          const userWallets = await walletDao.getUserWallets(
+            transaction.userId
+          );
+          const payoutWallet = userWallets.find(
+            (w) => w.type.name === "PAYOUT"
+          );
+
+          if (!payoutWallet) {
+            throw new Error("Payout wallet not found");
+          }
+
+          // Calculate total refund amount (transaction amount + charges)
+          const totalAmount =
+            parseFloat(transaction.amount) +
+            parseFloat(transaction.totalCharges);
+
+          // No need to check locks when refunding
+          await walletDao.updateWalletBalance(
+            payoutWallet.wallet.id,
+            totalAmount,
+            "CREDIT",
+            `Refund for failed payout #${transaction.clientOrderId}`,
+            transaction.id,
+            transaction.userId,
+            "PAYOUT_REFUND",
+            null,
+            tx
+          );
         }
 
-        await this.updateSystemLog(systemLog.id, "PROCESSING", null, transaction.id);
+        // Format and forward user callback data
+        const userCallbackData = {
+          statusCode: statusCode,
+          message: callbackData.Message,
+          clientOrderId: callbackData.ClientOrderId,
+          orderId: callbackData.OrderId,
+          amount: callbackData.Amount,
+          paymentMode: callbackData.PaymentMode,
+          status: newStatus,
+          utrNumber: callbackData.UTR,
+          transactionDate: callbackData.Date,
+          rawStatus: statusNum,
+        };
 
-        // Map vendor status codes to internal status
-        const statusCode = parseInt(callbackData.StatusCode);
-        const statusNum = parseInt(callbackData.Status);
-        const newStatus = this.mapVendorStatus(statusCode, statusNum);
+        // Forward callback to user's callback URL
+        await this.forwardCallback(updatedTransaction, userCallbackData);
+        await this.updateSystemLog(systemLog.id, "COMPLETED");
 
-        return await db.transaction(async (tx) => {
-            // Update transaction status
-            const updatedTransaction = await this.updateTransactionStatus(
-                transaction.id,
-                newStatus,
-                callbackData.UTR,
-                {
-                    orderId: callbackData.OrderId,
-                    amount: parseFloat(callbackData.Amount),
-                    paymentMode: callbackData.PaymentMode,
-                    transactionDate: callbackData.Date,
-                    status: newStatus,
-                    statusCode: statusCode,
-                    checksum: callbackData.Checksum,
-                    rawResponse: callbackData
-                },
-                tx
-            );
-
-            // Process refund if needed
-            if (["FAILED", "REVERSED"].includes(newStatus) && transaction.status !== "FAILED") {
-                // Get user's payout wallet
-                const userWallets = await walletDao.getUserWallets(transaction.userId);
-                const payoutWallet = userWallets.find(w => w.type.name === "PAYOUT");
-
-                if (!payoutWallet) {
-                    throw new Error("Payout wallet not found");
-                }
-
-                // Calculate total refund amount (transaction amount + charges)
-                const totalAmount = parseFloat(transaction.amount) + parseFloat(transaction.totalCharges);
-
-                // No need to check locks when refunding
-                await walletDao.updateWalletBalance(
-                    payoutWallet.wallet.id,
-                    totalAmount,
-                    "CREDIT",
-                    `Refund for failed payout #${transaction.clientOrderId}`,
-                    transaction.id,
-                    transaction.userId,
-                    "PAYOUT_REFUND",
-                    null,
-                    tx
-                );
-            }
-
-            // Format and forward user callback data
-            const userCallbackData = {
-                statusCode: statusCode,
-                message: callbackData.Message,
-                clientOrderId: callbackData.ClientOrderId,
-                orderId: callbackData.OrderId,
-                amount: callbackData.Amount,
-                paymentMode: callbackData.PaymentMode,
-                status: newStatus,
-                utrNumber: callbackData.UTR,
-                transactionDate: callbackData.Date,
-                rawStatus: statusNum
-            };
-
-            // Forward callback to user's callback URL
-            await this.forwardCallback(updatedTransaction, userCallbackData);
-            await this.updateSystemLog(systemLog.id, "COMPLETED");
-
-            return {
-                systemLog,
-                transaction: updatedTransaction
-            };
-        });
+        return {
+          systemLog,
+          transaction: updatedTransaction,
+        };
+      });
     } catch (error) {
-        log.error("Error processing callback:", error);
-        if (systemLog) {
-            await this.updateSystemLog(systemLog.id, "FAILED", error.message);
-        }
-        throw error;
+      log.error("Error processing callback:", error);
+      if (systemLog) {
+        await this.updateSystemLog(systemLog.id, "FAILED", error.message);
+      }
+      throw error;
     }
-}
+  }
 
   async updateTransactionStatus(
     transactionId,
@@ -932,7 +957,7 @@ class PayoutDao {
       if (!apiConfig) {
         throw new Error("No API configuration found for Payout");
       }
-  
+
       const response = await axios.post(
         `${apiConfig.baseUrl}/api/api/api-module/payout/status-check`,
         {
@@ -946,29 +971,29 @@ class PayoutDao {
           },
         }
       );
-  
+
       // Check if response indicates an error (like IP not whitelisted)
       if (response.data.statusCode === 0 && !response.data.clientOrderId) {
         // Return existing transaction status without making any changes
         return {
           status: transaction.status,
           utrNumber: transaction.utrNumber,
-          description: `Status check failed: ${response.data.message}. Maintaining previous status.`
+          description: `Status check failed: ${response.data.message}. Maintaining previous status.`,
         };
       }
-  
+
       // If valid response, proceed with normal status mapping
       const newStatus = this.mapStatusCheckResponse(
         response.data.statusCode,
         response.data.status,
         transaction.createdAt
       );
-  
+
       let description = this.getStatusDescription(
         transaction.status,
         newStatus
       );
-  
+
       if (newStatus !== transaction.status) {
         await this.updateTransactionStatus(
           transaction.id,
@@ -976,7 +1001,7 @@ class PayoutDao {
           response.data.utr,
           response.data
         );
-  
+
         if (
           ["FAILED", "REVERSED"].includes(newStatus) &&
           transaction.status !== "FAILED"
@@ -984,7 +1009,7 @@ class PayoutDao {
           await this.processRefund(transaction);
         }
       }
-  
+
       return {
         status: newStatus,
         utrNumber: response.data.utr || transaction.utrNumber,
@@ -996,7 +1021,7 @@ class PayoutDao {
       return {
         status: transaction.status,
         utrNumber: transaction.utrNumber,
-        description: `Status check error: ${error.message}. Maintaining previous status.`
+        description: `Status check error: ${error.message}. Maintaining previous status.`,
       };
     }
   }
@@ -1045,7 +1070,6 @@ class PayoutDao {
 
     return `Status changed from ${oldStatus} to ${newStatus}. ${descriptions[newStatus]}`;
   }
-
 
   async getFilteredSystemLogs(filters) {
     try {
@@ -1339,20 +1363,21 @@ class PayoutDao {
             status: "FAILED",
             updatedAt: new Date(),
             completedAt: new Date(),
-            errorMessage: "Manually marked as failed by admin"
+            errorMessage: "Manually marked as failed by admin",
           })
           .where(eq(payoutTransactions.id, transaction.id))
           .returning();
-  
+
         await this.processRefund(transaction, tx);
         return updatedTransaction;
       });
     } catch (error) {
-      console.log("error--> ",error);
+      console.log("error--> ", error);
       log.error("Error manually marking transaction as failed:", error);
       throw error;
     }
   }
+
   async manuallyMarkSuccess(transaction, utrNumber) {
     try {
       const [updatedTransaction] = await db
@@ -1362,15 +1387,37 @@ class PayoutDao {
           updatedAt: new Date(),
           completedAt: new Date(),
           utrNumber: utrNumber,
-          errorMessage: null
+          errorMessage: null,
         })
         .where(eq(payoutTransactions.id, transaction.id))
         .returning();
-  
+
       return updatedTransaction;
     } catch (error) {
       console.log("error--> ", error);
       log.error("Error manually marking transaction as success:", error);
+      throw error;
+    }
+  }
+
+  async getPayoutTransactionByClientOrderId(clientOrderId) {
+    try {
+      const [transaction] = await db
+        .select()
+        .from(payoutTransactions)
+        .where(eq(payoutTransactions.clientOrderId, clientOrderId))
+        .limit(1);
+
+      if (transaction) {
+        // Clean the response by excluding any sensitive or internal fields
+        return transaction;
+      }
+      return null;
+    } catch (error) {
+      log.error(
+        `Error getting transaction by client order ID ${clientOrderId}:`,
+        error
+      );
       throw error;
     }
   }

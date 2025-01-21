@@ -914,4 +914,64 @@ payoutRouter.post("/admin/mark-success", authenticateToken, async (req, res) => 
   }
 });
 
+// Get payout status for user
+payoutRouter.post("/check-status", async (req, res) => {
+  try {
+    const { clientOrderId } = req.body;
+
+    if (!clientOrderId) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Client Order ID is required"
+      });
+    }
+
+    // Get transaction and verify it belongs to the user
+    const transaction = await payoutDao.getPayoutTransactionByClientOrderId(
+      clientOrderId
+    );
+
+    if (!transaction) {
+      return res.status(404).send({
+        messageCode: "TRANSACTION_NOT_FOUND",
+        message: "Transaction not found"
+      });
+    }
+
+    
+
+    // Map status to response format
+    const statusMapping = {
+      SUCCESS: "success",
+      FAILED: "failed",
+      PENDING: "pending",
+      REVERSED: "reversed"
+    };
+
+    res.send({
+      messageCode: `${statusMapping[transaction.status]}`,
+      message: `Transaction status: ${statusMapping[transaction.status]}`,
+      data: {
+        clientOrderId: transaction.clientOrderId,
+        orderId: transaction.orderId,
+        amount: transaction.amount,
+        beneficiaryName: transaction.beneficiaryName,
+        accountNumber: transaction.accountNumber,
+        ifscCode: transaction.ifscCode,
+        status: transaction.status,
+        utrNumber: transaction.utrNumber || null,
+        transactionDate: transaction.createdAt,
+        completedAt: transaction.completedAt
+      }
+    });
+  } catch (error) {
+    log.error("Error checking transaction status:", error);
+    res.status(500).send({
+      messageCode: "ERR_CHECK_STATUS",
+      message: "Error checking transaction status"
+    });
+  }
+});
+
+
 module.exports = payoutRouter;
