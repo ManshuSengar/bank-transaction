@@ -2,21 +2,40 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Fund-Dao");
 const { db, fundRequests, fundRequestLogs } = require("./db/schema");
-const { eq, and, desc,sql } = require("drizzle-orm");
+const { eq, and, desc, sql } = require("drizzle-orm");
 const walletDao = require("../wallet-service/wallet-dao");
-const {users}=require("../user-service/db/schema");
-const {banks}=require("../bank-service/db/schema");
+const { users } = require("../user-service/db/schema");
+const { banks } = require("../bank-service/db/schema");
+const telegramService = require("../telegram-service/telegram-dao");
 class FundDao {
   async createFundRequest(requestData, userId) {
     try {
       return await db.transaction(async (tx) => {
         // Validate wallet types for wallet-to-wallet transfer
-        if (requestData.transferType === 'WALLET_TO_WALLET') {
-          if (requestData.sourceWalletType === requestData.targetWalletType) {
+        if (requestData.transferType === "WALLET_TO_WALLET") {
+          const userWallets = await walletDao.getUserWallets(userId);
+          const sourceWallet = userWallets.find(
+            (w) => w.type.name === requestData.sourceWalletType
+          );
+
+          if (!sourceWallet) {
+            throw {
+              statusCode: 404,
+              messageCode: "SOURCE_WALLET_NOT_FOUND",
+              message: `Source wallet (${requestData.sourceWalletType}) not found`,
+            };
+          }
+
+          // Check available balance considering locks
+          const availableBalance = await walletDao.getAvailableBalance(
+            sourceWallet.wallet.id
+          );
+          if (availableBalance < parseFloat(requestData.amount)) {
             throw {
               statusCode: 400,
-              messageCode: 'INVALID_WALLET_TYPES',
-              message: 'Source and target wallet types must be different'
+              messageCode: "INSUFFICIENT_BALANCE",
+              message:
+                "Insufficient available balance in source wallet (some funds may be locked)",
             };
           }
         }
@@ -25,21 +44,28 @@ class FundDao {
           .insert(fundRequests)
           .values({
             userId,
-            bankId: requestData.transferType === 'BANK_TO_WALLET' ? requestData.bankId : null,
-            walletType: requestData.transferType === 'BANK_TO_WALLET' 
-              ? requestData.walletType 
-              : requestData.targetWalletType,
-            sourceWalletType: requestData.transferType === 'WALLET_TO_WALLET' 
-              ? requestData.sourceWalletType 
-              : null,
-            targetWalletType: requestData.transferType === 'WALLET_TO_WALLET' 
-              ? requestData.targetWalletType 
-              : null,
+            bankId:
+              requestData.transferType === "BANK_TO_WALLET"
+                ? requestData.bankId
+                : null,
+            walletType:
+              requestData.transferType === "BANK_TO_WALLET"
+                ? requestData.walletType
+                : requestData.targetWalletType,
+            sourceWalletType:
+              requestData.transferType === "WALLET_TO_WALLET"
+                ? requestData.sourceWalletType
+                : null,
+            targetWalletType:
+              requestData.transferType === "WALLET_TO_WALLET"
+                ? requestData.targetWalletType
+                : null,
             transferType: requestData.transferType,
             amount: requestData.amount,
-            paymentMode: requestData.transferType === 'BANK_TO_WALLET' 
-              ? requestData.paymentMode 
-              : 'INTERNAL_TRANSFER',
+            paymentMode:
+              requestData.transferType === "BANK_TO_WALLET"
+                ? requestData.paymentMode
+                : "INTERNAL_TRANSFER",
             paymentDate: new Date(requestData.paymentDate),
             referenceNumber: requestData.referenceNumber,
             documentPath: requestData.documentPath,
@@ -49,7 +75,7 @@ class FundDao {
           .returning();
 
         // Perform additional validation for wallet-to-wallet transfers
-        if (requestData.transferType === 'WALLET_TO_WALLET') {
+        if (requestData.transferType === "WALLET_TO_WALLET") {
           // Validate sufficient balance in source wallet
           const userWallets = await walletDao.getUserWallets(userId);
           const sourceWallet = userWallets.find(
@@ -59,16 +85,19 @@ class FundDao {
           if (!sourceWallet) {
             throw {
               statusCode: 404,
-              messageCode: 'SOURCE_WALLET_NOT_FOUND',
-              message: `Source wallet (${requestData.sourceWalletType}) not found`
+              messageCode: "SOURCE_WALLET_NOT_FOUND",
+              message: `Source wallet (${requestData.sourceWalletType}) not found`,
             };
           }
 
-          if (parseFloat(sourceWallet.wallet.balance) < parseFloat(requestData.amount)) {
+          if (
+            parseFloat(sourceWallet.wallet.balance) <
+            parseFloat(requestData.amount)
+          ) {
             throw {
               statusCode: 400,
-              messageCode: 'INSUFFICIENT_BALANCE',
-              message: 'Insufficient balance in source wallet'
+              messageCode: "INSUFFICIENT_BALANCE",
+              message: "Insufficient balance in source wallet",
             };
           }
         }
@@ -81,6 +110,24 @@ class FundDao {
           performedBy: userId,
           remarks: `${requestData.transferType} fund request created`,
         });
+
+        const [userDetails] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        const requestWithUser = {
+          ...request,
+          user: userDetails,
+        };
+
+        telegramService
+          .sendFundRequestNotification(requestWithUser)
+          .catch((error) => {
+            console.log("error--> ", error);
+            log.error("Error sending Telegram notification:", error);
+          });
 
         return request;
       });
@@ -134,8 +181,10 @@ class FundDao {
         // Process approved requests
         if (status === "APPROVED") {
           // Bank to wallet transfer
-          if (currentRequest.transferType === 'BANK_TO_WALLET') {
-            const userWallets = await walletDao.getUserWallets(currentRequest.userId);
+          if (currentRequest.transferType === "BANK_TO_WALLET") {
+            const userWallets = await walletDao.getUserWallets(
+              currentRequest.userId
+            );
             const targetWallet = userWallets.find(
               (w) => w.type.name === currentRequest.walletType
             );
@@ -151,11 +200,13 @@ class FundDao {
                 "FUND_REQUEST"
               );
             }
-          } 
+          }
           // Wallet to wallet transfer
-          else if (currentRequest.transferType === 'WALLET_TO_WALLET') {
-            const userWallets = await walletDao.getUserWallets(currentRequest.userId);
-            
+          else if (currentRequest.transferType === "WALLET_TO_WALLET") {
+            const userWallets = await walletDao.getUserWallets(
+              currentRequest.userId
+            );
+
             const sourceWallet = userWallets.find(
               (w) => w.type.name === currentRequest.sourceWalletType
             );
@@ -234,21 +285,21 @@ class FundDao {
             approvedAt: fundRequests.approvedAt,
             rejectionReason: fundRequests.rejectionReason,
             createdAt: fundRequests.createdAt,
-            updatedAt: fundRequests.updatedAt
+            updatedAt: fundRequests.updatedAt,
           },
           user: {
             username: users.username,
             firstname: users.firstname,
             lastname: users.lastname,
             emailId: users.emailId,
-            phoneNo: users.phoneNo
+            phoneNo: users.phoneNo,
           },
           bank: {
             name: banks.name,
             accountNumber: banks.accountNumber,
             ifsc: banks.ifsc,
-            branch: banks.branch
-          }
+            branch: banks.branch,
+          },
         })
         .from(fundRequests)
         .leftJoin(users, eq(fundRequests.userId, users.id))
@@ -264,22 +315,17 @@ class FundDao {
         .limit(limit)
         .offset(offset);
 
-      let countQuery = db
-        .select({ count: sql`count(*)` })
-        .from(fundRequests);
+      let countQuery = db.select({ count: sql`count(*)` }).from(fundRequests);
       if (whereConditions.length > 0) {
         countQuery = countQuery.where(and(...whereConditions));
       }
 
-      const [requests, totalCount] = await Promise.all([
-        query,
-        countQuery,
-      ]);
+      const [requests, totalCount] = await Promise.all([query, countQuery]);
 
-      const formattedRequests = requests.map(r => ({
+      const formattedRequests = requests.map((r) => ({
         ...r.request,
         user: r.user,
-        bank: r.bank
+        bank: r.bank,
       }));
 
       return {
@@ -296,7 +342,7 @@ class FundDao {
       throw error;
     }
   }
-  
+
   async getFundRequestById(requestId, userId = null) {
     try {
       let query = db

@@ -78,10 +78,38 @@ const walletTransactionLogs = pgTable('wallet_transaction_logs', {
     additionalMetadata: jsonb('additional_metadata'),
     createdAt: timestamp('created_at').defaultNow()
 });
+
+const walletLocks = pgTable('wallet_locks', {
+    id: serial('id').primaryKey(),
+    walletId: integer('wallet_id').references(() => userWallets.id).notNull(),
+    amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+    reason: text('reason').notNull(),
+    lockedBy: integer('locked_by').references(() => users.id).notNull(),
+    lockedAt: timestamp('locked_at').defaultNow(),
+    unlockedAt: timestamp('unlocked_at'),
+    status: varchar('status', { length: 20 }).default('ACTIVE'), // ACTIVE or RELEASED
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow()
+});
+
+// Add new table for wallet lock history
+const walletLockHistory = pgTable('wallet_lock_history', {
+    id: serial('id').primaryKey(),
+    walletId: integer('wallet_id').references(() => userWallets.id).notNull(),
+    lockId: integer('lock_id').references(() => walletLocks.id).notNull(),
+    action: varchar('action', { length: 20 }).notNull(), // LOCKED or UNLOCKED
+    amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+    reason: text('reason').notNull(),
+    performedBy: integer('performed_by').references(() => users.id).notNull(),
+    performedAt: timestamp('performed_at').defaultNow()
+});
+
 module.exports = {
     db,
     walletTypes,
     userWallets,
     walletTransactions,
-    walletTransactionLogs
+    walletTransactionLogs,
+    walletLocks,
+    walletLockHistory
 };

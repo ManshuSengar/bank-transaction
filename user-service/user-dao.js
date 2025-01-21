@@ -12,10 +12,7 @@ const {
   userLoginHistory,
   permissions,
   rolePermissions,
-  schemes,
-  schemeCharges,
-  products,
-  apiConfigs
+  
 } = require("./db/schema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -26,6 +23,8 @@ const { generateRandomPassword } = require("./utlis/password-utlis");
 const { eq, like, and, or, between, sql, desc } = require("drizzle-orm");
 const secretKey = getJwtSecretKey();
 const { getUserPermissions } = require("../middleware/auth-token-validator");
+const {  userSchemes ,schemes,schemeCharges,apiConfigs} = require('../scheme-service/db/schema');
+const {products} =require('../product-service/db/schema');
 
 const walletDao = require("../wallet-service/wallet-dao");
 
@@ -38,6 +37,11 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
         password: users.password,
         roleId: users.roleId,
         isActive: users.isActive,
+        failedLoginAttempts: users.failedLoginAttempts,
+        accountLockTime: users.accountLockTime,
+        emailId: users.emailId,
+        firstname:users.firstname,
+        lastname:users.lastname,
       })
       .from(users)
       .where(eq(users.username, loginInfo.username))
@@ -51,7 +55,28 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       throw error;
     }
 
-    // Check if user is active before proceeding
+    // Check if account is locked
+    if (user.accountLockTime && new Date() < new Date(user.accountLockTime)) {
+      const remainingTime = Math.ceil((new Date(user.accountLockTime) - new Date()) / (1000 * 60)); // Convert to minutes
+      
+      await db.insert(userLoginHistory).values({
+        userId: user.id,
+        ipAddress,
+        userAgent,
+        loginStatus: "FAILED",
+        failureReason: "Account is locked",
+        latitude: loginInfo.location?.latitude || null,
+        longitude: loginInfo.location?.longitude || null,
+      });
+
+      const error = new Error("Account locked");
+      error.statusCode = 403;
+      error.messageCode = "ACCOUNT_LOCKED";
+      error.userMessage = `Your account is locked due to multiple failed attempts. Please use the forgot password option or contact support.`;
+      throw error;
+    }
+
+    // Check if user is active
     if (!user.isActive) {
       await db.insert(userLoginHistory).values({
         userId: user.id,
@@ -73,12 +98,41 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
     const validPassword = await bcrypt.compare(loginInfo.password, user.password);
 
     if (!validPassword) {
+      // Increment failed login attempts
+      const newAttempts = (user.failedLoginAttempts || 0) + 1;
+      const updateData = {
+        failedLoginAttempts: newAttempts,
+        updatedAt: new Date()
+      };
+
+      // If failed attempts reach 3, lock the account
+      if (newAttempts >= 3) {
+        const lockTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+        updateData.accountLockTime = sql`${lockTime}`;
+
+        // Send email notification about account lock
+
+        console.log("user--> ",user);
+        await emailService.sendAccountLockEmail({
+          emailId: user.emailId,
+          firstname: user.firstname,
+          lastname: user.lastname,
+          username: user.username,
+           lockTime:lockTime
+        });
+      }
+
+      await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, user.id));
+
       await db.insert(userLoginHistory).values({
         userId: user.id,
         ipAddress,
         userAgent,
         loginStatus: "FAILED",
-        failureReason: "Invalid password",
+        failureReason: `Invalid password (Attempt ${newAttempts}/3)`,
         latitude: loginInfo.location?.latitude || null,
         longitude: loginInfo.location?.longitude || null,
       });
@@ -86,14 +140,19 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       const error = new Error("Invalid password");
       error.statusCode = 401;
       error.messageCode = "USRNPI";
-      error.userMessage = "Username/Password incorrect.";
+      error.userMessage = newAttempts >= 3 
+        ? "Account locked due to too many failed attempts. Please use forgot password or contact support."
+        : `Invalid password. ${3 - newAttempts} attempts remaining.`;
       throw error;
     }
 
-    // Update user's last login information
+    // Reset failed attempts on successful login
+   
     await db
       .update(users)
       .set({
+        failedLoginAttempts: 0,
+        accountLockTime: null,
         lastLogin: new Date(),
         lastLoginIp: ipAddress,
         lastLoginLocation: loginInfo.location
@@ -189,7 +248,6 @@ const validateLoginUser = async (loginInfo, ipAddress, userAgent) => {
       messageCode: "USRV",
       message: "Valid credential.",
     };
-
   } catch (error) {
     log.error("Error in validateLoginUser:", error);
     if (!error.statusCode) {
@@ -476,7 +534,10 @@ async function getUserByUsername(username) {
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id))
       .leftJoin(addresses, eq(users.id, addresses.userId))
-      .where(eq(users.username, username))
+      .where( and(
+        eq(users.username, username),
+        eq(users.isActive, true)
+      ))
       .limit(1);
 
     if (!user) {
@@ -723,6 +784,8 @@ function getJwtSecretKey() {
   }
 }
 
+// In user-dao.js
+
 async function getAllUsers(page = 1, limit = 10) {
   try {
     const offset = (page - 1) * limit;
@@ -739,6 +802,8 @@ async function getAllUsers(page = 1, limit = 10) {
         isActive: users.isActive,
         lastLogin: users.lastLogin,
         createdAt: users.createdAt,
+        failedLoginAttempts: users.failedLoginAttempts,
+        accountLockTime: users.accountLockTime,
         role: roles,
         address: addresses,
       })
@@ -748,11 +813,7 @@ async function getAllUsers(page = 1, limit = 10) {
       .limit(limit)
       .offset(offset);
 
-    // Import required schemas from scheme service
-    const { schemes, userSchemes, schemeCharges, apiConfigs } = require('../scheme-service/db/schema');
-    const { products } = require('../product-service/db/schema');
-
-    // Get wallet balances and schemes for each user
+    // Get wallet balances, schemes, and lock amounts for each user
     const userDataWithDetails = await Promise.all(
       userData.map(async (user) => {
         // Get wallet information
@@ -761,6 +822,12 @@ async function getAllUsers(page = 1, limit = 10) {
         const collectionWallet = wallets.find(
           (w) => w.type.name === "COLLECTION"
         );
+        const payoutWallet = wallets.find((w) => w.type.name === "PAYOUT");
+
+        // Get lock amounts for each wallet
+        const serviceLocked = serviceWallet ? await walletDao.getTotalLockedAmount(serviceWallet.wallet.id) : 0;
+        const collectionLocked = collectionWallet ? await walletDao.getTotalLockedAmount(collectionWallet.wallet.id) : 0;
+        const payoutLocked = payoutWallet ? await walletDao.getTotalLockedAmount(payoutWallet.wallet.id) : 0;
 
         // Get user schemes with complete details
         const userSchemeResults = await db
@@ -783,7 +850,6 @@ async function getAllUsers(page = 1, limit = 10) {
             )
           );
 
-        // Process and group schemes
         const schemesMap = new Map();
         
         userSchemeResults.forEach((row) => {
@@ -809,22 +875,48 @@ async function getAllUsers(page = 1, limit = 10) {
           }
         });
 
+        // Calculate if account is currently locked
+        let accountLockTime = null;
+        let isLocked = false;
+        
+        if (user.accountLockTime) {
+          accountLockTime = new Date(user.accountLockTime);
+          isLocked = accountLockTime > new Date();
+        }
+
         return {
           ...user,
+          accountStatus: {
+            isLocked,
+            failedAttempts: user.failedLoginAttempts || 0,
+            lockExpiry: isLocked ? accountLockTime : null
+          },
           wallets: {
+            serviceWalletId: serviceWallet?.wallet.id,
+            collectionWalletId: collectionWallet?.wallet.id,
+            payoutWalletId: payoutWallet?.wallet.id,
             serviceBalance: serviceWallet ? serviceWallet.wallet.balance : 0,
-            collectionBalance: collectionWallet
-              ? collectionWallet.wallet.balance
-              : 0,
+            collectionBalance: collectionWallet ? collectionWallet.wallet.balance : 0,
+            payoutBalance: payoutWallet ? payoutWallet.wallet.balance : 0,
+            serviceLockedAmount: serviceLocked,
+            collectionLockedAmount: collectionLocked,
+            payoutLockedAmount: payoutLocked,
+            serviceWallet: serviceWallet?.wallet || null,
+            collectionWallet: collectionWallet?.wallet || null,
+            payoutWallet: payoutWallet?.wallet || null
           },
           schemes: Array.from(schemesMap.values())
         };
       })
     );
 
-    const [{ count }] = await db.select({ count: sql`COUNT(*)` }).from(users);
+    // Get total count of users
+    const [{ count }] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(users);
 
-    log.info("Retrieved list of users with schemes");
+    log.info("Retrieved list of users with schemes, wallet details, and account status");
+    
     return {
       userData: userDataWithDetails,
       pagination: {
@@ -835,7 +927,7 @@ async function getAllUsers(page = 1, limit = 10) {
       },
     };
   } catch (error) {
-    console.log("Error in getAllUsers:", error);
+    log.error("Error in getAllUsers:", error);
     if (!error.statusCode) {
       error.statusCode = 500;
       error.messageCode = "INTERNAL_ERROR";
@@ -884,9 +976,56 @@ async function toggleUserStatus(userId) {
   }
 }
 
+const unlockUserAccount = async (userId, adminUserId) => {
+  try {
+    // Get user details first
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
+    if (!user) {
+      throw {
+        statusCode: 404,
+        messageCode: "USER_NOT_FOUND",
+        message: "User not found"
+      };
+    }
 
+    // Update user account
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        failedLoginAttempts: 0,
+        accountLockTime: null,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
 
+    // Log the unlock action
+    await db.insert(userActivityLogs).values({
+      userId,
+      activityType: "ACCOUNT_UNLOCK",
+      description: "Account unlocked by admin",
+      performedBy: adminUserId
+    });
+
+    // Send email notification about account unlock
+    await emailService.sendAccountUnlockEmail({
+      emailId: user.emailId,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      username: user.username
+    });
+
+    return updatedUser;
+  } catch (error) {
+    log.error("Error unlocking user account:", error);
+    throw error;
+  }
+};
 
 module.exports = {
   validateLoginUser,
@@ -903,4 +1042,5 @@ module.exports = {
   changePassword,
   getAllUsers,
   toggleUserStatus,
+  unlockUserAccount
 };

@@ -135,13 +135,13 @@ userrouter.post("/validateuser", async (req, res) => {
       message: result.message,
       role: result?.role?.name,
       permissions: result.permissions,
-      isActive: result.isActive
+      isActive: result.isActive,
     });
   } catch (err) {
     log.error(`Error in login for username : ${err}`);
-    
+
     // Special handling for inactive account
-    if (err.messageCode === 'ACCOUNT_INACTIVE') {
+    if (err.messageCode === "ACCOUNT_INACTIVE") {
       return res.status(err.statusCode).send({
         messageCode: err.messageCode,
         message: err.userMessage,
@@ -333,7 +333,7 @@ userrouter.get(
 userrouter.post(
   "/assignrole",
   authenticateToken,
-//   authorize(["manage_roles"]),
+  //   authorize(["manage_roles"]),
   async (req, res) => {
     try {
       const { username, roleId } = req.body;
@@ -363,6 +363,7 @@ userrouter.get(
       const result = await userDao.getAllUsers(page, limit);
       return res.send(result);
     } catch (err) {
+      console.log(`Error in retrieving all users: ${err}`);
       log.error(`Error in retrieving all users: ${err}`);
       return res.status(err.statusCode || 500).send({
         messageCode: err.messageCode || "INTERNAL_ERROR",
@@ -374,33 +375,31 @@ userrouter.get(
 );
 
 // Get authenticated user details
-userrouter.get('/me', 
-  authenticateToken,
-  async (req, res) => {
-      try {
-          const user = await userDao.getUserByUsername(req.user.username);
-          
-          // Remove sensitive information
-          delete user.password;
-          
-          return res.send({
-              messageCode: 'USER_FETCHED',
-              message: 'User details retrieved successfully',
-              user: {
-                  ...user,
-                  permissions: req.user.permissions // Include permissions from token
-              }
-          });
-      } catch (err) {
-          log.error(`Error retrieving authenticated user details: ${err}`);
-          return res.status(err.statusCode || 500).send({
-              messageCode: err.messageCode || 'INTERNAL_ERROR',
-              message: err.userMessage || 'An error occurred while retrieving user details',
-              error: err.message
-          });
-      }
+userrouter.get("/me", authenticateToken, async (req, res) => {
+  try {
+    const user = await userDao.getUserByUsername(req.user.username);
+
+    // Remove sensitive information
+    delete user.password;
+
+    return res.send({
+      messageCode: "USER_FETCHED",
+      message: "User details retrieved successfully",
+      user: {
+        ...user,
+        permissions: req.user.permissions, // Include permissions from token
+      },
+    });
+  } catch (err) {
+    log.error(`Error retrieving authenticated user details: ${err}`);
+    return res.status(err.statusCode || 500).send({
+      messageCode: err.messageCode || "INTERNAL_ERROR",
+      message:
+        err.userMessage || "An error occurred while retrieving user details",
+      error: err.message,
+    });
   }
-);
+});
 
 function isNotValidSchema(error, res) {
   if (error) {
@@ -431,21 +430,110 @@ userrouter.get(
       const result = await userDao.toggleUserStatus(userId);
       return res.send({
         messageCode: "STATUS_UPDATED",
-        message: `User ${result.isActive ? 'activated' : 'deactivated'} successfully`,
+        message: `User ${
+          result.isActive ? "activated" : "deactivated"
+        } successfully`,
         success: result.success,
-        isActive: result.isActive
+        isActive: result.isActive,
       });
     } catch (err) {
       log.error(`Error toggling user status: ${err}`);
       return res.status(err.statusCode || 500).send({
         messageCode: err.messageCode || "INTERNAL_ERROR",
-        message: err.userMessage || "An error occurred while updating user status",
+        message:
+          err.userMessage || "An error occurred while updating user status",
         error: err.message,
       });
     }
   }
 );
 
+// In user-controller.js
 
+// Add this new endpoint for admin to unlock user accounts
+userrouter.post("/admin/unlock-account/:userId",
+  authenticateToken,
+  // authorize(['manage_users']), // Uncomment if you want to restrict to users with manage_users permission
+  async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).send({
+          messageCode: "INVALID_USER_ID",
+          message: "Invalid user ID provided"
+        });
+      }
+
+      const result = await userDao.unlockUserAccount(userId, req.user.userId);
+
+      return res.send({
+        messageCode: "ACCOUNT_UNLOCKED",
+        message: "User account has been successfully unlocked",
+        success: true,
+        user: {
+          id: result.id,
+          username: result.username,
+          emailId: result.emailId,
+          isActive: result.isActive
+        }
+      });
+    } catch (err) {
+      log.error("Error unlocking user account:", err);
+      return res.status(err.statusCode || 500).send({
+        messageCode: err.messageCode || "INTERNAL_ERROR",
+        message: err.message || "An error occurred while unlocking the user account",
+        success: false
+      });
+    }
+  }
+);
+
+// Add endpoint to check account status
+userrouter.get("/account-status/:username",
+  async (req, res) => {
+    try {
+      const [user] = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          isActive: users.isActive,
+          failedLoginAttempts: users.failedLoginAttempts,
+          accountLockTime: users.accountLockTime
+        })
+        .from(users)
+        .where(eq(users.username, req.params.username))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).send({
+          messageCode: "USER_NOT_FOUND",
+          message: "User not found"
+        });
+      }
+
+      const isLocked = user.accountLockTime && new Date() < new Date(user.accountLockTime);
+      const remainingTime = isLocked ? 
+        Math.ceil((new Date(user.accountLockTime) - new Date()) / (1000 * 60)) : 0;
+
+      return res.send({
+        messageCode: "ACCOUNT_STATUS_FETCHED",
+        message: "Account status retrieved successfully",
+        status: {
+          isActive: user.isActive,
+          isLocked: isLocked,
+          remainingAttempts: isLocked ? 0 : Math.max(0, 3 - user.failedLoginAttempts),
+          lockTimeRemaining: remainingTime,
+          username: user.username
+        }
+      });
+    } catch (err) {
+      log.error("Error getting account status:", err);
+      return res.status(500).send({
+        messageCode: "INTERNAL_ERROR",
+        message: "An error occurred while checking account status"
+      });
+    }
+  }
+);
 
 module.exports = userrouter;

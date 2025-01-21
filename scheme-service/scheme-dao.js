@@ -71,97 +71,95 @@ class SchemeDao {
 
   async updateScheme(schemeId, schemeData) {
     try {
-      return await db.transaction(async (tx) => {
-        // First, check if the name already exists for a different scheme
-        if (schemeData.name) {
-          const existingScheme = await tx
-            .select()
-            .from(schemes)
-            .where(
-              and(
-                eq(schemes.name, schemeData.name.trim()),
-                // Exclude the current scheme being updated
-                !eq(schemes.id, schemeId)
-              )
-            )
-            .limit(1);
+        return await db.transaction(async (tx) => {
+            if (schemeData.name) {
+                const existingScheme = await tx
+                    .select()
+                    .from(schemes)
+                    .where(
+                        and(
+                            eq(schemes.name, schemeData.name.trim()),
+                            !eq(schemes.id, schemeId)
+                        )
+                    )
+                    .limit(1);
 
-          if (existingScheme.length > 0) {
-            const error = new Error("Scheme with this name already exists");
+                if (existingScheme.length > 0) {
+                    const error = new Error("Scheme with this name already exists");
+                    error.statusCode = 400;
+                    error.messageCode = "DUPLICATE_SCHEME_NAME";
+                    throw error;
+                }
+            }
+
+            // Update the scheme with all fields including productId
+            const [scheme] = await tx
+                .update(schemes)
+                .set({
+                    ...(schemeData.name && { name: schemeData.name.trim() }),
+                    ...(schemeData.productId && { productId: schemeData.productId }),
+                    ...(schemeData.description && {
+                        description: schemeData.description,
+                    }),
+                    ...(schemeData.status && { status: schemeData.status }),
+                    ...(schemeData.minTransactionLimit && {
+                        minTransactionLimit: schemeData.minTransactionLimit,
+                    }),
+                    ...(schemeData.maxTransactionLimit && {
+                        maxTransactionLimit: schemeData.maxTransactionLimit,
+                    }),
+                    ...(schemeData.dailyLimit && { dailyLimit: schemeData.dailyLimit }),
+                    ...(schemeData.monthlyLimit && {
+                        monthlyLimit: schemeData.monthlyLimit,
+                    }),
+                    updatedAt: new Date(),
+                })
+                .where(eq(schemes.id, schemeId))
+                .returning();
+
+            // Handle charges update
+            if (schemeData.charges) {
+                // Deactivate existing charges
+                await tx
+                    .update(schemeCharges)
+                    .set({ status: "INACTIVE", updatedAt: new Date() })
+                    .where(eq(schemeCharges.schemeId, schemeId));
+
+                // Insert new charges
+                const chargesData = schemeData.charges.map((charge) => ({
+                    schemeId: scheme.id,
+                    apiConfigId: charge.apiConfigId,
+                    minAmount: charge.minAmount,
+                    maxAmount: charge.maxAmount,
+                    chargeType: charge.chargeType,
+                    chargeValue: charge.chargeValue,
+                    gst: charge.gst,
+                    tds: charge.tds,
+                    status: "ACTIVE",
+                }));
+
+                const charges = await tx
+                    .insert(schemeCharges)
+                    .values(chargesData)
+                    .returning();
+
+                scheme.charges = charges;
+            }
+
+            return scheme;
+        });
+    } catch (error) {
+        log.error("Error updating scheme:", error);
+
+        if (error.code === "23505") {
             error.statusCode = 400;
             error.messageCode = "DUPLICATE_SCHEME_NAME";
-            throw error;
-          }
+            error.message = "A scheme with this name already exists";
         }
 
-        // Update the scheme
-        const [scheme] = await tx
-          .update(schemes)
-          .set({
-            ...(schemeData.name && { name: schemeData.name.trim() }),
-            ...(schemeData.description && {
-              description: schemeData.description,
-            }),
-            ...(schemeData.status && { status: schemeData.status }),
-            ...(schemeData.minTransactionLimit && {
-              minTransactionLimit: schemeData.minTransactionLimit,
-            }),
-            ...(schemeData.maxTransactionLimit && {
-              maxTransactionLimit: schemeData.maxTransactionLimit,
-            }),
-            ...(schemeData.dailyLimit && { dailyLimit: schemeData.dailyLimit }),
-            ...(schemeData.monthlyLimit && {
-              monthlyLimit: schemeData.monthlyLimit,
-            }),
-            updatedAt: new Date(),
-          })
-          .where(eq(schemes.id, schemeId))
-          .returning();
-
-        // Handle charges update
-        if (schemeData.charges) {
-          // Deactivate existing charges
-          await tx
-            .update(schemeCharges)
-            .set({ status: "INACTIVE", updatedAt: new Date() })
-            .where(eq(schemeCharges.schemeId, schemeId));
-
-          // Insert new charges
-          const chargesData = schemeData.charges.map((charge) => ({
-            schemeId: scheme.id,
-            apiConfigId: charge.apiConfigId,
-            minAmount: charge.minAmount,
-            maxAmount: charge.maxAmount,
-            chargeType: charge.chargeType,
-            chargeValue: charge.chargeValue,
-            gst: charge.gst,
-            tds: charge.tds,
-            status: "ACTIVE",
-          }));
-
-          const charges = await tx
-            .insert(schemeCharges)
-            .values(chargesData)
-            .returning();
-
-          scheme.charges = charges;
-        }
-
-        return scheme;
-      });
-    } catch (error) {
-      log.error("Error updating scheme:", error);
-
-      // Check for unique constraint violation
-      if (error.code === "23505") {
-        error.statusCode = 400;
-        error.messageCode = "DUPLICATE_SCHEME_NAME";
-        error.message = "A scheme with this name already exists";
-      }
-
-      throw error;
+        throw error;
     }
-  }
+}
 
   async getSchemeById(schemeId) {
     try {
