@@ -17,6 +17,7 @@ const axios=require("axios");
 const XLSX = require('xlsx');
 const fs = require('fs').promises;
 const path = require('path');
+const requestIp = require('request-ip');
 // Validation Schemas
 const accountValidateSchema = Joi.object({
   clientId: Joi.string().required(), // username
@@ -212,7 +213,7 @@ payoutRouter.post("/payout", async (req, res) => {
     }
 
     const apiToken = await apiTokenDao.getTokenByValue(req.body.secretKey);
-    if (!apiToken || apiToken[0].status !== "ACTIVE") {
+    if (!apiToken || apiToken[0].status !== "ACTIVE" && apiToken[0].userId==user.id) {
       return res.status(401).send({
         statusCode: 0,
         message: "Invalid token",
