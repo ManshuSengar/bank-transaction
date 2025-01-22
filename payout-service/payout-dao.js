@@ -1374,6 +1374,28 @@ class PayoutDao {
       throw error;
     }
   }
+
+  async getPayoutTransactionByClientOrderId(clientOrderId) {
+    try {
+      const [transaction] = await db
+        .select()
+        .from(payoutTransactions)
+        .where(eq(payoutTransactions.clientOrderId, clientOrderId))
+        .limit(1);
+
+      if (transaction) {
+        return transaction;
+      }
+      return null;
+    } catch (error) {
+      log.error(
+        `Error getting transaction by client order ID ${clientOrderId}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
 }
 
 module.exports = new PayoutDao();

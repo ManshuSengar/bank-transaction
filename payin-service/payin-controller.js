@@ -89,7 +89,8 @@ payinRouter.post("/qr", async (req, res) => {
     const result = await payinDao.generateQR(
       user.id,
       decryptedData.amount,
-      decryptedData.uniqueid
+      decryptedData.uniqueid,
+      `Brivtechdmv${decryptedData.uniqueid}@gmail.com`
     );
 
     res.status(201).send({
@@ -366,7 +367,7 @@ payinRouter.post("/check-status", async (req, res) => {
     if (newStatus !== "PENDING" && newStatus !== transaction.status) {
       await payinDao.processStatusChange(
         transaction,
-        newStatus === "SUCCESS",
+        newStatus === "APPROVED",
         amount,
         statusData.BankRRN
       );

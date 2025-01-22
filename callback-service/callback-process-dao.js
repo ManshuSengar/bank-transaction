@@ -54,12 +54,15 @@ class CallbackProcessDao {
 // In callback-process-dao.js
 
 async processUserCallback(decryptedData) {
+  console.log("decryptedData.OrderId",   decryptedData.OrderId)
   try {
       return await db.transaction(async (tx) => {
           // 1. Validate and get unique ID record
           const uniqueIdRecord = await uniqueIdDao.getUniqueIdByGeneratedId(
               decryptedData.OrderId
           );
+
+          console.log("uniqueIdRecord--> ",uniqueIdRecord);
 
           if (!uniqueIdRecord) {
               throw {
@@ -95,8 +98,8 @@ async processUserCallback(decryptedData) {
 
           // 4. Get user's wallets
           const userWallets = await walletDao.getUserWallets(userId);
-          const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
-          const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
+          const serviceWallet = userWallets.find(w => w?.type?.name === "SERVICE");
+          const collectionWallet = userWallets.find(w => w?.type?.name === "COLLECTION");
 
           if (!serviceWallet || !collectionWallet) {
               throw {
@@ -105,10 +108,10 @@ async processUserCallback(decryptedData) {
                   message: "Service or Collection wallet not found",
               };
           }
-
+      console.log("payinTransaction latest--> ",payinTransaction);
           // 5. Process based on transaction status
           if (status === "APPROVED") {
-              // No need to check locks for credits
+            console.log("status--> ",status);
               await walletDao.updateWalletBalance(
                   collectionWallet.wallet.id,
                   amount,
@@ -117,11 +120,9 @@ async processUserCallback(decryptedData) {
                   payinTransaction.transactionId,
                   userId,
                   "PAYIN",
-                  null,
-                  tx
               );
           } else if (status === "REJECTED") {
-              // No need to check locks for refunds
+            console.log("status--> ",status);
               await walletDao.updateWalletBalance(
                   serviceWallet.wallet.id,
                   chargeAmount,
@@ -130,11 +131,9 @@ async processUserCallback(decryptedData) {
                   payinTransaction.transactionId,
                   userId,
                   "PAYIN",
-                  null,
-                  tx
               );
           }
-
+         console.log("enter here-->< ");
           // 6. Update payin transaction status
           const [updatedTransaction] = await tx
               .update(payinTransactions)
@@ -142,11 +141,11 @@ async processUserCallback(decryptedData) {
                   status: status === "APPROVED" ? "SUCCESS" : "FAILED",
                   vendorTransactionId: decryptedData.BankRRN,
                   errorMessage: status === "REJECTED" ? "Transaction Rejected" : null,
-                  completedAt: new Date()
+                  updatedAt: new Date()
               })
               .where(eq(payinTransactions.id, payinTransaction.id))
               .returning();
-
+         console.log("updatedTransaction--> ",updatedTransaction);
           // 7. Modify payload with original unique ID
           const modifiedPayload = {
               ...decryptedData,
@@ -156,7 +155,7 @@ async processUserCallback(decryptedData) {
 
           // 8. Get user's callback configurations
           const userCallbackConfigs = await callbackDao.getUserCallbackConfigs(userId);
-
+          console.log("userCallbackConfigs--> ",userCallbackConfigs);
           // 9. If no callback configs, skip
           if (!userCallbackConfigs.length) {
               log.warn(`No callback configurations for user ${userId}`);
@@ -231,6 +230,7 @@ async processUserCallback(decryptedData) {
           };
       });
   } catch (error) {
+    console.log("error details--> ",error);
       log.error("Error processing user callback:", error);
       throw error;
   }

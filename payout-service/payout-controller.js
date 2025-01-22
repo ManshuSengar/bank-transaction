@@ -213,7 +213,7 @@ payoutRouter.post("/payout", async (req, res) => {
     }
 
     const apiToken = await apiTokenDao.getTokenByValue(req.body.secretKey);
-    if (!apiToken || apiToken[0].status !== "ACTIVE" && apiToken[0].userId==user.id) {
+    if (!apiToken || apiToken[0].status !== "ACTIVE") {
       return res.status(401).send({
         statusCode: 0,
         message: "Invalid token",
@@ -224,7 +224,17 @@ payoutRouter.post("/payout", async (req, res) => {
         status: null,
       });
     }
-
+    if (!user || apiToken[0].userId !== user.id) {
+      return res.status(401).send({
+        statusCode: 0,
+        message: "Token does not belong to the specified user",
+        clientOrderId: req.body.clientOrderId,
+        orderId: null,
+        beneficiaryName: null,
+        utr: null,
+        status: null,
+      });
+    }
     const result = await payoutDao.initiatePayout(
       user.id,
       {
@@ -913,5 +923,60 @@ payoutRouter.post("/admin/mark-success", authenticateToken, async (req, res) => 
     });
   }
 });
+
+payoutRouter.post("/check-status", async (req, res) => {
+  try {
+    const { clientOrderId } = req.body;
+
+    if (!clientOrderId) {
+      return res.status(400).send({
+        messageCode: "VALIDATION_ERROR",
+        message: "Client Order ID is required"
+      });
+    }
+
+    const transaction = await payoutDao.getPayoutTransactionByClientOrderId(
+      clientOrderId
+    );
+
+    if (!transaction) {
+      return res.status(404).send({
+        messageCode: "TRANSACTION_NOT_FOUND",
+        message: "Transaction not found"
+      });
+    }
+
+    const statusMapping = {
+      SUCCESS: "success",
+      FAILED: "failed",
+      PENDING: "pending",
+      REVERSED: "reversed"
+    };
+
+    res.send({
+      messageCode: `${statusMapping[transaction.status]}`,
+      message: `Transaction status: ${statusMapping[transaction.status]}`,
+      data: {
+        clientOrderId: transaction.clientOrderId,
+        orderId: transaction.orderId,
+        amount: transaction.amount,
+        beneficiaryName: transaction.beneficiaryName,
+        accountNumber: transaction.accountNumber,
+        ifscCode: transaction.ifscCode,
+        status: transaction.status,
+        utrNumber: transaction.utrNumber || null,
+        transactionDate: transaction.createdAt,
+        completedAt: transaction.completedAt
+      }
+    });
+  } catch (error) {
+    log.error("Error checking transaction status:", error);
+    res.status(500).send({
+      messageCode: "ERR_CHECK_STATUS",
+      message: "Error checking transaction status"
+    });
+  }
+});
+
 
 module.exports = payoutRouter;

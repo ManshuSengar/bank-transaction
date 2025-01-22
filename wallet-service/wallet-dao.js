@@ -215,6 +215,7 @@ class WalletDao {
     trasaction = null
   ) {
     try {
+      console.log("walletId,amount,type,description,referenceId,userId,referenceType__> ",walletId,amount,type,description,referenceId,userId,referenceType);
       return await db.transaction(async (tx) => {
         tx = trasaction ? trasaction : tx;
         const [wallet] = await tx
@@ -304,6 +305,7 @@ class WalletDao {
         };
       });
     } catch (error) {
+      console.log("wallet update error--> ",error);
       log.error("Error updating wallet balance:", error);
       throw error;
     }

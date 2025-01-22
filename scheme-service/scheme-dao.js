@@ -417,41 +417,26 @@ class SchemeDao {
   async assignSchemeToUser(userId, schemeId, assignedBy) {
     try {
       return await db.transaction(async (tx) => {
-        // Deactivate existing schemes of same product type
-        const [existingScheme] = await tx
-          .select({
-            scheme: schemes,
-          })
-          .from(schemes)
-          .where(eq(schemes.id, schemeId))
+        const existingAssignment = await tx
+          .select()
+          .from(userSchemes)
+          .where(
+            and(
+              eq(userSchemes.userId, userId),
+              eq(userSchemes.schemeId, schemeId),
+              eq(userSchemes.status, "ACTIVE")
+            )
+          )
           .limit(1);
 
-        if (existingScheme) {
-          await tx
-            .update(userSchemes)
-            .set({
-              status: "INACTIVE",
-              updatedAt: new Date(),
-            })
-            .where(
-              and(
-                eq(userSchemes.userId, userId),
-                exists(
-                  db
-                    .select()
-                    .from(schemes)
-                    .where(
-                      and(
-                        eq(schemes.id, userSchemes.schemeId),
-                        eq(schemes.productId, existingScheme.scheme.productId)
-                      )
-                    )
-                )
-              )
-            );
+        if (existingAssignment.length > 0) {
+          const error = new Error("Scheme is already assigned to this user");
+          error.statusCode = 400;
+          error.messageCode = "SCHEME_ALREADY_ASSIGNED";
+          throw error;
         }
 
-        // Assign new scheme
+        // Assign new scheme without deactivating existing ones
         const [assignment] = await tx
           .insert(userSchemes)
           .values({

@@ -12,7 +12,11 @@ const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
 const { users } = require("../user-service/db/schema");
+const IndianNameEmailGenerator=require("../payin-service/utlis");
+const nameEmailGenerator = new IndianNameEmailGenerator();
+
 class PayinDao {
+
   async generateQR(userId, amount, originalUniqueId = null) {
     try {
       return await db.transaction(async (tx) => {
@@ -119,10 +123,15 @@ class PayinDao {
           amount
         );
 
+
+        // generate uniquemail
+        const { fullName, email } = nameEmailGenerator.generateUniqueNameEmail();
         // 7. Prepare Payload for Third-Party API
+        console.log("email--> ",email);
         const payload = {
           uniqueid: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
           amount: amount.toString(),
+          email
         };
         // 8. Encrypt Payload
         const encryptedData = await encryptionService.encrypt(payload);
@@ -134,7 +143,7 @@ class PayinDao {
           data: encryptedData,
         });
         console.log("vendorResponse--> ", vendorResponse);
-        if (!vendorResponse?.Status) {
+        if (!vendorResponse?.data?.Status) {
           throw {
             statusCode: 400,
             messageCode: "TELE",
