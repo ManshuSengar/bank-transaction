@@ -10,9 +10,9 @@ const log = new Logger("Payin-Controller");
 const Joi = require("joi");
 const { authenticateToken } = require("../middleware/auth-token-validator");
 const axios = require("axios");
-const XLSX = require('xlsx');
-const fs = require('fs').promises;
-const path = require('path');
+const XLSX = require("xlsx");
+const fs = require("fs").promises;
+const path = require("path");
 
 // Validation Schema
 const generateQRSchema = Joi.object({
@@ -21,7 +21,6 @@ const generateQRSchema = Joi.object({
   data: Joi.string().required(), // Encrypted data string
 });
 
-// Public QR Generation Endpoint
 payinRouter.post("/qr", async (req, res) => {
   try {
     console.log("/qr--> ", req.body);
@@ -101,7 +100,6 @@ payinRouter.post("/qr", async (req, res) => {
       createdAt: result.transaction.createdAt,
       updatedAt: result.transaction.updatedAt,
     });
-    
   } catch (error) {
     log.error("Error generating public QR:", error);
     res.status(error.statusCode || 500).send({
@@ -111,7 +109,6 @@ payinRouter.post("/qr", async (req, res) => {
   }
 });
 
-// Verify Transaction (Public Endpoint)
 payinRouter.post("/verify", async (req, res) => {
   try {
     const { transactionId, username, token } = req.body;
@@ -312,7 +309,6 @@ payinRouter.get("/admin/transactions", async (req, res) => {
   }
 });
 
-// In payin-controller.js
 payinRouter.post("/check-status", async (req, res) => {
   try {
     const { uniqueId, username } = req.body;
@@ -324,10 +320,8 @@ payinRouter.post("/check-status", async (req, res) => {
       });
     }
 
-    // Get user and transaction
     const user = await userDao.getUserByUsername(username);
     const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
-    console.log("transaction--> ", transaction);
     if (!transaction || !user || transaction.userId !== user.id) {
       return res.status(404).send({
         messageCode: "TRANSACTION_NOT_FOUND",
@@ -352,7 +346,7 @@ payinRouter.post("/check-status", async (req, res) => {
         uniqueid: transaction?.transactionId,
       }
     );
-  
+    console.log("vendorResponse--> ", vendorResponse?.data);
 
     if (!vendorResponse.data.Status) {
       return res.status(400).send({
@@ -393,7 +387,6 @@ payinRouter.post("/check-status", async (req, res) => {
   }
 });
 
-// Admin check status endpoint
 payinRouter.post("/admin/check-status", async (req, res) => {
   try {
     const { uniqueId } = req.body;
@@ -425,6 +418,16 @@ payinRouter.post("/admin/check-status", async (req, res) => {
       });
     }
 
+    if (originalStatus === "FAILED") {
+      return res.send({
+        messageCode: "ALREADY_FAILED",
+        message: "Transaction already marked as failed",
+        description: "Transaction charges have been refunded to service wallet",
+        status: originalStatus,
+        transactionId: transaction.transactionId,
+      });
+    }
+
     const vendorResponse = await axios.post(
       process.env.VENDOR_CHECK_STATUS_API,
       {
@@ -433,7 +436,7 @@ payinRouter.post("/admin/check-status", async (req, res) => {
         uniqueid: transaction?.transactionId,
       }
     );
-     console.log("vendorResponse.data. ",vendorResponse.data);
+    console.log("vendorResponse.data. ", vendorResponse.data);
     if (!vendorResponse.data.Status) {
       return res.status(400).send({
         messageCode: "VENDOR_ERROR",
@@ -446,19 +449,26 @@ payinRouter.post("/admin/check-status", async (req, res) => {
     const newStatus = statusData.Status;
 
     let statusDescription = "";
-    if (originalStatus === "PENDING" && newStatus === "SUCCESS") {
+    if (originalStatus === "PENDING" && newStatus === "APPROVED") {
       statusDescription =
         "Transaction successful - Amount credited to collection wallet";
     } else if (originalStatus === "PENDING" && newStatus === "FAILED") {
       statusDescription = "Transaction failed - Amount reversed or not debited";
     } else if (newStatus === "PENDING") {
       statusDescription = "Transaction is still being processed";
+    } else if (originalStatus === "FAILED" && newStatus === "APPROVED") {
+      statusDescription =
+        "Status changed from failed to approved - Updating wallet balances";
+    } else if (originalStatus === "APPROVED" && newStatus === "FAILED") {
+      statusDescription =
+        "Status changed from approved to failed - Reversing wallet transactions";
     }
 
+    console.log("newStatus--> ", transaction.status, newStatus);
     if (newStatus !== "PENDING" && newStatus !== transaction.status) {
       await payinDao.processStatusChange(
         transaction,
-        newStatus === "SUCCESS",
+        newStatus === "APPROVED",
         amount,
         statusData.BankRRN
       );
@@ -489,72 +499,59 @@ payinRouter.post("/admin/check-status", async (req, res) => {
 
 payinRouter.get("/admin/transactions/download", async (req, res) => {
   try {
-      const {
-          startDate,
-          endDate,
-          status,
-          search,
-          minAmount,
-          maxAmount,
-      } = req.query;
+    const { startDate, endDate, status, search, minAmount, maxAmount } =
+      req.query;
 
-      const transactions = await payinDao.getAdminFilteredTransactions({
-          startDate,
-          endDate,
-          status,
-          search,
-          minAmount: minAmount ? parseFloat(minAmount) : null,
-          maxAmount: maxAmount ? parseFloat(maxAmount) : null,
-          page: 1,
-          limit: 100000 
-      });
+    const transactions = await payinDao.getAdminFilteredTransactions({
+      startDate,
+      endDate,
+      status,
+      search,
+      minAmount: minAmount ? parseFloat(minAmount) : null,
+      maxAmount: maxAmount ? parseFloat(maxAmount) : null,
+      page: 1,
+      limit: 100000,
+    });
 
-      const excelData = transactions.data.map((transaction) => ({
-          'Transaction ID': transaction.transactionId || 'N/A',
-          'Amount': transaction.amount,
-          'Unique ID': transaction.uniqueId,
-          'Charge Value': transaction.chargeValue,
-          'GST Amount': transaction.gstAmount,
-          'Status': transaction.status,
-          'Created At': new Date(transaction.createdAt).toLocaleString(),
-          'User ID': transaction.userId,
-          'Username': transaction.user.username,
-          'Full Name': `${transaction.user.firstname} ${transaction.user.lastname}`,
-          'Email': transaction.user.emailId,
-          'Phone No': transaction.user.phoneNo
-      }));
+    const excelData = transactions.data.map((transaction) => ({
+      "Transaction ID": transaction.transactionId || "N/A",
+      Amount: transaction.amount,
+      "Unique ID": transaction.uniqueId,
+      "Charge Value": transaction.chargeValue,
+      "GST Amount": transaction.gstAmount,
+      Status: transaction.status,
+      "Created At": new Date(transaction.createdAt).toLocaleString(),
+      "User ID": transaction.userId,
+      Username: transaction.user.username,
+      "Full Name": `${transaction.user.firstname} ${transaction.user.lastname}`,
+      Email: transaction.user.emailId,
+      "Phone No": transaction.user.phoneNo,
+    }));
 
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Payin Transactions');
-
-      const timestamp = new Date().toISOString().replace(/[:\.]/g, '-');
-      const filename = `payin_transactions_${timestamp}.xlsx`;
-      const filepath = path.join(__dirname, '..', 'uploads', 'exports', filename);
-
-      await fs.mkdir(path.dirname(filepath), { recursive: true });
-
-      XLSX.writeFile(workbook, filepath);
-
-      res.download(filepath, filename, async (err) => {
-          if (err) {
-              console.error('Download error:', err);
-          }
-          await fs.unlink(filepath).catch(() => {});
-      });
-
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Payin Transactions");
+    const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
+    const filename = `payin_transactions_${timestamp}.xlsx`;
+    const filepath = path.join(__dirname, "..", "uploads", "exports", filename);
+    await fs.mkdir(path.dirname(filepath), { recursive: true });
+    XLSX.writeFile(workbook, filepath);
+    res.download(filepath, filename, async (err) => {
+      if (err) {
+        console.error("Download error:", err);
+      }
+      await fs.unlink(filepath).catch(() => {});
+    });
   } catch (error) {
-      console.log("Error downloading admin transactions:", error);
-      log.error("Error downloading admin transactions:", error);
-      res.status(500).send({
-          messageCode: "ERR_DOWNLOAD_TRANSACTIONS",
-          message: "Error downloading transactions",
-      });
+    console.log("Error downloading admin transactions:", error);
+    log.error("Error downloading admin transactions:", error);
+    res.status(500).send({
+      messageCode: "ERR_DOWNLOAD_TRANSACTIONS",
+      message: "Error downloading transactions",
+    });
   }
 });
 
-// Admin endpoint to manually mark pending transactions as failed
 payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
   try {
     const { uniqueId } = req.body;
@@ -562,7 +559,7 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
     if (!uniqueId) {
       return res.status(400).send({
         messageCode: "VALIDATION_ERROR",
-        message: "Unique ID is required"
+        message: "Unique ID is required",
       });
     }
 
@@ -575,11 +572,11 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
     // }
 
     const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
-    
+
     if (!transaction) {
       return res.status(404).send({
         messageCode: "TRANSACTION_NOT_FOUND",
-        message: "Transaction not found"
+        message: "Transaction not found",
       });
     }
 
@@ -587,14 +584,14 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
     if (transaction.status !== "PENDING") {
       return res.status(400).send({
         messageCode: "INVALID_STATUS",
-        message: "Only pending transactions can be marked as failed"
+        message: "Only pending transactions can be marked as failed",
       });
     }
 
     const updatedTransaction = await payinDao.processStatusChange(
-      transaction, 
+      transaction,
       false, // isSuccess = false (marking as failed)
-      transaction.amount, 
+      transaction.amount,
       null // No bank RRN
     );
 
@@ -604,18 +601,82 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
       transaction: {
         uniqueId: updatedTransaction.uniqueId,
         status: updatedTransaction.status,
-        amount: updatedTransaction.amount
-      }
+        amount: updatedTransaction.amount,
+      },
     });
   } catch (error) {
     log.error("Error marking transaction as failed:", error);
     res.status(500).send({
       messageCode: "ERR_MARK_FAILED",
-      message: "Error marking transaction as failed"
+      message: "Error marking transaction as failed",
     });
   }
 });
 
+payinRouter.get(
+  "/user/transactions/download",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const userId = parseInt(req.user.userId);
+      const { startDate, endDate, status, search, minAmount, maxAmount } =
+        req.query;
 
+      const transactions = await payinDao.getFilteredTransactions({
+        userId,
+        startDate,
+        endDate,
+        status,
+        search,
+        minAmount: minAmount ? parseFloat(minAmount) : null,
+        maxAmount: maxAmount ? parseFloat(maxAmount) : null,
+        page: 1,
+        limit: 100000,
+      });
+
+      const excelData = transactions.data.map((transaction) => ({
+        "Transaction ID": transaction.transactionId || "N/A",
+        Amount: transaction.amount,
+        "Unique ID": transaction.uniqueId,
+        "Charge Value": transaction.chargeValue,
+        "GST Amount": transaction.gstAmount,
+        Status: transaction.status,
+        "Created At": new Date(transaction.createdAt).toLocaleString(),
+        "Bank RRN": transaction.vendorTransactionId || "N/A",
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "My Transactions");
+
+      const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
+      const filename = `user_transactions_${timestamp}.xlsx`;
+      const filepath = path.join(
+        __dirname,
+        "..",
+        "uploads",
+        "exports",
+        filename
+      );
+
+      await fs.mkdir(path.dirname(filepath), { recursive: true });
+
+      XLSX.writeFile(workbook, filepath);
+      res.download(filepath, filename, async (err) => {
+        if (err) {
+          console.error("Download error:", err);
+        }
+        await fs.unlink(filepath).catch(() => {});
+      });
+    } catch (error) {
+      console.log("Error downloading user transactions:", error);
+      log.error("Error downloading user transactions:", error);
+      res.status(500).send({
+        messageCode: "ERR_DOWNLOAD_TRANSACTIONS",
+        message: "Error downloading transactions",
+      });
+    }
+  }
+);
 
 module.exports = payinRouter;

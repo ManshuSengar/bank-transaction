@@ -320,100 +320,86 @@ class SchemeDao {
   }
   async calculateCharges(amount, schemeId, productId) {
     try {
-      // Get all applicable scheme charges and API configuration
-      const chargeQuery = await db
-        .select({
-          scheme: schemes,
-          charge: schemeCharges,
-          api: apiConfigs,
-        })
-        .from(schemes)
-        .innerJoin(schemeCharges, eq(schemes.id, schemeCharges.schemeId))
-        .innerJoin(apiConfigs, eq(schemeCharges.apiConfigId, apiConfigs.id))
+      const chargeConfigs = await db
+        .select()
+        .from(schemeCharges)
         .where(
           and(
-            eq(schemes.id, schemeId),
-            eq(schemes.status, "ACTIVE"),
-            eq(schemeCharges.status, "ACTIVE"),
-            eq(apiConfigs.status, "ACTIVE"),
-            // Check if amount is within min and max range
-            schemeCharges.minAmount !== null,
-            schemeCharges.maxAmount !== null,
-            gte(amount, schemeCharges.minAmount),
-            lte(amount, schemeCharges.maxAmount)
+            eq(schemeCharges.schemeId, schemeId),
+            eq(schemeCharges.status, 'ACTIVE')
           )
-        );
-
-      if (!chargeQuery.length) {
+        )
+        .orderBy(asc(schemeCharges.minAmount));
+  
+      if (!chargeConfigs.length) {
         throw {
           statusCode: 400,
-          messageCode: "NO_APPLICABLE_CHARGE_SLAB",
-          message: `No charge slab found for amount ${amount}`
+          messageCode: 'NO_CHARGE_CONFIG',
+          message: 'No charge configuration found for the scheme'
         };
       }
-
-      // If multiple slabs match, take the most specific (smallest range)
-      const applicableCharge = chargeQuery.reduce((mostSpecific, current) => {
-        if (!mostSpecific) return current;
+  
+      // Find the applicable charge configuration
+      let applicableCharge = null;
+      for (const config of chargeConfigs) {
+        const minAmount = config.minAmount || 0;
+        const maxAmount = config.maxAmount || Number.MAX_SAFE_INTEGER;
         
-        const currentRange = 
-          +current.charge.maxAmount - +current.charge.minAmount;
-        const mostSpecificRange = 
-          +mostSpecific.charge.maxAmount - +mostSpecific.charge.minAmount;
-        
-        return currentRange < mostSpecificRange ? current : mostSpecific;
-      });
-
-      const { charge, api } = applicableCharge;
-
+        if (amount >= minAmount && amount <= maxAmount) {
+          applicableCharge = config;
+          break;
+        }
+      }
+  
+      if (!applicableCharge) {
+        throw {
+          statusCode: 400,
+          messageCode: 'NO_APPLICABLE_CHARGE',
+          message: 'No applicable charge configuration found for this amount'
+        };
+      }
+  
       // Calculate base charge
-      const baseCharge =
-        charge.chargeType === "FLAT"
-          ? +charge.chargeValue
-          : (+amount * +charge.chargeValue) / 100;
-
+      let chargeAmount;
+      if (applicableCharge.chargeType === 'PERCENTAGE') {
+        chargeAmount = (amount * applicableCharge.chargeValue) / 100;
+      } else {
+        chargeAmount = applicableCharge.chargeValue;
+      }
+  
       // Calculate GST if applicable
-      const gstAmount = +charge.gst ? +(+baseCharge * +charge.gst) / 100 : 0;
-
+      const gstAmount = applicableCharge.gst 
+        ? (chargeAmount * applicableCharge.gst) / 100 
+        : 0;
+  
       // Calculate TDS if applicable
-      const tdsAmount = +charge.tds ? (+amount * +charge.tds) / 100 : 0;
-
-      // Total amount including all charges
-      const totalCharges = +baseCharge + +gstAmount;
-      const finalAmount = +amount + +totalCharges - +tdsAmount;
-
+      const tdsAmount = applicableCharge.tds 
+        ? (chargeAmount * applicableCharge.tds) / 100 
+        : 0;
+  
+      // Calculate total charges
+      const totalCharges = chargeAmount + gstAmount;
+  
       return {
-        api: {
-          id: api.id,
-          name: api.name,
-          baseUrl: api.baseUrl,
-        },
         charges: {
-          originalAmount: amount,
-          chargeType: charge.chargeType,
-          chargeValue: charge.chargeValue,
-          chargeSlabMin: charge.minAmount,
-          chargeSlabMax: charge.maxAmount,
-          baseCharge,
+          chargeType: applicableCharge.chargeType,
+          chargeValue: chargeAmount,
           gst: {
-            percentage: charge.gst || 0,
-            amount: gstAmount,
+            percentage: applicableCharge.gst || 0,
+            amount: gstAmount
           },
-          tds: {
-            percentage: charge.tds || 0,
-            amount: tdsAmount,
-          },
-          totalCharges,
-          finalAmount,
-        },
+          tds: applicableCharge.tds ? {
+            percentage: applicableCharge.tds,
+            amount: tdsAmount
+          } : null,
+          totalCharges
+        }
       };
     } catch (error) {
-      console.error("Error calculating charges:", error);
-      log.error("Error calculating charges:", error);
+      console.error('Error calculating charges:', error);
       throw error;
     }
   }
-
   async assignSchemeToUser(userId, schemeId, assignedBy) {
     try {
       return await db.transaction(async (tx) => {

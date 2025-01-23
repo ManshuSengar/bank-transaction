@@ -804,6 +804,98 @@ async (req, res) => {
 }
 );
 
+walletRouter.get("/transaction-logs/download", authenticateToken, async (req, res) => {
+  try {
+      const {
+          type,
+          referenceType,
+          walletType,
+          startDate,
+          endDate,
+          search
+      } = req.query;
+
+      const filters = {
+          userId: req.user.userId,
+          page: 1,
+          limit: 100000
+      };
+
+      if (type?.trim()) {
+          filters.type = type.toUpperCase().trim();
+      }
+      if (search?.trim()) {
+          filters.search = search.trim();
+      }
+      if (referenceType?.trim()) {
+          filters.referenceType = referenceType.toUpperCase().trim();
+      }
+      if (startDate && endDate) {
+          filters.startDate = startDate;
+          filters.endDate = endDate;
+      }
+      if (walletType?.trim()) {
+          const userWallets = await walletDao.getUserWallets(req.user.userId);
+          const matchingWalletIds = userWallets
+              .filter(w => w.type.name.toUpperCase() === walletType.toUpperCase().trim())
+              .map(w => w.wallet.id);
+
+          if (matchingWalletIds.length === 0) {
+              return res.status(200).send({
+                  messageCode: "NO_MATCHING_WALLETS",
+                  message: "No wallets found for the specified wallet type",
+                  data: []
+              });
+          }
+          filters.walletIds = matchingWalletIds;
+      }
+
+      const transactionLogs = await walletDao.getAdvancedWalletTransactionLogs(filters);
+
+      const excelData = transactionLogs.data.map(log => ({
+          'Transaction ID': log.transactionId,
+          'Transaction Unique ID': log.transactionUniqueId,
+          'Wallet Type': log.walletType,
+          'Transaction Type': log.type,
+          'Reference Type': log.referenceType,
+          'Reference ID': log.referenceId,
+          'Amount': log.amount,
+          'Balance Before': log.balanceBefore,
+          'Balance After': log.balanceAfter,
+          'Description': log.description,
+          'Status': log.status,
+          'Created At': new Date(log.createdAt).toLocaleString()
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transaction Logs');
+
+      const timestamp = new Date().toISOString().replace(/[:\.]/g, '-');
+      const filename = `transaction_logs_${timestamp}.xlsx`;
+      const filepath = path.join(__dirname, '..', 'uploads', 'exports', filename);
+      
+      await fs.mkdir(path.dirname(filepath), { recursive: true });
+      XLSX.writeFile(workbook, filepath);
+
+      res.download(filepath, filename, async (err) => {
+          if (err) {
+              console.error('Download error:', err);
+          }
+          await fs.unlink(filepath).catch(() => {});
+      });
+
+  } catch (error) {
+      console.error("Error in transaction logs download:", error);
+      log.error("Error downloading transaction logs:", error);
+      res.status(500).send({
+          messageCode: "ERR_DOWNLOAD_TRANSACTION_LOGS",
+          message: "Error downloading transaction logs",
+          errorDetails: error.message
+      });
+  }
+});
+
 
 
 module.exports = walletRouter;
