@@ -11,7 +11,7 @@ class PaymentStatusScheduler {
   constructor() {
     this.cronSchedule = "*/5 * * * *";
     this.batchSize = 50;
-    this.retryAttempts = 3;
+    this.retryAttempts = 1;
     this.processDelay = 1000;
   }
 
