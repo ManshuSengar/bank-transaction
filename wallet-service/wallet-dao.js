@@ -13,9 +13,15 @@ const {
 const { users } = require("../user-service/db/schema");
 const { eq, and, or, between, desc, sql, like } = require("drizzle-orm");
 const crypto = require("crypto");
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock();
 
 
 class WalletDao {
+  constructor() {
+    this.lock = new AsyncLock();
+    this.lockTTL = 30000; // 30 seconds timeout
+  }
   generateTransactionUniqueId() {
     return crypto.randomBytes(6).toString("hex");
   }
@@ -215,97 +221,104 @@ class WalletDao {
     trasaction = null
   ) {
     try {
-      console.log("walletId,amount,type,description,referenceId,userId,referenceType__> ",walletId,amount,type,description,referenceId,userId,referenceType);
-      return await db.transaction(async (tx) => {
-        tx = trasaction ? trasaction : tx;
-        const [wallet] = await tx
-          .select()
-          .from(userWallets)
-          .where(eq(userWallets.id, walletId))
-          .limit(1);
-
-        if (!wallet) {
-          throw new Error("Wallet not found");
-        }
-        const balanceBefore = parseFloat(wallet.balance);
-        let balanceAfter;
-
-        if (type === "DEBIT") {
-          const availableBalance = await this.getAvailableBalance(walletId);
-          if (availableBalance < amount) {
-            throw {
-              statusCode: 400,
-              messageCode: "INSUFFICIENT_BALANCE",
-              message: "Insufficient available balance for transaction",
-            };
+      return await this.lock.acquire(`wallet:${walletId}`, async () => {
+        return await db.transaction(async (tx) => {
+          tx = trasaction ? trasaction : tx;
+          const [wallet] = await tx
+            .select()
+            .from(userWallets)
+            .where(eq(userWallets.id, walletId))
+            .limit(1);
+  
+          if (!wallet) {
+            throw new Error("Wallet not found");
           }
-          balanceAfter = balanceBefore - parseFloat(amount);
-        } else {
-          balanceAfter = balanceBefore + parseFloat(amount);
-        }
-
-        const [updatedWallet] = await tx
-          .update(userWallets)
-          .set({
-            balance: balanceAfter,
-            lastTransactionAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(userWallets.id, walletId))
-          .returning();
-
-        // Generate or use provided transactionUniqueId
-        const finalTransactionUniqueId =
-          transactionUniqueId || this.generateTransactionUniqueId();
-
-        const [transaction] = await tx
-          .insert(walletTransactions)
-          .values({
-            transactionUniqueId: finalTransactionUniqueId,
-            fromWalletId: type === "DEBIT" ? walletId : null,
-            toWalletId: type === "CREDIT" ? walletId : null,
-            amount,
-            type,
-            description,
-            reference: referenceId,
-            status: "SUCCESS",
-            balanceBefore,
-            balanceAfter,
-            createdBy: userId,
-            completedAt: new Date(),
-          })
-          .returning();
-
-        const [transactionLog] = await tx
-          .insert(walletTransactionLogs)
-          .values({
-            transactionUniqueId: finalTransactionUniqueId,
-            walletId,
-            transactionId: transaction.id,
-            type,
-            amount,
-            balanceBefore,
-            balanceAfter,
-            description,
-            referenceType,
-            referenceId,
-            userId,
-            status: "SUCCESS",
-            additionalMetadata: JSON.stringify({
-              originalDescription: description,
-              transactionDetails: transaction,
-            }),
-          })
-          .returning();
-
-        return {
-          wallet: updatedWallet,
-          transaction,
-          transactionLog,
-        };
-      });
+          const balanceBefore = parseFloat(wallet.balance);
+          let balanceAfter;
+  
+          if (type === "DEBIT") {
+            const availableBalance = await this.getAvailableBalance(walletId);
+            if (availableBalance < amount) {
+              throw {
+                statusCode: 400,
+                messageCode: "INSUFFICIENT_BALANCE",
+                message: "Insufficient available balance for transaction",
+              };
+            }
+            balanceAfter = balanceBefore - parseFloat(amount);
+          } else {
+            balanceAfter = balanceBefore + parseFloat(amount);
+          }
+  
+          const [updatedWallet] = await tx
+            .update(userWallets)
+            .set({
+              balance: balanceAfter,
+              lastTransactionAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(userWallets.id, walletId))
+            .returning();
+  
+          const finalTransactionUniqueId =
+            transactionUniqueId || this.generateTransactionUniqueId();
+  
+          const [transaction] = await tx
+            .insert(walletTransactions)
+            .values({
+              transactionUniqueId: finalTransactionUniqueId,
+              fromWalletId: type === "DEBIT" ? walletId : null,
+              toWalletId: type === "CREDIT" ? walletId : null,
+              amount,
+              type,
+              description,
+              reference: referenceId,
+              status: "SUCCESS",
+              balanceBefore,
+              balanceAfter,
+              createdBy: userId,
+              completedAt: new Date(),
+            })
+            .returning();
+  
+          const [transactionLog] = await tx
+            .insert(walletTransactionLogs)
+            .values({
+              transactionUniqueId: finalTransactionUniqueId,
+              walletId,
+              transactionId: transaction.id,
+              type,
+              amount,
+              balanceBefore,
+              balanceAfter,
+              description,
+              referenceType,
+              referenceId,
+              userId,
+              status: "SUCCESS",
+              additionalMetadata: JSON.stringify({
+                originalDescription: description,
+                transactionDetails: transaction,
+              }),
+            })
+            .returning();
+  
+          return {
+            wallet: updatedWallet,
+            transaction,
+            transactionLog,
+          };
+        });
+      }, { timeout: this.lockTTL });
     } catch (error) {
-      console.log("wallet update error--> ",error);
+      if (error.name === 'TimeoutError') {
+        throw {
+          statusCode: 408,
+          messageCode: "LOCK_TIMEOUT",
+          message: "Transaction timed out while waiting for lock"
+        };
+      }
+      console.log("wallet update error--> ", error);
       log.error("Error updating wallet balance:", error);
       throw error;
     }

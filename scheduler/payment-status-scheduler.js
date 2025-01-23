@@ -111,7 +111,7 @@ class PaymentStatusScheduler {
             uniqueid: transaction.transactionId,
           }
         );
-        console.log("vendorResponse--> ", vendorResponse);
+        console.log("vendorResponse--> ", vendorResponse.data);
         if (!vendorResponse.data.Status) {
           throw new Error("Invalid vendor response");
         }

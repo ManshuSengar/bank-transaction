@@ -19,6 +19,7 @@ const {
   lte,
   gte,
   exists,
+  asc
 } = require("drizzle-orm");
 const { products } = require("../product-service/db/schema");
 class SchemeDao {
@@ -342,10 +343,10 @@ class SchemeDao {
       // Find the applicable charge configuration
       let applicableCharge = null;
       for (const config of chargeConfigs) {
-        const minAmount = config.minAmount || 0;
-        const maxAmount = config.maxAmount || Number.MAX_SAFE_INTEGER;
+        const minAmount = +config.minAmount || 0;
+        const maxAmount = +config.maxAmount || Number.MAX_SAFE_INTEGER;
         
-        if (amount >= minAmount && amount <= maxAmount) {
+        if (+amount >= +minAmount && +amount <= +maxAmount) {
           applicableCharge = config;
           break;
         }
@@ -362,35 +363,35 @@ class SchemeDao {
       // Calculate base charge
       let chargeAmount;
       if (applicableCharge.chargeType === 'PERCENTAGE') {
-        chargeAmount = (amount * applicableCharge.chargeValue) / 100;
+        chargeAmount = (+amount * +applicableCharge.chargeValue) / 100;
       } else {
-        chargeAmount = applicableCharge.chargeValue;
+        chargeAmount = +applicableCharge.chargeValue;
       }
   
       // Calculate GST if applicable
-      const gstAmount = applicableCharge.gst 
-        ? (chargeAmount * applicableCharge.gst) / 100 
+      const gstAmount = +applicableCharge.gst 
+        ? (+chargeAmount * +applicableCharge.gst) / 100 
         : 0;
   
       // Calculate TDS if applicable
-      const tdsAmount = applicableCharge.tds 
-        ? (chargeAmount * applicableCharge.tds) / 100 
+      const tdsAmount = +applicableCharge.tds 
+        ? (+chargeAmount * +applicableCharge.tds) / 100 
         : 0;
   
       // Calculate total charges
-      const totalCharges = chargeAmount + gstAmount;
+      const totalCharges = +chargeAmount + +gstAmount;
   
       return {
         charges: {
           chargeType: applicableCharge.chargeType,
-          chargeValue: chargeAmount,
+          chargeValue: +chargeAmount,
           gst: {
-            percentage: applicableCharge.gst || 0,
-            amount: gstAmount
+            percentage: +applicableCharge.gst || 0,
+            amount: +gstAmount
           },
-          tds: applicableCharge.tds ? {
-            percentage: applicableCharge.tds,
-            amount: tdsAmount
+          tds: +applicableCharge.tds ? {
+            percentage: +applicableCharge.tds,
+            amount: +tdsAmount
           } : null,
           totalCharges
         }

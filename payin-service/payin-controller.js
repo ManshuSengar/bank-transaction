@@ -311,8 +311,9 @@ payinRouter.get("/admin/transactions", async (req, res) => {
 
 payinRouter.post("/check-status", async (req, res) => {
   try {
+   
     const { uniqueId, username } = req.body;
-
+    console.log("uniqueId",uniqueId);
     if (!uniqueId || !username) {
       return res.status(400).send({
         messageCode: "VALIDATION_ERROR",
@@ -322,6 +323,7 @@ payinRouter.post("/check-status", async (req, res) => {
 
     const user = await userDao.getUserByUsername(username);
     const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
+    console.log("user--> ",user,"--> ",transaction);
     if (!transaction || !user || transaction.userId !== user.id) {
       return res.status(404).send({
         messageCode: "TRANSACTION_NOT_FOUND",

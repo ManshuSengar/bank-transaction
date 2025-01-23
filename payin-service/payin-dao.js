@@ -136,7 +136,6 @@ class PayinDao {
         // 8. Encrypt Payload
         const encryptedData = await encryptionService.encrypt(payload);
         console.log("encryptedData--> ", encryptedData);
-        // 9. Make Vendor API Call
         const vendorResponse = await axios.post(apiConfig.baseUrl, {
           reseller_id: process.env.RESELLER_ID,
           reseller_pass: process.env.RESELLER_PASSWORD,
@@ -150,7 +149,6 @@ class PayinDao {
             message: "Technical error",
           };
         }
-        // 10. Record Transaction
         const [transaction] = await tx
           .insert(payinTransactions)
           .values({
@@ -172,7 +170,6 @@ class PayinDao {
           })
           .returning();
 
-        // 11. Deduct Charges from Service Wallet
         const walletTransaction = await walletDao.updateWalletBalance(
           serviceWallet.wallet.id,
           chargeCalculation.charges.totalCharges,
@@ -183,7 +180,6 @@ class PayinDao {
           "PAYIN"
         );
 
-        // 12. Log Scheme Transaction
         const schemeTransactionLog = await schemeTransactionLogDao.createLog({
           schemeId: scheme.id,
           userId,
@@ -197,7 +193,6 @@ class PayinDao {
           referenceId: finalOriginalUniqueId,
           remarks: `Payin QR Generation - ${finalOriginalUniqueId}`,
         });
-        // await uniqueIdDao.markUniqueIdAsUsed(uniqueIdRecord.id);
         return {
           transaction,
           walletTransaction,

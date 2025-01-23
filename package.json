@@ -29,6 +29,7 @@
   "author": "Manshu Sengar",
   "license": "ISC",
   "dependencies": {
+    "async-lock": "^1.4.1",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "config": "^3.3.12",

@@ -75,7 +75,7 @@ app.listen(port, () => {
 
 try {
   //  paymentStatusScheduler.start();
-   payoutStatusScheduler.start();
+  //  payoutStatusScheduler.start();
   console.log("Payment status scheduler started successfully");
 } catch (error) {
   console.error("Failed to start payment status scheduler:", error);
