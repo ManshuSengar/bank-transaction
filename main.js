@@ -3,9 +3,28 @@ const app = express();
 const morgan = require("morgan");
 require("dotenv").config();
 const cors = require("cors");
-
+const prometheus = require('prom-client');
 const environment = app.get("env");
 app.use(express.json());
+
+
+const collectDefaultMetrics = prometheus.collectDefaultMetrics;
+
+// Create metrics
+const requestCounter = new prometheus.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'path', 'status']
+});
+
+const requestDurationHistogram = new prometheus.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration',
+  labelNames: ['method', 'path']
+});
+
+// Enable default metrics (CPU, memory etc)
+collectDefaultMetrics();
 
 app.use(
   cors({
@@ -20,8 +39,31 @@ app.use(
       "Authorization",
     ],
     exposedHeaders: ["x-auth-token"],
-  })
-);
+  }));
+
+  const requestMetrics = {
+    requests: [],
+    windowSize: 1000, // 1 second window
+   };
+
+  app.use((req, res, next) => {
+    requestMetrics.requests.push(Date.now());
+    
+    // Cleanup old requests
+    const cutoff = Date.now() - requestMetrics.windowSize;
+    requestMetrics.requests = requestMetrics.requests.filter(time => time > cutoff);
+    
+    next();
+   });
+
+app.get('/metrics/rps', (req, res) => {
+  const now = Date.now();
+  const cutoff = now - requestMetrics.windowSize;
+  const recentRequests = requestMetrics.requests.filter(time => time > cutoff);
+  const rps = recentRequests.length;
+  
+  res.json({ rps });
+ });
 
 const userservicerouter = require("./user-service/user-controller");
 const permissionRouter = require("./user-service/permission-controller");

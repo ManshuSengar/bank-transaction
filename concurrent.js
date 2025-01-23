@@ -1,77 +1,86 @@
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const axios = require('axios');
-const crypto = require('crypto');
-const numWorkers = 10; // Each worker will handle 5 transactions
+const fs = require('fs/promises');
+const path = require('path');
 
-if (isMainThread) {
-  async function runWorkers() {
-    const workers = [];
-    for (let i = 0; i < numWorkers; i++) {
-      const worker = new Worker(__filename, {
-        workerData: { workerId: i }
-      });
-      workers.push(worker);
-    }
+class APITester {
+ constructor(config) {
+   this.config = config;
+   this.results = [];
+   this.startTime = null;
+ }
 
-    workers.forEach(worker => {
-      worker.on('message', result => {
-        console.log(`Worker completed: ${result.success} transactions`);
-      });
-      worker.on('error', error => {
-        console.error('Worker error:', error);
-      });
-    });
-  }
+ generateRandomData() {
+   return {
+     data: {
+       uniqueid: Math.floor(10000 + Math.random() * 90000).toString(),
+       amount: '101'
+     }
+   };
+ }
 
-  runWorkers();
-} else {
-  async function processTransactions() {
-    const baseUrl = 'https://merchant.fonexpay.com';
-    const username = 'DEMOFONEXPAY';
-    const token = 'a48ab3b5cefb70b4aced3de3d90b94fa750121cccd04093bc2dcb6f90b1e99aa';
-    let successCount = 0;
+ async makeRequest() {
+   try {
+     const response = await axios.request({
+       ...this.config,
+       data: this.generateRandomData()
+     });
+     return { success: true, data: response.data, timestamp: Date.now() };
+   } catch (error) {
+     return { 
+       success: false, 
+       error: error.message,
+       timestamp: Date.now()
+     };
+   }
+ }
 
-    async function makeTransaction() {
-      try {
-        // Generate unique ID
-        const uniqueId = crypto.randomBytes(8).toString('hex');
-        
-        // Step 1: Encrypt data
-        const encryptResponse = await axios.post(`${baseUrl}/validate/encrypt`, {
-          data: {
-            uniqueid: uniqueId,
-            amount: "105"
-          }
-        });
-
-
-        console.log("encryptResponse--> ",encryptResponse);
-        if (encryptResponse.data.messageCode === 'ENCRYPTION_SUCCESS') {
-          // Step 2: Process payment
-          const paymentResponse = await axios.post(`${baseUrl}/payin/qr`, {
-            data: encryptResponse.data.encryptedData,
-            token: token,
-            username: username
-          });
-          console.log("paymentResponse--> ",paymentResponse);
-          if (paymentResponse.data) {
-            successCount++;
-          }
-        }
-      } catch (error) {
-        console.log(error);
-      }
-    }
-
-    // Process 5 transactions per worker
-    setInterval(async ()=>{
-    const promises = Array(5).fill().map(() => makeTransaction());
-    await Promise.all(promises);
-    },500)
+ async runBulkTest(totalRequests, concurrency) {
+   this.startTime = Date.now();
+   const batches = Math.ceil(totalRequests / concurrency);
    
-    
-    parentPort.postMessage({ success: successCount });
-  }
+   for (let i = 0; i < batches; i++) {
+     const batchSize = Math.min(concurrency, totalRequests - (i * concurrency));
+     const promises = Array(batchSize).fill().map(() => this.makeRequest());
+     const batchResults = await Promise.all(promises);
+     this.results.push(...batchResults);
+     
+     // Progress logging
+     console.log(`Completed ${this.results.length}/${totalRequests} requests`);
+   }
 
-  processTransactions();
+   await this.generateReport();
+ }
+
+ async generateReport() {
+   const endTime = Date.now();
+   const duration = (endTime - this.startTime) / 1000;
+   
+   const summary = {
+     totalRequests: this.results.length,
+     successfulRequests: this.results.filter(r => r.success).length,
+     failedRequests: this.results.filter(r => !r.success).length,
+     durationSeconds: duration,
+     requestsPerSecond: this.results.length / duration,
+     errors: this.results.filter(r => !r.success).map(r => r.error)
+   };
+
+   const reportPath = path.join(__dirname, `api_test_report_${Date.now()}.json`);
+   await fs.writeFile(reportPath, JSON.stringify({summary, results: this.results}, null, 2));
+   console.log(`Test completed. Report saved to ${reportPath}`);
+   console.log('Summary:', summary);
+ }
 }
+
+// Usage
+const config = {
+ method: 'post',
+ url: 'https://merchant.Fonexpay.com/validate/encrypt',
+ headers: {
+   'Content-Type': 'application/json',
+   'x-auth-token': 'your_jwt_token_here'
+ }
+};
+
+const tester = new APITester(config);
+tester.runBulkTest(5000, 1000) // 5000 total requests, 100 concurrent requests
+ .catch(console.error);
