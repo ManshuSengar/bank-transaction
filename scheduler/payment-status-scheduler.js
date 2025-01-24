@@ -9,21 +9,66 @@ const payinDao = require("../payin-service/payin-dao");
 
 class PaymentStatusScheduler {
   constructor() {
+    this.job = null;
     this.cronSchedule = "*/5 * * * *";
     this.batchSize = 50;
     this.retryAttempts = 1;
     this.processDelay = 1000;
+    this.isManuallyRunning = false;
   }
 
   async start() {
     log.info("Starting Payment Status Check Scheduler");
-    cron.schedule(this.cronSchedule, async () => {
+    this.job = cron.schedule(this.cronSchedule, async () => {
       try {
         await this.processPayments();
       } catch (error) {
         log.error("Error in payment status scheduler:", error);
       }
     });
+  }
+
+  async manualTrigger() {
+    if (this.isManuallyRunning) {
+      return { success: false, message: "Manual scheduler already running" };
+    }
+    log.info("Manually triggering Payment Status Check");
+    this.isManuallyRunning = true;
+    try {
+      await this.processPayments();
+      this.isManuallyRunning = false;
+      return { success: true, message: "Scheduler completed successfully" };
+    } catch (error) {
+      this.isManuallyRunning = false;
+      log.error("Error in manual payment status check:", error);
+      return {
+        success: false,
+        message: "Scheduler failed",
+        error: error.message,
+      };
+    }
+  }
+
+  async stop() {
+    try {
+      if (this.job) {
+        this.job.stop();
+        this.job = null;
+        log.info("Cron scheduler stopped successfully");
+      }
+      if (this.isManuallyRunning) {
+        this.isManuallyRunning = false;
+        log.info("Manual scheduler stopped successfully");
+      }
+
+      return { 
+        success: true, 
+        message: "Scheduler stopped successfully" 
+      };
+    } catch (error) {
+      log.error("Error stopping scheduler:", error);
+      return { success: false, message: "Failed to stop scheduler" };
+    }
   }
 
   async processPayments() {

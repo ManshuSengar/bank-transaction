@@ -207,6 +207,25 @@ class PayinDao {
             message: "Technical error",
           };
         }
+        if(!vendorResponse?.data?.qr){
+          await this.logVendorResponseError({
+            userId,
+            uniqueId: originalUniqueId,
+            transactionId: uniqueIdRecord.generatedUniqueId,
+            requestPayload: payload,
+            vendorResponse: vendorResponse?.data,
+            errorType: "UNKNOWN_RESPONSE_FORMAT",
+            errorMessage: "Unexpected vendor response format",
+            additionalInfo: {
+              receivedFields: Object.keys(vendorResponse?.data || {}),
+            },
+          });
+          throw {
+            statusCode: 400,
+            messageCode: "TELE",
+            message: "Technical error",
+          };
+        }
 
         const [transaction] = await tx
           .insert(payinTransactions)
@@ -216,7 +235,7 @@ class PayinDao {
             apiConfigId: apiConfig.id,
             amount,
             uniqueId: finalOriginalUniqueId,
-            qrString: vendorResponse.data.qr_string,
+            qrString: vendorResponse.data.qr,
             baseAmount: +amount,
             chargeType: chargeCalculation.charges.chargeType,
             chargeValue: +chargeCalculation.charges.chargeValue,
