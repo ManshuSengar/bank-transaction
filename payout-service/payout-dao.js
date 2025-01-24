@@ -696,8 +696,6 @@ class PayoutDao {
                     transaction.id,
                     transaction.userId,
                     "PAYOUT_REFUND",
-                    null,
-                    tx
                 );
             }
 
@@ -797,8 +795,6 @@ class PayoutDao {
         transaction.id,
         transaction.userId,
         "PAYOUT_REFUND",
-        null,
-        tx
       );
 
       // Return the wallet update result

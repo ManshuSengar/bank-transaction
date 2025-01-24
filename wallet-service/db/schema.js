@@ -37,6 +37,7 @@ const userWallets = pgTable('user_wallets', {
     walletTypeId: integer('wallet_type_id').references(() => walletTypes.id).notNull(),
     balance: decimal('balance', { precision: 15, scale: 2 }).default('0'),
     status: varchar('status', { length: 20 }).default('ACTIVE'),
+    version: integer('version').default(1),
     lastTransactionAt: timestamp('last_transaction_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow()
