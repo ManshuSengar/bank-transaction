@@ -1,4 +1,3 @@
-// kyc-service/db/schema.js
 const { pgTable, serial, varchar, timestamp, text, integer, boolean } = require('drizzle-orm/pg-core');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { users } = require('../../user-service/db/schema');

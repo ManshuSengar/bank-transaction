@@ -7,7 +7,6 @@ const log = new Logger('Role-Controller');
 const { authenticateToken, authorize } = require('../middleware/auth-token-validator');
 const Joi = require('joi');
 
-// Validation schema for role
 const roleSchema = Joi.object({
     name: Joi.string().min(3).max(50).required(),
     description: Joi.string().min(3).max(200),
@@ -18,7 +17,6 @@ const roleIdSchema = Joi.object({
     roleId: Joi.number().required()
 });
 
-// Create new role (Admin only)
 roleRouter.post('/', 
     authenticateToken, 
     authorize(['manage_roles']), 
@@ -47,7 +45,6 @@ roleRouter.post('/',
         }
 });
 
-// Update role
 roleRouter.put('/:roleId', 
     authenticateToken, 
     authorize(['manage_roles']), 
@@ -91,7 +88,6 @@ roleRouter.put('/:roleId',
         }
 });
 
-// Delete role
 roleRouter.delete('/:roleId', 
     authenticateToken, 
     authorize(['manage_roles']), 
@@ -125,7 +121,6 @@ roleRouter.delete('/:roleId',
         }
 });
 
-// Get role by ID
 roleRouter.get('/:roleId', 
     authenticateToken, 
     authorize(['view_roles', 'manage_roles']), 
@@ -156,7 +151,6 @@ roleRouter.get('/:roleId',
         }
 });
 
-// Get all roles
 roleRouter.get('/', 
     authenticateToken, 
     authorize(['view_roles', 'manage_roles']), 
@@ -173,7 +167,6 @@ roleRouter.get('/',
         }
 });
 
-// Add permission to role
 roleRouter.post('/:roleId/permissions', 
     authenticateToken, 
     authorize(['manage_roles']), 
@@ -197,7 +190,6 @@ roleRouter.post('/:roleId/permissions',
         }
 });
 
-// Remove permission from role
 roleRouter.delete('/:roleId/permissions/:permissionId', 
     authenticateToken, 
     authorize(['manage_roles']), 
@@ -219,7 +211,6 @@ roleRouter.delete('/:roleId/permissions/:permissionId',
         }
 });
 
-// Get role permissions
 roleRouter.get('/:roleId/permissions', 
     authenticateToken, 
     authorize(['view_roles', 'manage_roles']), 

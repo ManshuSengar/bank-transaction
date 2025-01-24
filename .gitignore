@@ -8,7 +8,10 @@
 
 # dependencies
 /node_modules
-
+dist/
+.env
+uploads/*
+!uploads/.gitkeep
 # IDEs and editors
 /.idea
 .project
@@ -41,3 +44,4 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+

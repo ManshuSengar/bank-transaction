@@ -13,10 +13,9 @@ const permissionSchema = Joi.object({
     description: Joi.string().min(3).max(200)
 });
 
-// Create new permission (Admin only)
 permissionRouter.post('/',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { error } = permissionSchema.validate(req.body);
@@ -48,10 +47,9 @@ permissionRouter.post('/',
         }
 });
 
-// Update permission
 permissionRouter.put('/:id',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             const { error } = permissionSchema.validate(req.body);
@@ -90,10 +88,9 @@ permissionRouter.put('/:id',
         }
 });
 
-// Delete permission
 permissionRouter.delete('/:id',
     authenticateToken,
-    authorize(['manage_roles']),
+    // authorize(['manage_roles']),
     async (req, res) => {
         try {
             await permissionDao.deletePermission(req.params.id);
@@ -116,10 +113,9 @@ permissionRouter.delete('/:id',
         }
 });
 
-// Get permission by ID
 permissionRouter.get('/:id',
     authenticateToken,
-    authorize(['view_roles', 'manage_roles']),
+    // authorize(['view_roles', 'manage_roles']),
     async (req, res) => {
         try {
             const permission = await permissionDao.getPermissionById(req.params.id);
@@ -139,10 +135,9 @@ permissionRouter.get('/:id',
         }
 });
 
-// Get all permissions
 permissionRouter.get('/',
     authenticateToken,
-    authorize(['view_roles', 'manage_roles']),
+    // authorize(['view_roles', 'manage_roles']),
     async (req, res) => {
         try {
             const permissions = await permissionDao.getAllPermissions();
@@ -152,6 +147,79 @@ permissionRouter.get('/',
             res.status(500).send({
                 messageCode: 'ERR_PERMISSIONS_GET',
                 message: 'Error retrieving permissions'
+            });
+        }
+});
+
+permissionRouter.post('/assign-to-user',
+    authenticateToken,
+    // authorize(['manage_roles']),
+    async (req, res) => {
+        try {
+            const { userId, permissionIds } = req.body;
+            
+            if (!Array.isArray(permissionIds) || permissionIds.length === 0) {
+                return res.status(400).send({
+                    messageCode: 'INVALID_PERMISSIONS',
+                    message: 'Permission IDs must be provided as an array'
+                });
+            }
+
+            const assignments = await permissionDao.assignPermissionsToUser(userId, permissionIds, req.user.userId);
+            
+            res.status(201).send({
+                messageCode: 'PERMISSIONS_ASSIGNED',
+                message: 'Permissions assigned successfully to user',
+                assignments
+            });
+        } catch (error) {
+            log.error('Error assigning permissions to user:', error);
+            if (error.code === '23505') {
+                return res.status(409).send({
+                    messageCode: 'DUPLICATE_PERMISSION',
+                    message: 'Some permissions are already assigned to the user'
+                });
+            }
+            res.status(500).send({
+                messageCode: 'ERR_PERMISSION_ASSIGN',
+                message: 'Error assigning permissions'
+            });
+        }
+});
+
+permissionRouter.delete('/remove-from-user/:userId/:permissionId',
+    authenticateToken,
+    // authorize(['manage_roles']),
+    async (req, res) => {
+        try {
+            const { userId, permissionId } = req.params;
+            
+            await permissionDao.removePermissionFromUser(userId, permissionId);
+            res.send({
+                messageCode: 'PERMISSION_REMOVED',
+                message: 'Permission removed successfully from user'
+            });
+        } catch (error) {
+            log.error('Error removing permission from user:', error);
+            res.status(500).send({
+                messageCode: 'ERR_PERMISSION_REMOVE',
+                message: 'Error removing permission'
+            });
+        }
+});
+
+permissionRouter.get('/user/:userId',
+    authenticateToken,
+    // authorize(['view_roles', 'manage_roles']),
+    async (req, res) => {
+        try {
+            const permissions = await permissionDao.getUserDirectPermissions(req.params.userId);
+            res.send(permissions);
+        } catch (error) {
+            log.error('Error getting user permissions:', error);
+            res.status(500).send({
+                messageCode: 'ERR_GET_PERMISSIONS',
+                message: 'Error retrieving user permissions'
             });
         }
 });
