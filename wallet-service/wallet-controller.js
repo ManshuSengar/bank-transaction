@@ -12,7 +12,7 @@ const XLSX = require('xlsx');
 const fs = require('fs').promises;
 const path = require('path');
 const Joi = require("joi");
-
+const moment=require('moment');
 // Validation schemas
 const transferSchema = Joi.object({
   fromWalletId: Joi.number().required(),
@@ -554,7 +554,7 @@ walletRouter.get("/admin/excel-transaction/download",
               'Balance After': log.balanceAfter,
               'Description': log.description,
               'Status': log.status,
-              'Created At': new Date(log.createdAt).toLocaleString()
+              'Created At': moment.utc(log.createdAt).format("DD/MM/YYYY HH:mm:ss")
           }));
 
           const worksheet = XLSX.utils.json_to_sheet(excelData);

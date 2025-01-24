@@ -13,6 +13,7 @@ const axios = require("axios");
 const XLSX = require("xlsx");
 const fs = require("fs").promises;
 const path = require("path");
+const moment =require('moment');
 
 // Validation Schema
 const generateQRSchema = Joi.object({
@@ -33,22 +34,7 @@ payinRouter.post("/qr", async (req, res) => {
     }
 
     const { username, token, data } = req.body;
-    const clientIp =
-      req.ip ||
-      req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      req.headers["x-forwarded-for"]?.split(",")[0];
-    // Validate API Token
-    // const validToken = await apiTokenDao.getValidToken(token, clientIp);
-    // console.log("validate token--> ", validToken);
     const apiToken = await apiTokenDao.getTokenByValue(token);
-    // console.log("apiToken--> ",apiToken);
-    // if (!validToken) {
-    //   return res.status(401).send({
-    //     messageCode: "INVALID_TOKEN",
-    //     message: "Invalid token, inactive token, or unauthorized IP address",
-    //   });
-    // }
     if (!apiToken[0] || apiToken[0].status !== "ACTIVE") {
       return res.status(401).send({
         messageCode: "INVALID_TOKEN",
@@ -56,7 +42,6 @@ payinRouter.post("/qr", async (req, res) => {
       });
     }
 
-    // Validate token belongs to the user
     const user = await userDao.getUserByUsername(username);
     console.log("user--> ", user);
     if (!user || apiToken[0].userId !== user.id) {
@@ -65,7 +50,6 @@ payinRouter.post("/qr", async (req, res) => {
         message: "Token does not belong to the specified user",
       });
     }
-    // Decrypt the data
     let decryptedData;
     try {
       decryptedData = await encryptionService.decrypt(data);
@@ -76,7 +60,6 @@ payinRouter.post("/qr", async (req, res) => {
       });
     }
 
-    // Validate decrypted data structure
     if (!decryptedData.amount || !decryptedData.uniqueid) {
       return res.status(400).send({
         messageCode: "INVALID_PAYLOAD",
@@ -89,7 +72,6 @@ payinRouter.post("/qr", async (req, res) => {
       user.id,
       decryptedData.amount,
       decryptedData.uniqueid,
-      `Brivtechdmv${decryptedData.uniqueid}@gmail.com`
     );
 
     res.status(201).send({
@@ -289,6 +271,7 @@ payinRouter.get("/admin/transactions", async (req, res) => {
         gstAmount: transaction.gstAmount,
         status: transaction.status,
         createdAt: transaction.createdAt,
+        updatedAt:transaction.updatedAt,
         userId: transaction.userId,
         username: transaction.user.username,
         firstname: transaction.user.firstname,
@@ -339,7 +322,7 @@ payinRouter.post("/check-status", async (req, res) => {
         transactionId: transaction.transactionId,
       });
     }
-
+    console.log("process.env.RESELLER_ID--> ",process.env.RESELLER_ID);
     const vendorResponse = await axios.post(
       process.env.VENDOR_CHECK_STATUS_API,
       {
@@ -468,6 +451,7 @@ payinRouter.post("/admin/check-status", async (req, res) => {
 
     console.log("newStatus--> ", transaction.status, newStatus);
     if (newStatus !== "PENDING" && newStatus !== transaction.status) {
+      console.log("newStatus23--> ", transaction.status);
       await payinDao.processStatusChange(
         transaction,
         newStatus === "APPROVED",
@@ -522,7 +506,8 @@ payinRouter.get("/admin/transactions/download", async (req, res) => {
       "Charge Value": transaction.chargeValue,
       "GST Amount": transaction.gstAmount,
       Status: transaction.status,
-      "Created At": new Date(transaction.createdAt).toLocaleString(),
+      "Created At": moment.utc(transaction.createdAt).format("DD/MM/YYYY HH:mm:ss"),
+      "Updated At": moment.utc(transaction.updatedAt).format("DD/MM/YYYY HH:mm:ss"),
       "User ID": transaction.userId,
       Username: transaction.user.username,
       "Full Name": `${transaction.user.firstname} ${transaction.user.lastname}`,
@@ -532,6 +517,11 @@ payinRouter.get("/admin/transactions/download", async (req, res) => {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
+    worksheet['!cols'] = [
+      { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, 
+      { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 10 },
+      { wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 15 }
+    ];
     XLSX.utils.book_append_sheet(workbook, worksheet, "Payin Transactions");
     const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
     const filename = `payin_transactions_${timestamp}.xlsx`;
@@ -643,7 +633,7 @@ payinRouter.get(
         "Charge Value": transaction.chargeValue,
         "GST Amount": transaction.gstAmount,
         Status: transaction.status,
-        "Created At": new Date(transaction.createdAt).toLocaleString(),
+        "Created At": moment.utc(transaction.createdAt).format("DD/MM/YYYY HH:mm:ss"),
         "Bank RRN": transaction.vendorTransactionId || "N/A",
       }));
 

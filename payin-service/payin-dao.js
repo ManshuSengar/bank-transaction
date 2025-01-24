@@ -1,7 +1,7 @@
 // payin-service/payin-dao.js
 const Logger = require("../logger/logger");
 const log = new Logger("Payin-Dao");
-const { db, payinTransactions } = require("./db/schema");
+const { db, payinTransactions, vendorResponseLogs } = require("./db/schema");
 const { eq, and, sql, desc, or, like, gte, lte } = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
@@ -12,10 +12,37 @@ const crypto = require("crypto");
 const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
 const { users } = require("../user-service/db/schema");
-const IndianNameEmailGenerator=require("../payin-service/utlis");
+const IndianNameEmailGenerator = require("../payin-service/utlis");
 const nameEmailGenerator = new IndianNameEmailGenerator();
 
 class PayinDao {
+  async logVendorResponseError(params) {
+    try {
+      const [errorLog] = await db
+        .insert(vendorResponseLogs)
+        .values({
+          userId: params.userId,
+          uniqueId: params.uniqueId,
+          transactionId: params.transactionId,
+          requestPayload: params.requestPayload,
+          vendorResponse: params.vendorResponse,
+          errorType: params.errorType,
+          errorDetails: {
+            error: params.errorMessage,
+            timestamp: new Date(),
+            additionalInfo: params.additionalInfo || {},
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      return errorLog;
+    } catch (error) {
+      log.error("Error logging vendor response:", error);
+      throw error;
+    }
+  }
 
   async generateQR(userId, amount, originalUniqueId = null) {
     try {
@@ -81,7 +108,6 @@ class PayinDao {
 
         // 3. Get Default API Configuration for Payin
         const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
-        console.log("apiConfig--> ", apiConfig);
         // Product ID 1 for Payin
         if (!apiConfig) {
           throw {
@@ -117,21 +143,21 @@ class PayinDao {
         }
 
         // 6. Generate Unique Transaction ID if not provided
-        const uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
+        var uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
           userId,
           finalOriginalUniqueId,
           amount
         );
 
-
         // generate uniquemail
-        const { fullName, email } = nameEmailGenerator.generateUniqueNameEmail();
+        const { fullName, email } =
+          nameEmailGenerator.generateUniqueNameEmail();
         // 7. Prepare Payload for Third-Party API
-        console.log("email--> ",email);
+        console.log("email--> ", email);
         const payload = {
           uniqueid: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
           amount: amount.toString(),
-          email
+          email,
         };
         // 8. Encrypt Payload
         const encryptedData = await encryptionService.encrypt(payload);
@@ -143,12 +169,45 @@ class PayinDao {
         });
         console.log("vendorResponse--> ", vendorResponse);
         if (!vendorResponse?.data?.Status) {
+          if (
+            vendorResponse.data.error_code ||
+            vendorResponse.data.error_message
+          ) {
+            await this.logVendorResponseError({
+              userId,
+              uniqueId: originalUniqueId,
+              transactionId: uniqueIdRecord.generatedUniqueId,
+              requestPayload: payload,
+              vendorResponse: vendorResponse?.data,
+              errorType: "VENDOR_ERROR",
+              errorMessage:
+                vendorResponse?.data?.error_message || "Vendor error occurred",
+            });
+            throw {
+              statusCode: 400,
+              messageCode: "TELE",
+              message: "Technical error",
+            };
+          }
+          await this.logVendorResponseError({
+            userId,
+            uniqueId: originalUniqueId,
+            transactionId: uniqueIdRecord.generatedUniqueId,
+            requestPayload: payload,
+            vendorResponse: vendorResponse?.data,
+            errorType: "UNKNOWN_RESPONSE_FORMAT",
+            errorMessage: "Unexpected vendor response format",
+            additionalInfo: {
+              receivedFields: Object.keys(vendorResponse?.data || {}),
+            },
+          });
           throw {
             statusCode: 400,
             messageCode: "TELE",
             message: "Technical error",
           };
         }
+
         const [transaction] = await tx
           .insert(payinTransactions)
           .values({
@@ -203,6 +262,28 @@ class PayinDao {
         };
       });
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        await this.logVendorResponseError({
+          userId,
+          uniqueId: uniqueIdRecord?.originalUniqueId || "",
+          transactionId: uniqueIdRecord?.generatedUniqueId || "",
+          requestPayload: payload,
+          vendorResponse: error?.response?.data || "",
+          errorType: "VENDOR_API_ERROR",
+          errorMessage: error?.message,
+          additionalInfo: {
+            status: error?.response?.status,
+            statusText: error?.response?.statusText,
+            vendorUrl: "",
+            requestTimestamp: new Date(),
+          },
+        });
+        throw {
+          statusCode: 400,
+          messageCode: "TELE",
+          message: "Technical error",
+        };
+      }
       console.log("Error generating QR for Payin:", error);
       log.error("Error generating QR for Payin:", error);
       throw error;
@@ -428,6 +509,7 @@ class PayinDao {
             gstAmount: payinTransactions.gstAmount,
             status: payinTransactions.status,
             createdAt: payinTransactions.createdAt,
+            updatedAt: payinTransactions.updatedAt,
             userId: payinTransactions.userId,
             user: {
               username: users.username,
@@ -452,6 +534,7 @@ class PayinDao {
           .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
 
+      console.log("transactions--> ", transactions[0]);
       const [summary] = await db
         .select({
           totalAmount: sql`SUM(amount)`,
@@ -485,69 +568,71 @@ class PayinDao {
       throw error;
     }
   }
-  
 
-async processStatusChange(transaction, isSuccess, amount, bankRRN) {
-  try {
-    return await db.transaction(async (tx) => {
-      const [updatedTransaction] = await tx
-        .update(payinTransactions)
-        .set({
-          status: isSuccess ? "SUCCESS" : "FAILED",
-          vendorTransactionId: bankRRN,
-          updatedAt: new Date()
-        })
-        .where(eq(payinTransactions.id, transaction.id))
-        .returning();
-      const userWallets = await walletDao.getUserWallets(transaction.userId);
-      const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
-      const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
-      if (!serviceWallet || !collectionWallet) {
-        throw new Error("Required wallets not found");
-      }
-      if (isSuccess) {
-        await walletDao.updateWalletBalance(
-          collectionWallet.wallet.id,
-          amount,
-          "CREDIT",
-          `Payin Transaction Credit - ${transaction.uniqueId}`,
-          transaction.transactionId,
-          transaction.userId,
-          "PAYIN"
+  async processStatusChange(transaction, isSuccess, amount, bankRRN) {
+    try {
+      return await db.transaction(async (tx) => {
+        const [updatedTransaction] = await tx
+          .update(payinTransactions)
+          .set({
+            status: isSuccess ? "SUCCESS" : "FAILED",
+            vendorTransactionId: bankRRN,
+            updatedAt: new Date(),
+          })
+          .where(eq(payinTransactions.id, transaction.id))
+          .returning();
+        const userWallets = await walletDao.getUserWallets(transaction.userId);
+        const serviceWallet = userWallets.find(
+          (w) => w.type.name === "SERVICE"
         );
-      } else {
-        await walletDao.updateWalletBalance(
-          serviceWallet.wallet.id,
-          transaction.totalCharges,
-          "CREDIT",
-          `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
-          transaction.transactionId,
-          transaction.userId,
-          "PAYIN"
+        const collectionWallet = userWallets.find(
+          (w) => w.type.name === "COLLECTION"
         );
-      }
-      return updatedTransaction;
-    });
-  } catch (error) {
-    log.error("Error processing status change:", error);
-    throw error;
+        if (!serviceWallet || !collectionWallet) {
+          throw new Error("Required wallets not found");
+        }
+        if (isSuccess) {
+          await walletDao.updateWalletBalance(
+            collectionWallet.wallet.id,
+            amount,
+            "CREDIT",
+            `Payin Transaction Credit - ${transaction.uniqueId}`,
+            transaction.transactionId,
+            transaction.userId,
+            "PAYIN"
+          );
+        } else {
+          await walletDao.updateWalletBalance(
+            serviceWallet.wallet.id,
+            transaction.totalCharges,
+            "CREDIT",
+            `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
+            transaction.transactionId,
+            transaction.userId,
+            "PAYIN"
+          );
+        }
+        return updatedTransaction;
+      });
+    } catch (error) {
+      log.error("Error processing status change:", error);
+      throw error;
+    }
   }
-}
 
-async getTransactionByUniqueId(uniqueId) {
-  try {
-    const [transaction] = await db
-      .select()
-      .from(payinTransactions)
-      .where(eq(payinTransactions.uniqueId, uniqueId))
-      .limit(1);
-    return transaction;
-  } catch (error) {
-    log.error("Error getting transaction:", error);
-    throw error;
+  async getTransactionByUniqueId(uniqueId) {
+    try {
+      const [transaction] = await db
+        .select()
+        .from(payinTransactions)
+        .where(eq(payinTransactions.uniqueId, uniqueId))
+        .limit(1);
+      return transaction;
+    } catch (error) {
+      log.error("Error getting transaction:", error);
+      throw error;
+    }
   }
-}
-
 }
 
 module.exports = new PayinDao();

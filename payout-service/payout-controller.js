@@ -469,7 +469,7 @@ payoutRouter.get(
         Status: transaction.status,
         "Charge Value": transaction.chargeValue,
         "GST Amount": transaction.gstAmount,
-        "Created At": new Date(transaction.createdAt).toLocaleString(),
+        "Created At": moment.utc(transaction.createdAt).format("DD/MM/YYYY HH:mm:ss"),
         Username: transaction.user.username,
         "Full Name": `${transaction.user.firstname} ${transaction.user.lastname}`,
         Email: transaction.user.emailId,

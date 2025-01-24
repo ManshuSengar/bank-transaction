@@ -1,5 +1,5 @@
 // payin-service/db/schema.js
-const { pgTable, serial, varchar, timestamp, decimal, integer, text, jsonb } = require('drizzle-orm/pg-core');
+const { pgTable, serial, varchar, timestamp, decimal, integer, text, jsonb ,boolean} = require('drizzle-orm/pg-core');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { users } = require('../../user-service/db/schema');
 const { schemes } = require('../../scheme-service/db/schema');
@@ -41,7 +41,25 @@ const payinTransactions = pgTable('payin_transactions', {
     updatedAt: timestamp('updated_at').defaultNow()
 });
 
+const vendorResponseLogs = pgTable('vendor_response_logs', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id),
+    uniqueId: varchar('unique_id', { length: 100 }),
+    transactionId: varchar('transaction_id', { length: 100 }),
+    requestPayload: jsonb('request_payload'),
+    vendorResponse: jsonb('vendor_response'),
+    errorType: varchar('error_type', { length: 50 }),
+    errorDetails: jsonb('error_details'),
+    isResolved: boolean('is_resolved').default(false),
+    resolvedAt: timestamp('resolved_at'),
+    resolvedBy: integer('resolved_by').references(() => users.id),
+    resolutionNotes: text('resolution_notes'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow()
+});
+
 module.exports = {
     db,
-    payinTransactions
+    payinTransactions,
+    vendorResponseLogs
 };
