@@ -388,87 +388,92 @@ class PayinDao {
     try {
       const conditions = [eq(payinTransactions.userId, userId)];
 
-      if (startDate && endDate) {
-        conditions.push(
-          and(
-            gte(payinTransactions.createdAt, new Date(startDate)),
-            lte(payinTransactions.createdAt, new Date(endDate))
-          )
-        );
-      }
+    if (startDate && endDate) {
+      const parsedStartDate = new Date(startDate);
+      parsedStartDate.setHours(0, 0, 0, 0);
+      const parsedEndDate = new Date(endDate);
+      parsedEndDate.setHours(23, 59, 59, 999);
+     
+      conditions.push(
+        and(
+          sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
+          sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
+        )
+      );
+    }
 
-      if (status) {
-        conditions.push(eq(payinTransactions.status, status));
-      }
+    if (status) {
+      conditions.push(eq(payinTransactions.status, status));
+    }
 
-      if (minAmount) {
-        conditions.push(gte(payinTransactions.amount, minAmount));
-      }
+    if (minAmount) {
+      conditions.push(gte(payinTransactions.amount, minAmount));
+    }
 
-      if (maxAmount) {
-        conditions.push(lte(payinTransactions.amount, maxAmount));
-      }
+    if (maxAmount) {
+      conditions.push(lte(payinTransactions.amount, maxAmount));
+    }
 
-      if (search) {
-        conditions.push(
-          or(
-            like(payinTransactions.uniqueId, `%${search}%`),
-            like(payinTransactions.vendorTransactionId, `%${search}%`)
-          )
-        );
-      }
+    if (search) {
+      conditions.push(
+        or(
+          like(payinTransactions.uniqueId, `%${search}%`),
+          like(payinTransactions.vendorTransactionId, `%${search}%`)
+        )
+      );
+    }
 
-      const offset = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-      const [transactions, countResult] = await Promise.all([
-        db
-          .select()
-          .from(payinTransactions)
-          .where(and(...conditions))
-          .limit(limit)
-          .offset(offset)
-          .orderBy(desc(payinTransactions.createdAt)),
+    const [transactions, countResult] = await Promise.all([
+      db
+        .select()
+        .from(payinTransactions)
+        .where(and(...conditions))
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(payinTransactions.createdAt)),
 
-        db
-          .select({
-            count: sql`count(*)`,
-          })
-          .from(payinTransactions)
-          .where(and(...conditions)),
-      ]);
-
-      const [summary] = await db
+      db
         .select({
-          totalAmount: sql`SUM(amount)`,
-          totalCharges: sql`SUM(total_charges)`,
-          successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
-          failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
-          pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
+          count: sql`count(*)`,
         })
         .from(payinTransactions)
-        .where(and(...conditions));
+        .where(and(...conditions)),
+    ]);
 
-      return {
-        data: transactions,
-        pagination: {
-          page,
-          limit,
-          total: Number(countResult[0].count),
-          pages: Math.ceil(Number(countResult[0].count) / limit),
-        },
-        summary: {
-          totalAmount: Number(summary.totalAmount) || 0,
-          totalCharges: Number(summary.totalCharges) || 0,
-          successCount: Number(summary.successCount) || 0,
-          failedCount: Number(summary.failedCount) || 0,
-          pendingCount: Number(summary.pendingCount) || 0,
-        },
-      };
-    } catch (error) {
-      console.log("Error getting filtered transactions:", error);
-      log.error("Error getting filtered transactions:", error);
-      throw error;
-    }
+    const [summary] = await db
+      .select({
+        totalAmount: sql`SUM(amount)`,
+        totalCharges: sql`SUM(total_charges)`,
+        successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
+        failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
+        pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
+      })
+      .from(payinTransactions)
+      .where(and(...conditions));
+
+    return {
+      data: transactions,
+      pagination: {
+        page,
+        limit,
+        total: Number(countResult[0].count),
+        pages: Math.ceil(Number(countResult[0].count) / limit),
+      },
+      summary: {
+        totalAmount: Number(summary.totalAmount) || 0,
+        totalCharges: Number(summary.totalCharges) || 0,
+        successCount: Number(summary.successCount) || 0,
+        failedCount: Number(summary.failedCount) || 0,
+        pendingCount: Number(summary.pendingCount) || 0,
+      },
+    };
+  } catch (error) {
+    console.log("Error getting filtered transactions:", error);
+    log.error("Error getting filtered transactions:", error);
+    throw error;
+  }
   }
 
   async getAdminFilteredTransactions({
@@ -485,10 +490,12 @@ class PayinDao {
       const conditions = [];
 
       if (startDate && endDate) {
+        const parsedStartDate = new Date(startDate);
+        const parsedEndDate = new Date(endDate);
         conditions.push(
           and(
-            gte(payinTransactions.createdAt, new Date(startDate)),
-            lte(payinTransactions.createdAt, new Date(endDate))
+            sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
+            sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
           )
         );
       }
