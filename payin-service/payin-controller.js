@@ -719,24 +719,24 @@ payinRouter.post("/stop-payment-status", authenticateToken, async (req, res) => 
   }
 });
 
-// payinRouter.post("/admin/mark-all-pending-failed", async (req, res) => {
-//   try {
-//     const batchProcessor = require("../scheduler/batch-failed-transaction");
-//     const result = await batchProcessor.markPendingTransactionsAsFailed();
+payinRouter.post("/admin/mark-all-pending-failed", async (req, res) => {
+  try {
+    const batchProcessor = require("../scheduler/batch-failed-transaction");
+    const result = await batchProcessor.markPendingTransactionsAsFailed();
     
-//     res.send({
-//       messageCode: "PENDING_TRANSACTIONS_MARKED_FAILED",
-//       message: result.message,
-//       processedCount: result.processedCount
-//     });
-//   } catch (error) {
-//     console.log("error--> ",error);
-//     log.error("Error in bulk marking transactions as failed:", error);
-//     res.status(500).send({
-//       messageCode: "ERR_BULK_MARK_FAILED",
-//       message: "Error marking pending transactions as failed"
-//     });
-//   }
-// });
+    res.send({
+      messageCode: "PENDING_TRANSACTIONS_MARKED_FAILED",
+      message: result.message,
+      processedCount: result.processedCount
+    });
+  } catch (error) {
+    console.log("error--> ",error);
+    log.error("Error in bulk marking transactions as failed:", error);
+    res.status(500).send({
+      messageCode: "ERR_BULK_MARK_FAILED",
+      message: "Error marking pending transactions as failed"
+    });
+  }
+});
 
 module.exports = payinRouter;
