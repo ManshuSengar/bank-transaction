@@ -560,7 +560,7 @@ class PayinDao {
           .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
 
-      console.log("transactions--> ", transactions[0]);
+      // console.log("transactions--> ", transactions[0]);
       const [summary] = await db
         .select({
           totalAmount: sql`SUM(amount)`,
