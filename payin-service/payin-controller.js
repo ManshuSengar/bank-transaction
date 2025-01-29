@@ -11,10 +11,48 @@ const Joi = require("joi");
 const { authenticateToken } = require("../middleware/auth-token-validator");
 const axios = require("axios");
 const XLSX = require("xlsx");
-const fs = require("fs").promises;
 const path = require("path");
 const moment =require('moment');
 const paymentStatusScheduler = require("../scheduler/payment-status-scheduler");
+const multer = require('multer');
+const fs = require('fs').promises;
+
+
+const storage = multer.diskStorage({
+  destination: async function (req, file, cb) {
+      const dir = path.join(__dirname, '../uploads/bulk-transactions');
+      try {
+          await fs.mkdir(dir, { recursive: true });
+          cb(null, dir);
+      } catch (error) {
+          cb(error);
+      }
+  },
+  filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, 'bulk-failed-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+  ];
+  if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+  } else {
+      cb(new Error('Invalid file type. Only Excel files (.xlsx, .xls) are allowed.'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+      fileSize: 15 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Validation Schema
 const generateQRSchema = Joi.object({
@@ -555,15 +593,7 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
         message: "Unique ID is required",
       });
     }
-
-    // Verify user has permission to perform this action
-    // if (!req.user.permissions.includes('manage_transactions')) {
-    //   return res.status(403).send({
-    //     messageCode: "FORBIDDEN",
-    //     message: "You do not have permission to mark transactions as failed"
-    //   });
-    // }
-
+  
     const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
 
     if (!transaction) {
@@ -573,7 +603,6 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
       });
     }
 
-    // Only allow marking pending transactions as failed
     if (transaction.status !== "PENDING") {
       return res.status(400).send({
         messageCode: "INVALID_STATUS",
@@ -719,24 +748,238 @@ payinRouter.post("/stop-payment-status", authenticateToken, async (req, res) => 
   }
 });
 
-payinRouter.post("/admin/mark-all-pending-failed", async (req, res) => {
-  try {
-    const batchProcessor = require("../scheduler/batch-failed-transaction");
-    const result = await batchProcessor.markPendingTransactionsAsFailed();
+// payinRouter.post("/admin/mark-all-pending-failed", async (req, res) => {
+//   try {
+//     const batchProcessor = require("../scheduler/batch-failed-transaction");
+//     const result = await batchProcessor.markPendingTransactionsAsFailed();
     
-    res.send({
-      messageCode: "PENDING_TRANSACTIONS_MARKED_FAILED",
-      message: result.message,
-      processedCount: result.processedCount
-    });
+//     res.send({
+//       messageCode: "PENDING_TRANSACTIONS_MARKED_FAILED",
+//       message: result.message,
+//       processedCount: result.processedCount
+//     });
+//   } catch (error) {
+//     console.log("error--> ",error);
+//     log.error("Error in bulk marking transactions as failed:", error);
+//     res.status(500).send({
+//       messageCode: "ERR_BULK_MARK_FAILED",
+//       message: "Error marking pending transactions as failed"
+//     });
+//   }
+// });
+
+
+payinRouter.post("/admin/bulk-mark-failed", authenticateToken, async (req, res) => {
+  try {
+    console.log("testing");
+      upload.single('file')(req, res, async function(err) {
+          if (err instanceof multer.MulterError) {
+              return res.status(400).send({
+                  messageCode: "UPLOAD_ERROR",
+                  message: err.message
+              });
+          } else if (err) {
+              return res.status(400).send({
+                  messageCode: "INVALID_FILE",
+                  message: err.message
+              });
+          }
+
+          if (!req.file) {
+              return res.status(400).send({
+                  messageCode: "NO_FILE",
+                  message: "Please upload an Excel file"
+              });
+          }
+
+          const results = {
+              successful: [],
+              failed: [],
+              skipped: []
+          };
+
+          try {
+              // Read Excel file
+              const workbook = XLSX.readFile(req.file.path);
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const data = XLSX.utils.sheet_to_json(worksheet);
+
+              if (data.length === 0) {
+                  throw new Error('Excel file is empty');
+              }
+
+              if (!data[0].hasOwnProperty('Unique ID')) {
+                  throw new Error('Excel file must contain a "Unique ID" column');
+              }
+
+              // Process transactions in batches
+              const batchSize = 50;
+              for (let i = 0; i < data.length; i += batchSize) {
+                  const batch = data.slice(i, i + batchSize);
+                  
+                  await Promise.all(batch.map(async (row) => {
+                      try {
+                          const uniqueId = row['Unique ID']?.toString();
+                          
+                          if (!uniqueId) {
+                              results.skipped.push({
+                                  uniqueId: 'N/A',
+                                  reason: 'Missing Unique ID'
+                              });
+                              return;
+                          }
+
+                          console.log("uniqueId--> ",uniqueId);
+
+                          const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
+                           console.log("transaction__. ",transaction);
+                          if (!transaction) {
+                              results.failed.push({
+                                  uniqueId,
+                                  reason: 'Transaction not found'
+                              });
+                              return;
+                          }
+
+                          if (transaction.status !== 'PENDING') {
+                              results.skipped.push({
+                                  uniqueId,
+                                  reason: `Invalid status: ${transaction.status}`
+                              });
+                              return;
+                          }
+
+                          // Process the status change
+                          const updatedTransaction = await payinDao.processStatusChangeWithTransaction(
+                              transaction,
+                              false,
+                              transaction.amount,
+                              null
+                          );
+
+                          if (updatedTransaction) {
+                              results.successful.push({
+                                  uniqueId,
+                                  amount: transaction.amount
+                              });
+                          } else {
+                              results.failed.push({
+                                  uniqueId,
+                                  reason: 'Status change failed'
+                              });
+                          }
+                      } catch (error) {
+                          results.failed.push({
+                              uniqueId: row['Unique ID']?.toString() || 'N/A',
+                              reason: error.message || 'Processing error'
+                          });
+                      }
+                  }));
+              }
+
+              // Generate summary report
+              const summaryWorkbook = XLSX.utils.book_new();
+              
+              // Success sheet
+              const successSheet = XLSX.utils.json_to_sheet(results.successful.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Amount': item.amount,
+                  'Status': 'Marked as Failed'
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, successSheet, 'Successful');
+
+              // Failed sheet
+              const failedSheet = XLSX.utils.json_to_sheet(results.failed.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Reason': item.reason
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, failedSheet, 'Failed');
+
+              // Skipped sheet
+              const skippedSheet = XLSX.utils.json_to_sheet(results.skipped.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Reason': item.reason
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, skippedSheet, 'Skipped');
+
+              // Save summary file
+              const summaryFilename = `bulk-mark-failed-summary-${Date.now()}.xlsx`;
+              const summaryPath = path.join(__dirname, '../uploads/reports', summaryFilename);
+              
+              await fs.mkdir(path.dirname(summaryPath), { recursive: true });
+              XLSX.writeFile(summaryWorkbook, summaryPath);
+
+              res.download(summaryPath, summaryFilename, async (err) => {
+                  if (err) {
+                      console.error("Download error:", err);
+                  }
+                  try {
+                      await fs.unlink(req.file.path);
+                      await fs.unlink(summaryPath);
+                  } catch (cleanupError) {
+                      console.error("Cleanup error:", cleanupError);
+                  }
+              });
+
+          } catch (error) {
+              // Cleanup uploaded file in case of error
+              try {
+                  await fs.unlink(req.file.path);
+              } catch (cleanupError) {
+                  console.error("Cleanup error:", cleanupError);
+              }
+              
+              throw error;
+          }
+      });
   } catch (error) {
-    console.log("error--> ",error);
-    log.error("Error in bulk marking transactions as failed:", error);
-    res.status(500).send({
-      messageCode: "ERR_BULK_MARK_FAILED",
-      message: "Error marking pending transactions as failed"
-    });
+      console.error("Error in bulk marking transactions as failed:", error);
+      res.status(500).send({
+          messageCode: "ERR_BULK_MARK_FAILED",
+          message: "Error processing bulk mark failed request",
+          error: error.message
+      });
   }
 });
 
+payinRouter.get("/admin/bulk-mark-failed/template", authenticateToken, async (req, res) => {
+  try {
+      const workbook = XLSX.utils.book_new();
+      
+      const sampleData = [
+          { 'Unique ID': 'SAMPLE123' },
+          { 'Unique ID': 'SAMPLE456' }
+      ];
+      
+      // Create worksheet with sample data
+      const worksheet = XLSX.utils.json_to_sheet(sampleData);
+      worksheet['!cols'] = [{ wch: 20 }];
+      
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions');
+      
+      const filename = 'bulk-mark-failed-template.xlsx';
+      const filepath = path.join(__dirname, '../uploads/templates', filename);
+      
+      await fs.mkdir(path.dirname(filepath), { recursive: true });
+      XLSX.writeFile(workbook, filepath);
+      
+      res.download(filepath, filename, async (err) => {
+          if (err) {
+              console.error("Template download error:", err);
+          }
+          try {
+              await fs.unlink(filepath);
+          } catch (cleanupError) {
+              console.error("Template cleanup error:", cleanupError);
+          }
+      });
+  } catch (error) {
+      console.error("Error generating template:", error);
+      res.status(500).send({
+          messageCode: "ERR_GENERATE_TEMPLATE",
+          message: "Error generating bulk mark failed template"
+      });
+  }
+});
 module.exports = payinRouter;

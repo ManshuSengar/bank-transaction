@@ -597,6 +597,7 @@ class PayinDao {
 
   async processStatusChange(transaction, isSuccess, amount, bankRRN) {
     try {
+      console.log("transaction--> ",transaction);
       return await db.transaction(async (tx) => {
         const [updatedTransaction] = await tx
           .update(payinTransactions)
@@ -659,6 +660,66 @@ class PayinDao {
       throw error;
     }
   }
+
+  async processStatusChangeWithTransaction(transaction, isSuccess, amount, bankRRN) {
+    try {
+      return await db.transaction(async (tx) => {
+        // Atomic status update with condition check
+        const [updatedTransaction] = await tx
+          .update(payinTransactions)
+          .set({
+            status: isSuccess ? "SUCCESS" : "FAILED",
+            vendorTransactionId: bankRRN,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(payinTransactions.id, transaction.id),
+            eq(payinTransactions.status, 'PENDING')
+          ))
+          .returning();
+
+        if (!updatedTransaction) {
+          return null; // Indicate no update happened
+        }
+
+        const userWallets = await walletDao.getUserWallets(transaction.userId);
+        const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
+        const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
+
+        if (!serviceWallet || !collectionWallet) {
+          throw new Error("Required wallets not found");
+        }
+
+        if (isSuccess) {
+          await walletDao.updateWalletBalance(
+            collectionWallet.wallet.id,
+            amount,
+            "CREDIT",
+            `Payin Transaction Credit - ${transaction.uniqueId}`,
+            transaction.transactionId,
+            transaction.userId,
+            "PAYIN"
+          );
+        } else {
+          await walletDao.updateWalletBalance(
+            serviceWallet.wallet.id,
+            transaction.totalCharges,
+            "CREDIT",
+            `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
+            transaction.transactionId,
+            transaction.userId,
+            "PAYIN"
+          );
+        }
+
+        return updatedTransaction;
+      });
+    } catch (error) {
+      log.error("Error processing status change:", error);
+      throw error;
+    }
+  }
 }
+
 
 module.exports = new PayinDao();
