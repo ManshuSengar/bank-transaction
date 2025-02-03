@@ -701,52 +701,52 @@ payinRouter.get(
   }
 );
 
-payinRouter.post("/trigger-payment-status", authenticateToken, async (req, res) => {
-  try {
-    const result = await paymentStatusScheduler.manualTrigger();
-    if (result.success) {
-      res.status(200).send({
-        messageCode: "SCHEDULER_TRIGGERED",
-        message: result.message
-      });
-    } else {
-      res.status(500).send({
-        messageCode: "SCHEDULER_FAILED",
-        message: result.message,
-        error: result.error
-      });
-    }
-  } catch (error) {
-    log.error("Error triggering scheduler:", error);
-    res.status(500).send({
-      messageCode: "ERR_TRIGGER_SCHEDULER",
-      message: "Failed to trigger scheduler"
-    });
-  }
-});
+// payinRouter.post("/trigger-payment-status", authenticateToken, async (req, res) => {
+//   try {
+//     const result = await paymentStatusScheduler.manualTrigger();
+//     if (result.success) {
+//       res.status(200).send({
+//         messageCode: "SCHEDULER_TRIGGERED",
+//         message: result.message
+//       });
+//     } else {
+//       res.status(500).send({
+//         messageCode: "SCHEDULER_FAILED",
+//         message: result.message,
+//         error: result.error
+//       });
+//     }
+//   } catch (error) {
+//     log.error("Error triggering scheduler:", error);
+//     res.status(500).send({
+//       messageCode: "ERR_TRIGGER_SCHEDULER",
+//       message: "Failed to trigger scheduler"
+//     });
+//   }
+// });
 
-payinRouter.post("/stop-payment-status", authenticateToken, async (req, res) => {
-  try {
-    const result = await paymentStatusScheduler.stop();
-    if (result.success) {
-      res.status(200).send({
-        messageCode: "SCHEDULER_STOPPED",
-        message: result.message
-      });
-    } else {
-      res.status(500).send({
-        messageCode: "SCHEDULER_STOP_FAILED",
-        message: result.message
-      });
-    }
-  } catch (error) {
-    log.error("Error stopping scheduler:", error);
-    res.status(500).send({
-      messageCode: "ERR_STOP_SCHEDULER",
-      message: "Failed to stop scheduler"
-    });
-  }
-});
+// payinRouter.post("/stop-payment-status", authenticateToken, async (req, res) => {
+//   try {
+//     const result = await paymentStatusScheduler.stop();
+//     if (result.success) {
+//       res.status(200).send({
+//         messageCode: "SCHEDULER_STOPPED",
+//         message: result.message
+//       });
+//     } else {
+//       res.status(500).send({
+//         messageCode: "SCHEDULER_STOP_FAILED",
+//         message: result.message
+//       });
+//     }
+//   } catch (error) {
+//     log.error("Error stopping scheduler:", error);
+//     res.status(500).send({
+//       messageCode: "ERR_STOP_SCHEDULER",
+//       message: "Failed to stop scheduler"
+//     });
+//   }
+// });
 
 // payinRouter.post("/admin/mark-all-pending-failed", async (req, res) => {
 //   try {

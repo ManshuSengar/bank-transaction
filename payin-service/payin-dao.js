@@ -107,7 +107,22 @@ class PayinDao {
         }
 
         // 3. Get Default API Configuration for Payin
-        const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
+        const applicableCharge = scheme.charges.find(charge => {
+          const minAmount = +charge.minAmount || 0;
+          const maxAmount = +charge.maxAmount || Number.MAX_SAFE_INTEGER;
+          return +amount >= minAmount && +amount <= maxAmount;
+        });
+  
+        if (!applicableCharge || !applicableCharge.api) {
+          throw {
+            statusCode: 400,
+            messageCode: "NO_API_CONFIG",
+            message: "No suitable API configuration found for this amount",
+          };
+        }
+  
+        const apiConfig = applicableCharge.api;
+        // const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
         // Product ID 1 for Payin
         if (!apiConfig) {
           throw {

@@ -632,7 +632,6 @@ class PayoutDao {
 
   async processCallback(callbackData) {
     try {
-        // Log raw callback
         const [systemLog] = await db
             .insert(systemCallbackLogs)
             .values({

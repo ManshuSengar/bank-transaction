@@ -78,8 +78,10 @@ async processUserCallback(decryptedData) {
               .select()
               .from(payinTransactions)
               .where(
-                  eq(payinTransactions.uniqueId, uniqueIdRecord.originalUniqueId)
-              )
+                and(
+                  eq(payinTransactions.uniqueId, uniqueIdRecord.originalUniqueId),
+                  eq(payinTransactions.status, "PENDING"),
+              ))
               .limit(1);
 
           if (!payinTransaction) {
