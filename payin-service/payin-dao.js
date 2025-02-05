@@ -45,6 +45,8 @@ class PayinDao {
   }
 
   async generateQR(userId, amount, originalUniqueId = null) {
+    let uniqueIdRecord = null;
+    let payload = null;
     try {
       return await db.transaction(async (tx) => {
         // 1. Get User's Default Payin Scheme
@@ -158,7 +160,7 @@ class PayinDao {
         }
 
         // 6. Generate Unique Transaction ID if not provided
-        var uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
+         uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
           userId,
           finalOriginalUniqueId,
           amount
@@ -169,7 +171,7 @@ class PayinDao {
           nameEmailGenerator.generateUniqueNameEmail();
         // 7. Prepare Payload for Third-Party API
         console.log("email--> ", email);
-        const payload = {
+         payload = {
           uniqueid: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
           amount: amount.toString(),
           email,
@@ -296,6 +298,7 @@ class PayinDao {
         };
       });
     } catch (error) {
+      console.log("payin error--> ", error);
       if (axios.isAxiosError(error)) {
         await this.logVendorResponseError({
           userId,

@@ -122,6 +122,7 @@ payinRouter.post("/qr", async (req, res) => {
       updatedAt: result.transaction.updatedAt,
     });
   } catch (error) {
+    console.log("payin controller error ",error);
     log.error("Error generating public QR:", error);
     res.status(error.statusCode || 500).send({
       messageCode: error.messageCode || "ERR_GENERATE_QR",
@@ -982,4 +983,240 @@ payinRouter.get("/admin/bulk-mark-failed/template", authenticateToken, async (re
       });
   }
 });
+
+
+payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res) => {
+  try {
+    console.log("enter--> ");
+      upload.single('file')(req, res, async function(err) {
+          if (err instanceof multer.MulterError) {
+              return res.status(400).send({
+                  messageCode: "UPLOAD_ERROR",
+                  message: err.message
+              });
+          } else if (err) {
+              return res.status(400).send({
+                  messageCode: "INVALID_FILE",
+                  message: err.message
+              });
+          }
+
+          if (!req.file) {
+              return res.status(400).send({
+                  messageCode: "NO_FILE",
+                  message: "Please upload an Excel file"
+              });
+          }
+
+          const results = {
+              processed: [],
+              failed: [],
+              skipped: []
+          };
+
+          try {
+              // Read Excel file
+              const workbook = XLSX.readFile(req.file.path);
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const data = XLSX.utils.sheet_to_json(worksheet);
+
+              if (data.length === 0) {
+                  throw new Error('Excel file is empty');
+              }
+
+              if (!data[0].hasOwnProperty('Unique ID')) {
+                  throw new Error('Excel file must contain a "Unique ID" column');
+              }
+
+              // Process transactions in batches
+              const batchSize = 50;
+              for (let i = 0; i < data.length; i += batchSize) {
+                  const batch = data.slice(i, i + batchSize);
+                  
+                  await Promise.all(batch.map(async (row) => {
+                      try {
+                          const uniqueId = row['Unique ID']?.toString();
+                          
+                          if (!uniqueId) {
+                              results.skipped.push({
+                                  uniqueId: 'N/A',
+                                  reason: 'Missing Unique ID'
+                              });
+                              return;
+                          }
+                          console.log("transaction Id--> ",uniqueId);
+                          const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
+                          console.log("transaction Id--> ",transaction);
+
+                          if (!transaction) {
+                              results.failed.push({
+                                  uniqueId,
+                                  reason: 'Transaction not found'
+                              });
+                              return;
+                          }
+
+                          if (transaction.status !== 'PENDING') {
+                              results.skipped.push({
+                                  uniqueId,
+                                  reason: `Transaction already ${transaction.status}`
+                              });
+                              return;
+                          }
+
+                          // Check status with vendor
+                          const vendorResponse = await axios.post(
+                              process.env.VENDOR_CHECK_STATUS_API,
+                              {
+                                  reseller_id: process.env.RESELLER_ID,
+                                  reseller_pass: process.env.RESELLER_PASSWORD,
+                                  uniqueid: transaction.transactionId,
+                              }
+                          );
+
+                          if (!vendorResponse.data.Status) {
+                              throw new Error('Vendor API error');
+                          }
+
+                          const statusData = vendorResponse.data.Data;
+                          const amount = parseFloat(statusData.TxnAmount);
+                          const newStatus = statusData.Status;
+
+                          if (newStatus !== "PENDING") {
+                              const updatedTransaction = await payinDao.processStatusChange(
+                                  transaction,
+                                  newStatus === "APPROVED",
+                                  amount,
+                                  statusData.BankRRN
+                              );
+
+                              results.processed.push({
+                                  uniqueId,
+                                  previousStatus: transaction.status,
+                                  currentStatus: updatedTransaction.status,
+                                  amount: updatedTransaction.amount,
+                                  bankRRN: updatedTransaction.vendorTransactionId
+                              });
+                          } else {
+                              results.skipped.push({
+                                  uniqueId,
+                                  reason: 'Transaction still pending'
+                              });
+                          }
+                      } catch (error) {
+                          results.failed.push({
+                              uniqueId: row['Unique ID']?.toString() || 'N/A',
+                              reason: error.message || 'Processing error'
+                          });
+                      }
+                  }));
+              }
+
+              // Generate summary report
+              const summaryWorkbook = XLSX.utils.book_new();
+              
+              // Processed sheet
+              const processedSheet = XLSX.utils.json_to_sheet(results.processed.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Previous Status': item.previousStatus,
+                  'Current Status': item.currentStatus,
+                  'Amount': item.amount,
+                  'Bank RRN': item.bankRRN || 'N/A'
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, processedSheet, 'Processed');
+
+              // Failed sheet
+              const failedSheet = XLSX.utils.json_to_sheet(results.failed.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Reason': item.reason
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, failedSheet, 'Failed');
+
+              // Skipped sheet
+              const skippedSheet = XLSX.utils.json_to_sheet(results.skipped.map(item => ({
+                  'Unique ID': item.uniqueId,
+                  'Reason': item.reason
+              })));
+              XLSX.utils.book_append_sheet(summaryWorkbook, skippedSheet, 'Skipped');
+
+              // Save summary file
+              const summaryFilename = `bulk-status-check-summary-${Date.now()}.xlsx`;
+              const summaryPath = path.join(__dirname, '../uploads/reports', summaryFilename);
+              
+              await fs.mkdir(path.dirname(summaryPath), { recursive: true });
+              XLSX.writeFile(summaryWorkbook, summaryPath);
+
+              res.download(summaryPath, summaryFilename, async (err) => {
+                  if (err) {
+                      console.error("Download error:", err);
+                  }
+                  try {
+                      await fs.unlink(req.file.path);
+                      await fs.unlink(summaryPath);
+                  } catch (cleanupError) {
+                      console.error("Cleanup error:", cleanupError);
+                  }
+              });
+
+          } catch (error) {
+              // Cleanup uploaded file in case of error
+              try {
+                  await fs.unlink(req.file.path);
+              } catch (cleanupError) {
+                  console.error("Cleanup error:", cleanupError);
+              }
+              
+              throw error;
+          }
+      });
+  } catch (error) {
+      console.error("Error in bulk status check:", error);
+      res.status(500).send({
+          messageCode: "ERR_BULK_STATUS_CHECK",
+          message: "Error processing bulk status check request",
+          error: error.message
+      });
+  }
+});
+
+payinRouter.get("/admin/bulk-status-check/template", authenticateToken, async (req, res) => {
+  try {
+      const workbook = XLSX.utils.book_new();
+      
+      const sampleData = [
+          { 'Unique ID': 'SAMPLE123' },
+          { 'Unique ID': 'SAMPLE456' }
+      ];
+      
+      const worksheet = XLSX.utils.json_to_sheet(sampleData);
+      worksheet['!cols'] = [{ wch: 20 }];
+      
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions');
+      
+      const filename = 'bulk-status-check-template.xlsx';
+      const filepath = path.join(__dirname, '../uploads/templates', filename);
+      
+      await fs.mkdir(path.dirname(filepath), { recursive: true });
+      XLSX.writeFile(workbook, filepath);
+      
+      res.download(filepath, filename, async (err) => {
+          if (err) {
+              console.error("Template download error:", err);
+          }
+          try {
+              await fs.unlink(filepath);
+          } catch (cleanupError) {
+              console.error("Template cleanup error:", cleanupError);
+          }
+      });
+  } catch (error) {
+      console.error("Error generating template:", error);
+      res.status(500).send({
+          messageCode: "ERR_GENERATE_TEMPLATE",
+          message: "Error generating bulk status check template"
+      });
+  }
+});
+
 module.exports = payinRouter;
