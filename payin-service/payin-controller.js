@@ -983,7 +983,6 @@ payinRouter.get("/admin/bulk-mark-failed/template", authenticateToken, async (re
   }
 });
 
-
 payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res) => {
   try {
     console.log("enter--> ");
@@ -1048,6 +1047,8 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                           const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
                           console.log("transaction Id--> ",transaction);
 
+                         
+
                           if (!transaction) {
                               results.failed.push({
                                   uniqueId,
@@ -1055,6 +1056,8 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                               });
                               return;
                           }
+
+                          
 
                           if (transaction.status !== 'PENDING') {
                               results.skipped.push({
@@ -1073,18 +1076,21 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                                   uniqueid: transaction.transactionId,
                               }
                           );
-
                           console.log("vendorResponse--> ",vendorResponse);
-
                           if (!vendorResponse.data.Status) {
                               throw new Error('Vendor API error');
                           }
+
+
+
+
+
 
                           const statusData = vendorResponse.data.Data;
                           const amount = parseFloat(statusData.TxnAmount);
                           const newStatus = statusData.Status;
 
-                          if (newStatus !== "PENDING") {
+                          if (newStatus !== "PENDING" ) {
                               const updatedTransaction = await payinDao.processStatusChangeWithTransaction(
                                   transaction,
                                   newStatus === "APPROVED",

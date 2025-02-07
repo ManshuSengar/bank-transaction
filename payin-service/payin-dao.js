@@ -2,7 +2,17 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Payin-Dao");
 const { db, payinTransactions, vendorResponseLogs } = require("./db/schema");
-const { eq, and, sql, desc, or, like, gte, lte } = require("drizzle-orm");
+const {
+  eq,
+  and,
+  sql,
+  desc,
+  or,
+  like,
+  gte,
+  lte,
+  count,
+} = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
 const apiConfigDao = require("../api-config-service/api-config-dao");
@@ -13,6 +23,7 @@ const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
 const { users } = require("../user-service/db/schema");
 const IndianNameEmailGenerator = require("../payin-service/utlis");
+const { walletTransactions } = require("../wallet-service/db/schema");
 const nameEmailGenerator = new IndianNameEmailGenerator();
 
 class PayinDao {
@@ -109,12 +120,12 @@ class PayinDao {
         }
 
         // 3. Get Default API Configuration for Payin
-        const applicableCharge = scheme.charges.find(charge => {
+        const applicableCharge = scheme.charges.find((charge) => {
           const minAmount = +charge.minAmount || 0;
           const maxAmount = +charge.maxAmount || Number.MAX_SAFE_INTEGER;
           return +amount >= minAmount && +amount <= maxAmount;
         });
-  
+
         if (!applicableCharge || !applicableCharge.api) {
           throw {
             statusCode: 400,
@@ -122,7 +133,7 @@ class PayinDao {
             message: "No suitable API configuration found for this amount",
           };
         }
-  
+
         const apiConfig = applicableCharge.api;
         // const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
         // Product ID 1 for Payin
@@ -160,7 +171,7 @@ class PayinDao {
         }
 
         // 6. Generate Unique Transaction ID if not provided
-         uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
+        uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
           userId,
           finalOriginalUniqueId,
           amount
@@ -171,7 +182,7 @@ class PayinDao {
           nameEmailGenerator.generateUniqueNameEmail();
         // 7. Prepare Payload for Third-Party API
         console.log("email--> ", email);
-         payload = {
+        payload = {
           uniqueid: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
           amount: amount.toString(),
           email,
@@ -224,7 +235,7 @@ class PayinDao {
             message: "Technical error",
           };
         }
-        if(!vendorResponse?.data?.qr){
+        if (!vendorResponse?.data?.qr) {
           await this.logVendorResponseError({
             userId,
             uniqueId: originalUniqueId,
@@ -406,92 +417,92 @@ class PayinDao {
     try {
       const conditions = [eq(payinTransactions.userId, userId)];
 
-    if (startDate && endDate) {
-      const parsedStartDate = new Date(startDate);
-      parsedStartDate.setHours(0, 0, 0, 0);
-      const parsedEndDate = new Date(endDate);
-      parsedEndDate.setHours(23, 59, 59, 999);
-     
-      conditions.push(
-        and(
-          sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
-          sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
-        )
-      );
-    }
+      if (startDate && endDate) {
+        const parsedStartDate = new Date(startDate);
+        parsedStartDate.setHours(0, 0, 0, 0);
+        const parsedEndDate = new Date(endDate);
+        parsedEndDate.setHours(23, 59, 59, 999);
 
-    if (status) {
-      conditions.push(eq(payinTransactions.status, status));
-    }
+        conditions.push(
+          and(
+            sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
+            sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
+          )
+        );
+      }
 
-    if (minAmount) {
-      conditions.push(gte(payinTransactions.amount, minAmount));
-    }
+      if (status) {
+        conditions.push(eq(payinTransactions.status, status));
+      }
 
-    if (maxAmount) {
-      conditions.push(lte(payinTransactions.amount, maxAmount));
-    }
+      if (minAmount) {
+        conditions.push(gte(payinTransactions.amount, minAmount));
+      }
 
-    if (search) {
-      conditions.push(
-        or(
-          like(payinTransactions.uniqueId, `%${search}%`),
-          like(payinTransactions.vendorTransactionId, `%${search}%`)
-        )
-      );
-    }
+      if (maxAmount) {
+        conditions.push(lte(payinTransactions.amount, maxAmount));
+      }
 
-    const offset = (page - 1) * limit;
+      if (search) {
+        conditions.push(
+          or(
+            like(payinTransactions.uniqueId, `%${search}%`),
+            like(payinTransactions.vendorTransactionId, `%${search}%`)
+          )
+        );
+      }
 
-    const [transactions, countResult] = await Promise.all([
-      db
-        .select()
-        .from(payinTransactions)
-        .where(and(...conditions))
-        .limit(limit)
-        .offset(offset)
-        .orderBy(desc(payinTransactions.createdAt)),
+      const offset = (page - 1) * limit;
 
-      db
+      const [transactions, countResult] = await Promise.all([
+        db
+          .select()
+          .from(payinTransactions)
+          .where(and(...conditions))
+          .limit(limit)
+          .offset(offset)
+          .orderBy(desc(payinTransactions.createdAt)),
+
+        db
+          .select({
+            count: sql`count(*)`,
+          })
+          .from(payinTransactions)
+          .where(and(...conditions)),
+      ]);
+
+      const [summary] = await db
         .select({
-          count: sql`count(*)`,
+          totalAmount: sql`SUM(amount)`,
+          totalCharges: sql`SUM(total_charges)`,
+          successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
+          failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
+          pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
         })
         .from(payinTransactions)
-        .where(and(...conditions)),
-    ]);
+        .where(and(...conditions));
 
-    const [summary] = await db
-      .select({
-        totalAmount: sql`SUM(amount)`,
-        totalCharges: sql`SUM(total_charges)`,
-        successCount: sql`COUNT(CASE WHEN status = 'SUCCESS' THEN 1 END)`,
-        failedCount: sql`COUNT(CASE WHEN status = 'FAILED' THEN 1 END)`,
-        pendingCount: sql`COUNT(CASE WHEN status = 'PENDING' THEN 1 END)`,
-      })
-      .from(payinTransactions)
-      .where(and(...conditions));
-
-    return {
-      data: transactions,
-      pagination: {
-        page,
-        limit,
-        total: Number(countResult[0].count),
-        pages: Math.ceil(Number(countResult[0].count) / limit),
-      },
-      summary: {
-        totalAmount: Number(summary.totalAmount) || 0,
-        totalCharges: Number(summary.totalCharges) || 0,
-        successCount: Number(summary.successCount) || 0,
-        failedCount: Number(summary.failedCount) || 0,
-        pendingCount: Number(summary.pendingCount) || 0,
-      },
-    };
-  } catch (error) {
-    console.log("Error getting filtered transactions:", error);
-    log.error("Error getting filtered transactions:", error);
-    throw error;
-  }
+      return {
+        data: transactions,
+        pagination: {
+          page,
+          limit,
+          total: Number(countResult[0].count),
+          pages: Math.ceil(Number(countResult[0].count) / limit),
+        },
+        summary: {
+          totalAmount: Number(summary.totalAmount) || 0,
+          totalCharges: Number(summary.totalCharges) || 0,
+          successCount: Number(summary.successCount) || 0,
+          failedCount: Number(summary.failedCount) || 0,
+          pendingCount: Number(summary.pendingCount) || 0,
+        },
+      };
+    } catch (error) {
+      console.log("Error getting filtered transactions:", error);
+      log.error("Error getting filtered transactions:", error);
+      throw error;
+    }
   }
 
   async getAdminFilteredTransactions({
@@ -615,7 +626,7 @@ class PayinDao {
 
   async processStatusChange(transaction, isSuccess, amount, bankRRN) {
     try {
-      console.log("transaction--> ",transaction);
+      console.log("transaction--> ", transaction);
       return await db.transaction(async (tx) => {
         const [updatedTransaction] = await tx
           .update(payinTransactions)
@@ -679,7 +690,20 @@ class PayinDao {
     }
   }
 
-  async processStatusChangeWithTransaction(transaction, isSuccess, amount, bankRRN) {
+  async isPayInTrxSettled(transactionId) {
+    const result = await db
+      .select({ count: count() })
+      .from(walletTransactions)
+      .where(eq(walletTransactions.reference, transactionId)); // Filtering condition
+    return result[0]?.count ?? 0; // Return count or 0 if undefined
+  }
+
+  async processStatusChangeWithTransaction(
+    transaction,
+    isSuccess,
+    amount,
+    bankRRN
+  ) {
     try {
       return await db.transaction(async (tx) => {
         // Atomic status update with condition check
@@ -690,10 +714,12 @@ class PayinDao {
             vendorTransactionId: bankRRN,
             updatedAt: new Date(),
           })
-          .where(and(
-            eq(payinTransactions.id, transaction.id),
-            eq(payinTransactions.status, 'PENDING')
-          ))
+          .where(
+            and(
+              eq(payinTransactions.id, transaction.id),
+              eq(payinTransactions.status, "PENDING")
+            )
+          )
           .returning();
 
         if (!updatedTransaction) {
@@ -701,32 +727,47 @@ class PayinDao {
         }
 
         const userWallets = await walletDao.getUserWallets(transaction.userId);
-        const serviceWallet = userWallets.find(w => w.type.name === "SERVICE");
-        const collectionWallet = userWallets.find(w => w.type.name === "COLLECTION");
+        const serviceWallet = userWallets.find(
+          (w) => w.type.name === "SERVICE"
+        );
+        const collectionWallet = userWallets.find(
+          (w) => w.type.name === "COLLECTION"
+        );
 
         if (!serviceWallet || !collectionWallet) {
           throw new Error("Required wallets not found");
         }
 
-        if (isSuccess) {
-          await walletDao.updateWalletBalance(
-            collectionWallet.wallet.id,
-            amount,
-            "CREDIT",
-            `Payin Transaction Credit - ${transaction.uniqueId}`,
-            transaction.transactionId,
-            transaction.userId,
-            "PAYIN"
-          );
+        let isPayInTransactionSettled = await this.isPayInTrxSettled(
+          transaction.id
+        );
+
+        if (isPayInTransactionSettled < 2) {
+          if (isSuccess) {
+            await walletDao.updateWalletBalance(
+              collectionWallet.wallet.id,
+              amount,
+              "CREDIT",
+              `Payin Transaction Credit - ${transaction.uniqueId}`,
+              transaction.transactionId,
+              transaction.userId,
+              "PAYIN"
+            );
+          } else {
+            await walletDao.updateWalletBalance(
+              serviceWallet.wallet.id,
+              transaction.totalCharges,
+              "CREDIT",
+              `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
+              transaction.transactionId,
+              transaction.userId,
+              "PAYIN"
+            );
+          }
         } else {
-          await walletDao.updateWalletBalance(
-            serviceWallet.wallet.id,
-            transaction.totalCharges,
-            "CREDIT",
-            `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
-            transaction.transactionId,
-            transaction.userId,
-            "PAYIN"
+          console.log(
+            "isPayInTransactionSettled >>",
+            isPayInTransactionSettled
           );
         }
 
@@ -738,6 +779,5 @@ class PayinDao {
     }
   }
 }
-
 
 module.exports = new PayinDao();
