@@ -334,7 +334,6 @@ payinRouter.get("/admin/transactions", async (req, res) => {
 
 payinRouter.post("/check-status", async (req, res) => {
   try {
-   
     const { uniqueId, username } = req.body;
     console.log("uniqueId",uniqueId);
     if (!uniqueId || !username) {
@@ -1075,6 +1074,8 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                               }
                           );
 
+                          console.log("vendorResponse--> ",vendorResponse);
+
                           if (!vendorResponse.data.Status) {
                               throw new Error('Vendor API error');
                           }
@@ -1084,7 +1085,7 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                           const newStatus = statusData.Status;
 
                           if (newStatus !== "PENDING") {
-                              const updatedTransaction = await payinDao.processStatusChange(
+                              const updatedTransaction = await payinDao.processStatusChangeWithTransaction(
                                   transaction,
                                   newStatus === "APPROVED",
                                   amount,

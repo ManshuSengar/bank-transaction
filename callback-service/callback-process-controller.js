@@ -84,15 +84,14 @@ callbackProcessRouter.get("/system-logs", async (req, res) => {
       searchType = "all",
       limit = 50,
       offset = 0,
+      transactionId
     } = req.query;
 
-    // Initialize filters object
     const filters = {
       limit: Math.min(parseInt(limit) || 50, 100),
       offset: parseInt(offset) || 0,
     };
 
-    // Add optional filters only if they exist and are valid
     if (userId) {
       const userIdNum = parseInt(userId);
       if (!isNaN(userIdNum)) {
@@ -112,19 +111,18 @@ callbackProcessRouter.get("/system-logs", async (req, res) => {
       filters.status = status.toUpperCase();
     }
 
-    // Add search parameters only if search is not empty
+    if (transactionId) {
+      filters.transactionId = transactionId.trim();
+    }
+
     if (search && search.trim()) {
       filters.search = search.trim();
-      filters.searchType = ["all", "transactionId", "orderId"].includes(
-        searchType
-      )
+      filters.searchType = ["all", "transactionId", "orderId", "systemTransactionId"].includes(searchType)
         ? searchType
         : "all";
     }
 
-    const systemLogs = await callbackProcessDao.getFilteredSystemCallbackLogs(
-      filters
-    );
+    const systemLogs = await callbackProcessDao.getFilteredSystemCallbackLogs(filters);
 
     res.send({
       messageCode: "SYSTEM_LOGS_RETRIEVED",

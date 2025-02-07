@@ -1149,6 +1149,122 @@ class WalletDao {
       throw error;
     }
   }
+
+  async updateWalletBalanceWithinTx(
+    walletId,
+    amount,
+    type,
+    description = "",
+    referenceId = null,
+    userId,
+    referenceType = "UNKNOWN",
+    transactionUniqueId = null,
+    tx
+) {
+    const lockKey = `${this.walletLockPrefix}${walletId}`;
+    
+    return await this.lock.acquire(lockKey, async () => {
+        const [wallet] = await tx
+            .select()
+            .from(userWallets)
+            .where(eq(userWallets.id, walletId))
+            .for("update")
+            .limit(1);
+
+        if (!wallet) {
+            throw new Error("Wallet not found");
+        }
+
+        const balanceBefore = parseFloat(wallet.balance);
+        let balanceAfter;
+
+        if (type === "DEBIT") {
+            const availableBalance = await this.getAvailableBalanceWithinTx(walletId, tx);
+            if (availableBalance < parseFloat(amount)) {
+                throw {
+                    statusCode: 400,
+                    messageCode: "INSUFFICIENT_BALANCE",
+                    message: "Insufficient available balance for transaction",
+                };
+            }
+            balanceAfter = balanceBefore - parseFloat(amount);
+        } else {
+            balanceAfter = balanceBefore + parseFloat(amount);
+        }
+
+        const [updatedWallet] = await tx
+            .update(userWallets)
+            .set({
+                balance: balanceAfter,
+                lastTransactionAt: new Date(),
+                updatedAt: new Date(),
+                version: sql`${userWallets.version} + 1`,
+            })
+            .where(
+                and(
+                    eq(userWallets.id, walletId),
+                    eq(userWallets.version, wallet.version) 
+                )
+            )
+            .returning();
+
+        if (!updatedWallet) {
+            throw {
+                statusCode: 409,
+                messageCode: "CONCURRENT_UPDATE",
+                message: "Wallet was updated by another transaction",
+            };
+        }
+
+        const finalTransactionUniqueId = transactionUniqueId || crypto.randomBytes(6).toString("hex");
+
+        const [transaction] = await tx
+            .insert(walletTransactions)
+            .values({
+                transactionUniqueId: finalTransactionUniqueId,
+                fromWalletId: type === "DEBIT" ? walletId : null,
+                toWalletId: type === "CREDIT" ? walletId : null,
+                amount: parseFloat(amount),
+                type,
+                description,
+                reference: referenceId,
+                status: "SUCCESS",
+                balanceBefore,
+                balanceAfter,
+                createdBy: userId,
+                completedAt: new Date(),
+            })
+            .returning();
+
+        const [transactionLog] = await tx
+            .insert(walletTransactionLogs)
+            .values({
+                transactionUniqueId: finalTransactionUniqueId,
+                walletId,
+                transactionId: transaction.id,
+                type,
+                amount: parseFloat(amount),
+                balanceBefore,
+                balanceAfter,
+                description,
+                referenceType,
+                referenceId,
+                userId,
+                status: "SUCCESS",
+                additionalMetadata: JSON.stringify({
+                    originalDescription: description,
+                    transactionDetails: transaction,
+                }),
+            })
+            .returning();
+
+        return {
+            wallet: updatedWallet,
+            transaction,
+            transactionLog,
+        };
+    }, { timeout: this.lockTTL });
+}
 }
 
 module.exports = new WalletDao();
