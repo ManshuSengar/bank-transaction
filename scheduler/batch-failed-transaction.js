@@ -36,7 +36,7 @@
 
 //         for (const transaction of pendingTransactions) {
 //           try {
-//             const updateResult = await payinDao.processStatusChange(
+//             const updateResult = await payinDao.processStatusChangeWithTransaction(
 //               transaction,
 //               false,
 //               transaction.amount,

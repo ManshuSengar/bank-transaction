@@ -367,12 +367,19 @@ async getFilteredSystemCallbackLogs(filters) {
         eq(systemCallbackLogs.payinTransactionId, payinTransactions.id)
       );
 
-    if (filters.startDate) {
-      conditions.push(gte(systemCallbackLogs.createdAt, filters.startDate));
-    }
+    // Improved date filtering to match getFilteredTransactions
+    if (filters.startDate && filters.endDate) {
+      const parsedStartDate = new Date(filters.startDate);
+      parsedStartDate.setHours(0, 0, 0, 0);
+      const parsedEndDate = new Date(filters.endDate);
+      parsedEndDate.setHours(23, 59, 59, 999);
 
-    if (filters.endDate) {
-      conditions.push(lte(systemCallbackLogs.createdAt, filters.endDate));
+      conditions.push(
+        and(
+          sql`${systemCallbackLogs.createdAt} >= ${parsedStartDate}`,
+          sql`${systemCallbackLogs.createdAt} <= ${parsedEndDate}`
+        )
+      );
     }
 
     if (filters.status) {
@@ -492,7 +499,7 @@ async getFilteredSystemCallbackLogs(filters) {
     log.error("Error fetching filtered system callback logs:", error);
     throw error;
   }
-} 
+}
   async getFilteredUserCallbackLogs(filters) {
     try {
         // Build base conditions array

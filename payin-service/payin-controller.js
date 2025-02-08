@@ -383,7 +383,7 @@ payinRouter.post("/check-status", async (req, res) => {
     const newStatus = statusData.Status;
 
     if (newStatus !== "PENDING" && newStatus !== transaction.status) {
-      await payinDao.processStatusChange(
+      await payinDao.processStatusChangeWithTransaction(
         transaction,
         newStatus === "APPROVED",
         amount,
@@ -491,7 +491,7 @@ payinRouter.post("/admin/check-status", async (req, res) => {
     console.log("newStatus--> ", transaction.status, newStatus);
     if (newStatus !== "PENDING" && newStatus !== transaction.status) {
       console.log("newStatus23--> ", transaction.status);
-      await payinDao.processStatusChange(
+      await payinDao.processStatusChangeWithTransaction(
         transaction,
         newStatus === "APPROVED",
         amount,
@@ -610,7 +610,7 @@ payinRouter.post("/admin/mark-failed", authenticateToken, async (req, res) => {
       });
     }
 
-    const updatedTransaction = await payinDao.processStatusChange(
+    const updatedTransaction = await payinDao.processStatusChangeWithTransaction(
       transaction,
       false, // isSuccess = false (marking as failed)
       transaction.amount,
@@ -1047,7 +1047,6 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                           const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
                           console.log("transaction Id--> ",transaction);
 
-                         
 
                           if (!transaction) {
                               results.failed.push({
@@ -1081,14 +1080,10 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                               throw new Error('Vendor API error');
                           }
 
-
-
-
-
-
                           const statusData = vendorResponse.data.Data;
                           const amount = parseFloat(statusData.TxnAmount);
                           const newStatus = statusData.Status;
+                          console.log("newStatus--> ", vendorResponse.data.Data);
 
                           if (newStatus !== "PENDING" ) {
                               const updatedTransaction = await payinDao.processStatusChangeWithTransaction(

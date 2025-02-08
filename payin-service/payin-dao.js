@@ -281,7 +281,7 @@ class PayinDao {
           chargeCalculation.charges.totalCharges,
           "DEBIT",
           `Payin Transaction Charges - ${finalOriginalUniqueId}`,
-          transaction.id,
+          uniqueIdRecord?.generatedUniqueId,
           userId,
           "PAYIN"
         );
@@ -690,14 +690,19 @@ class PayinDao {
     }
   }
 
-  async isPayInTrxSettled(transactionId) {
+  async isPayInTrxSettled(transactionId, id) {
     const result = await db
       .select({ count: count() })
       .from(walletTransactions)
-      .where(eq(walletTransactions.reference, transactionId)); // Filtering condition
-    return result[0]?.count ?? 0; // Return count or 0 if undefined
+      .where(
+        or(
+          eq(walletTransactions.reference, transactionId),
+          eq(walletTransactions.id, id)
+        )
+      );
+    console.log("Checking for transactionId:", transactionId, "and id:", id);
+    return result[0]?.count ?? 0;
   }
-
   async processStatusChangeWithTransaction(
     transaction,
     isSuccess,
@@ -739,9 +744,10 @@ class PayinDao {
         }
 
         let isPayInTransactionSettled = await this.isPayInTrxSettled(
+          transaction.transactionId,
           transaction.id
         );
-
+        console.log("isPayInTransactionSettled--> ",isPayInTransactionSettled,isSuccess, transaction.id);
         if (isPayInTransactionSettled < 2) {
           if (isSuccess) {
             await walletDao.updateWalletBalance(
@@ -770,7 +776,6 @@ class PayinDao {
             isPayInTransactionSettled
           );
         }
-
         return updatedTransaction;
       });
     } catch (error) {
