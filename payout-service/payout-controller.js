@@ -568,7 +568,6 @@ payoutRouter.post(
   }
 );
 
-// Process vendor callback
 payoutRouter.post("/callback", async (req, res) => {
   try {
     const callbackData = req.body;
@@ -588,7 +587,6 @@ payoutRouter.post("/callback", async (req, res) => {
     });
   } catch (error) {
     log.error("Error processing callback:", error);
-    // Still return success to vendor but log the error
     res.send({
       StatusCode: 1,
       Message: "Callback acknowledged",

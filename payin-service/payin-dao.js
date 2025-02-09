@@ -2,7 +2,17 @@
 const Logger = require("../logger/logger");
 const log = new Logger("Payin-Dao");
 const { db, payinTransactions, vendorResponseLogs } = require("./db/schema");
-const { eq, and, sql, desc, or, like, gte, lte } = require("drizzle-orm");
+const {
+  eq,
+  and,
+  sql,
+  desc,
+  or,
+  like,
+  gte,
+  lte,
+  count,
+} = require("drizzle-orm");
 const encryptionService = require("../encryption-service/encryption-dao");
 const schemeDao = require("../scheme-service/scheme-dao");
 const apiConfigDao = require("../api-config-service/api-config-dao");
@@ -13,8 +23,9 @@ const uniqueIdDao = require("../unique-service/unique-id-dao");
 const schemeTransactionLogDao = require("../scheme-service/scheme-transaction-log-dao");
 const { users } = require("../user-service/db/schema");
 const IndianNameEmailGenerator = require("../payin-service/utlis");
+const { walletTransactions } = require("../wallet-service/db/schema");
 const nameEmailGenerator = new IndianNameEmailGenerator();
-
+const {  apiConfigs } = require('../api-config-service/db/schema');
 class PayinDao {
   async logVendorResponseError(params) {
     try {
@@ -45,6 +56,8 @@ class PayinDao {
   }
 
   async generateQR(userId, amount, originalUniqueId = null) {
+    let uniqueIdRecord = null;
+    let payload = null;
     try {
       return await db.transaction(async (tx) => {
         // 1. Get User's Default Payin Scheme
@@ -107,7 +120,22 @@ class PayinDao {
         }
 
         // 3. Get Default API Configuration for Payin
-        const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
+        const applicableCharge = scheme.charges.find((charge) => {
+          const minAmount = +charge.minAmount || 0;
+          const maxAmount = +charge.maxAmount || Number.MAX_SAFE_INTEGER;
+          return +amount >= minAmount && +amount <= maxAmount;
+        });
+
+        if (!applicableCharge || !applicableCharge.api) {
+          throw {
+            statusCode: 400,
+            messageCode: "NO_API_CONFIG",
+            message: "No suitable API configuration found for this amount",
+          };
+        }
+
+        const apiConfig = applicableCharge.api;
+        // const apiConfig = await apiConfigDao.getDefaultApiConfig(1);
         // Product ID 1 for Payin
         if (!apiConfig) {
           throw {
@@ -143,7 +171,7 @@ class PayinDao {
         }
 
         // 6. Generate Unique Transaction ID if not provided
-        var uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
+        uniqueIdRecord = await uniqueIdDao.createUniqueIdRecord(
           userId,
           finalOriginalUniqueId,
           amount
@@ -154,7 +182,7 @@ class PayinDao {
           nameEmailGenerator.generateUniqueNameEmail();
         // 7. Prepare Payload for Third-Party API
         console.log("email--> ", email);
-        const payload = {
+        payload = {
           uniqueid: uniqueIdRecord.generatedUniqueId, // Use generated unique ID
           amount: amount.toString(),
           email,
@@ -207,6 +235,25 @@ class PayinDao {
             message: "Technical error",
           };
         }
+        if (!vendorResponse?.data?.qr) {
+          await this.logVendorResponseError({
+            userId,
+            uniqueId: originalUniqueId,
+            transactionId: uniqueIdRecord.generatedUniqueId,
+            requestPayload: payload,
+            vendorResponse: vendorResponse?.data,
+            errorType: "UNKNOWN_RESPONSE_FORMAT",
+            errorMessage: "Unexpected vendor response format",
+            additionalInfo: {
+              receivedFields: Object.keys(vendorResponse?.data || {}),
+            },
+          });
+          throw {
+            statusCode: 400,
+            messageCode: "TELE",
+            message: "Technical error",
+          };
+        }
 
         const [transaction] = await tx
           .insert(payinTransactions)
@@ -216,7 +263,7 @@ class PayinDao {
             apiConfigId: apiConfig.id,
             amount,
             uniqueId: finalOriginalUniqueId,
-            qrString: vendorResponse.data.qr_string,
+            qrString: vendorResponse.data.qr,
             baseAmount: +amount,
             chargeType: chargeCalculation.charges.chargeType,
             chargeValue: +chargeCalculation.charges.chargeValue,
@@ -234,7 +281,7 @@ class PayinDao {
           chargeCalculation.charges.totalCharges,
           "DEBIT",
           `Payin Transaction Charges - ${finalOriginalUniqueId}`,
-          transaction.id,
+          uniqueIdRecord?.generatedUniqueId,
           userId,
           "PAYIN"
         );
@@ -262,6 +309,7 @@ class PayinDao {
         };
       });
     } catch (error) {
+      console.log("payin error--> ", error);
       if (axios.isAxiosError(error)) {
         await this.logVendorResponseError({
           userId,
@@ -370,10 +418,15 @@ class PayinDao {
       const conditions = [eq(payinTransactions.userId, userId)];
 
       if (startDate && endDate) {
+        const parsedStartDate = new Date(startDate);
+        parsedStartDate.setHours(0, 0, 0, 0);
+        const parsedEndDate = new Date(endDate);
+        parsedEndDate.setHours(23, 59, 59, 999);
+
         conditions.push(
           and(
-            gte(payinTransactions.createdAt, new Date(startDate)),
-            lte(payinTransactions.createdAt, new Date(endDate))
+            sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
+            sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
           )
         );
       }
@@ -466,10 +519,12 @@ class PayinDao {
       const conditions = [];
 
       if (startDate && endDate) {
+        const parsedStartDate = new Date(startDate);
+        const parsedEndDate = new Date(endDate);
         conditions.push(
           and(
-            gte(payinTransactions.createdAt, new Date(startDate)),
-            lte(payinTransactions.createdAt, new Date(endDate))
+            sql`${payinTransactions.createdAt} >= ${parsedStartDate}`,
+            sql`${payinTransactions.createdAt} <= ${parsedEndDate}`
           )
         );
       }
@@ -491,7 +546,13 @@ class PayinDao {
           or(
             like(payinTransactions.uniqueId, `%${search}%`),
             like(payinTransactions.vendorTransactionId, `%${search}%`),
-            like(payinTransactions.transactionId, `%${search}%`) // Added this line
+            like(payinTransactions.transactionId, `%${search}%`),
+            like(users.username, `%${search}%`),
+            like(users.firstname, `%${search}%`),
+            like(users.lastname, `%${search}%`),
+            like(users.emailId, `%${search}%`),
+            like(users.phoneNo, `%${search}%`),
+            like(apiConfigs.name, `%${search}%`)
           )
         );
       }
@@ -502,7 +563,7 @@ class PayinDao {
         db
           .select({
             id: payinTransactions.id,
-            transactionId: payinTransactions?.transactionId,
+            transactionId: payinTransactions.transactionId,
             amount: payinTransactions.amount,
             uniqueId: payinTransactions.uniqueId,
             chargeValue: payinTransactions.chargeValue,
@@ -511,6 +572,10 @@ class PayinDao {
             createdAt: payinTransactions.createdAt,
             updatedAt: payinTransactions.updatedAt,
             userId: payinTransactions.userId,
+            apiConfig: {
+              name: apiConfigs.name,
+              baseUrl: apiConfigs.baseUrl,
+            },
             user: {
               username: users.username,
               firstname: users.firstname,
@@ -521,6 +586,10 @@ class PayinDao {
           })
           .from(payinTransactions)
           .leftJoin(users, eq(payinTransactions.userId, users.id))
+          .leftJoin(
+            apiConfigs,
+            eq(payinTransactions.apiConfigId, apiConfigs.id)
+          )
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .limit(limit)
           .offset(offset)
@@ -531,10 +600,14 @@ class PayinDao {
             count: sql`count(*)`,
           })
           .from(payinTransactions)
+          .leftJoin(users, eq(payinTransactions.userId, users.id))
+          .leftJoin(
+            apiConfigs,
+            eq(payinTransactions.apiConfigId, apiConfigs.id)
+          )
           .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
 
-      console.log("transactions--> ", transactions[0]);
       const [summary] = await db
         .select({
           totalAmount: sql`SUM(amount)`,
@@ -571,6 +644,7 @@ class PayinDao {
 
   async processStatusChange(transaction, isSuccess, amount, bankRRN) {
     try {
+      console.log("transaction--> ", transaction);
       return await db.transaction(async (tx) => {
         const [updatedTransaction] = await tx
           .update(payinTransactions)
@@ -630,6 +704,105 @@ class PayinDao {
       return transaction;
     } catch (error) {
       log.error("Error getting transaction:", error);
+      throw error;
+    }
+  }
+
+  async isPayInTrxSettled(transactionId, id) {
+    const result = await db
+      .select({ count: count() })
+      .from(walletTransactions)
+      .where(
+        or(
+          eq(walletTransactions.reference, transactionId),
+          eq(walletTransactions.id, id)
+        )
+      );
+    console.log("Checking for transactionId:", transactionId, "and id:", id);
+    return result[0]?.count ?? 0;
+  }
+  async processStatusChangeWithTransaction(
+    transaction,
+    isSuccess,
+    amount,
+    bankRRN
+  ) {
+    try {
+      return await db.transaction(async (tx) => {
+        // Atomic status update with condition check
+        const [updatedTransaction] = await tx
+          .update(payinTransactions)
+          .set({
+            status: isSuccess ? "SUCCESS" : "FAILED",
+            vendorTransactionId: bankRRN,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(payinTransactions.id, transaction.id),
+              eq(payinTransactions.status, "PENDING")
+            )
+          )
+          .returning();
+
+        if (!updatedTransaction) {
+          return null; // Indicate no update happened
+        }
+
+        const userWallets = await walletDao.getUserWallets(transaction.userId);
+        const serviceWallet = userWallets.find(
+          (w) => w.type.name === "SERVICE"
+        );
+        const collectionWallet = userWallets.find(
+          (w) => w.type.name === "COLLECTION"
+        );
+
+        if (!serviceWallet || !collectionWallet) {
+          throw new Error("Required wallets not found");
+        }
+
+        let isPayInTransactionSettled = await this.isPayInTrxSettled(
+          transaction.transactionId,
+          transaction.id
+        );
+        console.log(
+          "isPayInTransactionSettled--> ",
+          isPayInTransactionSettled,
+          isSuccess,
+          transaction.id
+        );
+        if (isPayInTransactionSettled < 2) {
+          if (isSuccess) {
+            await walletDao.updateWalletBalance(
+              collectionWallet.wallet.id,
+              amount,
+              "CREDIT",
+              `Payin Transaction Credit - ${transaction.uniqueId}`,
+              transaction.transactionId,
+              transaction.userId,
+              "PAYIN"
+            );
+          } else {
+            await walletDao.updateWalletBalance(
+              serviceWallet.wallet.id,
+              transaction.totalCharges,
+              "CREDIT",
+              `Payin Transaction Charge Refund - ${transaction.uniqueId}`,
+              transaction.transactionId,
+              transaction.userId,
+              "PAYIN"
+            );
+          }
+        } else {
+          console.log(
+            "isPayInTransactionSettled >>",
+            isPayInTransactionSettled
+          );
+        }
+        return updatedTransaction;
+      });
+    } catch (error) {
+      log.error("Error processing status change:", error);
       throw error;
     }
   }

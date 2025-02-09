@@ -13,7 +13,7 @@ class APITester {
     return {
       data: {
         uniqueid: Math.floor(10000 + Math.random() * 90000).toString(),
-        amount: '101'
+        amount: '102'
       }
     };
   }
@@ -115,13 +115,13 @@ class APITester {
 // Usage
 const config = {
   headers: {
-    'Content-Type': 'application/json',
-    'x-auth-token': 'your_jwt_token_here'
+    "Content-Type": "application/json",
+    "x-auth-token": "your_jwt_token_here",
   },
-  token: '5f1278942d1cc516f412c43806670dbaaa93a62142a2e870d6d680b4d8f2e449',
-  username: 'testing'
+  token: "a48ab3b5cefb70b4aced3de3d90b94fa750121cccd04093bc2dcb6f90b1e99aa",
+  username: "DEMOFONEXPAY",
 };
 
 const tester = new APITester(config);
-tester.runBulkTest(500, 100)
+tester.runBulkTest(100, 10)
   .catch(console.error);

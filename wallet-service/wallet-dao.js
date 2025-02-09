@@ -7,20 +7,18 @@ const {
   walletTransactions,
   walletTransactionLogs,
   walletLocks,
-  walletLockHistory
-  
+  walletLockHistory,
 } = require("./db/schema");
 const { users } = require("../user-service/db/schema");
 const { eq, and, or, between, desc, sql, like } = require("drizzle-orm");
 const crypto = require("crypto");
-const AsyncLock = require('async-lock');
-const lock = new AsyncLock();
-
+const AsyncLock = require("async-lock");
 
 class WalletDao {
   constructor() {
     this.lock = new AsyncLock();
     this.lockTTL = 30000; // 30 seconds timeout
+    this.walletLockPrefix = "wallet:";
   }
   generateTransactionUniqueId() {
     return crypto.randomBytes(6).toString("hex");
@@ -166,14 +164,17 @@ class WalletDao {
     try {
       return await db.transaction(async (tx) => {
         // const sourceBalance = await this.getWalletBalance(fromWalletId);
-        const availableBalance = await walletDao.getAvailableBalance(fromWalletId);
-            if (availableBalance < parseFloat(amount)) {
-                throw {
-                    statusCode: 400,
-                    messageCode: 'INSUFFICIENT_BALANCE',
-                    message: 'Insufficient available balance for transfer (some funds may be locked)'
-                };
-            }
+        const availableBalance = await walletDao.getAvailableBalance(
+          fromWalletId
+        );
+        if (availableBalance < parseFloat(amount)) {
+          throw {
+            statusCode: 400,
+            messageCode: "INSUFFICIENT_BALANCE",
+            message:
+              "Insufficient available balance for transfer (some funds may be locked)",
+          };
+        }
 
         const transactionUniqueId = this.generateTransactionUniqueId();
 
@@ -220,105 +221,143 @@ class WalletDao {
     transactionUniqueId = null,
     trasaction = null
   ) {
+    const lockKey = `${this.walletLockPrefix}${walletId}`;
+
     try {
-      return await this.lock.acquire(`wallet:${walletId}`, async () => {
-        return await db.transaction(async (tx) => {
-          tx = trasaction ? trasaction : tx;
-          const [wallet] = await tx
-            .select()
-            .from(userWallets)
-            .where(eq(userWallets.id, walletId))
-            .limit(1);
-  
-          if (!wallet) {
-            throw new Error("Wallet not found");
-          }
-          const balanceBefore = parseFloat(wallet.balance);
-          let balanceAfter;
-  
-          if (type === "DEBIT") {
-            const availableBalance = await this.getAvailableBalance(walletId);
-            if (availableBalance < amount) {
+      return await this.lock.acquire(
+        lockKey,
+        async () => {
+          return await db.transaction(async (tx) => {
+            const [wallet] = await tx
+              .select()
+              .from(userWallets)
+              .where(eq(userWallets.id, walletId))
+              .for("update")
+              .limit(1);
+
+            if (!wallet) {
+              throw new Error("Wallet not found");
+            }
+
+            const balanceBefore = parseFloat(wallet.balance);
+            let balanceAfter;
+
+            if (type === "DEBIT") {
+              const availableBalance = await this.getAvailableBalanceWithinTx(
+                walletId,
+                tx
+              );
+              if (availableBalance < parseFloat(amount)) {
+                throw {
+                  statusCode: 400,
+                  messageCode: "INSUFFICIENT_BALANCE",
+                  message: "Insufficient available balance for transaction",
+                };
+              }
+              balanceAfter = balanceBefore - parseFloat(amount);
+            } else {
+              balanceAfter = balanceBefore + parseFloat(amount);
+            }
+
+            const [updatedWallet] = await tx
+              .update(userWallets)
+              .set({
+                balance: balanceAfter,
+                lastTransactionAt: new Date(),
+                updatedAt: new Date(),
+                version: sql`${userWallets.version} + 1`, // Optimistic locking
+              })
+              .where(
+                and(
+                  eq(userWallets.id, walletId),
+                  eq(userWallets.version, wallet.version) // Ensure no concurrent updates
+                )
+              )
+              .returning();
+
+            if (!updatedWallet) {
               throw {
-                statusCode: 400,
-                messageCode: "INSUFFICIENT_BALANCE",
-                message: "Insufficient available balance for transaction",
+                statusCode: 409,
+                messageCode: "CONCURRENT_UPDATE",
+                message: "Wallet was updated by another transaction",
               };
             }
-            balanceAfter = balanceBefore - parseFloat(amount);
-          } else {
-            balanceAfter = balanceBefore + parseFloat(amount);
-          }
-  
-          const [updatedWallet] = await tx
-            .update(userWallets)
-            .set({
-              balance: balanceAfter,
-              lastTransactionAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(userWallets.id, walletId))
-            .returning();
-  
-          const finalTransactionUniqueId =
-            transactionUniqueId || this.generateTransactionUniqueId();
-  
-          const [transaction] = await tx
-            .insert(walletTransactions)
-            .values({
-              transactionUniqueId: finalTransactionUniqueId,
-              fromWalletId: type === "DEBIT" ? walletId : null,
-              toWalletId: type === "CREDIT" ? walletId : null,
-              amount,
-              type,
-              description,
-              reference: referenceId,
-              status: "SUCCESS",
-              balanceBefore,
-              balanceAfter,
-              createdBy: userId,
-              completedAt: new Date(),
-            })
-            .returning();
-  
-          const [transactionLog] = await tx
-            .insert(walletTransactionLogs)
-            .values({
-              transactionUniqueId: finalTransactionUniqueId,
-              walletId,
-              transactionId: transaction.id,
-              type,
-              amount,
-              balanceBefore,
-              balanceAfter,
-              description,
-              referenceType,
-              referenceId,
-              userId,
-              status: "SUCCESS",
-              additionalMetadata: JSON.stringify({
-                originalDescription: description,
-                transactionDetails: transaction,
-              }),
-            })
-            .returning();
-  
-          return {
-            wallet: updatedWallet,
-            transaction,
-            transactionLog,
-          };
-        });
-      }, { timeout: this.lockTTL });
+
+            const finalTransactionUniqueId =
+              transactionUniqueId || crypto.randomBytes(6).toString("hex");
+
+            const [transaction] = await tx
+              .insert(walletTransactions)
+              .values({
+                transactionUniqueId: finalTransactionUniqueId,
+                fromWalletId: type === "DEBIT" ? walletId : null,
+                toWalletId: type === "CREDIT" ? walletId : null,
+                amount: parseFloat(amount),
+                type,
+                description,
+                reference: referenceId,
+                status: "SUCCESS",
+                balanceBefore,
+                balanceAfter,
+                createdBy: userId,
+                completedAt: new Date(),
+              })
+              .returning();
+
+            const [transactionLog] = await tx
+              .insert(walletTransactionLogs)
+              .values({
+                transactionUniqueId: finalTransactionUniqueId,
+                walletId,
+                transactionId: transaction.id,
+                type,
+                amount: parseFloat(amount),
+                balanceBefore,
+                balanceAfter,
+                description,
+                referenceType,
+                referenceId,
+                userId,
+                status: "SUCCESS",
+                additionalMetadata: JSON.stringify({
+                  originalDescription: description,
+                  transactionDetails: transaction,
+                }),
+              })
+              .returning();
+
+            return {
+              wallet: updatedWallet,
+              transaction,
+              transactionLog,
+            };
+          });
+        },
+        { timeout: this.lockTTL }
+      );
     } catch (error) {
-      if (error.name === 'TimeoutError') {
+      if (error.name === "TimeoutError") {
         throw {
           statusCode: 408,
           messageCode: "LOCK_TIMEOUT",
-          message: "Transaction timed out while waiting for lock"
+          message: "Transaction timed out while waiting for lock",
         };
       }
-      console.log("wallet update error--> ", error);
+
+      if (error.statusCode === 409) {
+        return this.updateWalletBalance(
+          walletId,
+          amount,
+          type,
+          description,
+          referenceId,
+          userId,
+          referenceType,
+          transactionUniqueId,
+          trasaction
+        );
+      }
+
       log.error("Error updating wallet balance:", error);
       throw error;
     }
@@ -483,6 +522,7 @@ class WalletDao {
         walletIds,
         startDate,
         endDate,
+        search,
       } = filters;
 
       const userWallets = await this.getUserWallets(userId);
@@ -504,12 +544,31 @@ class WalletDao {
           balanceBefore: walletTransactionLogs.balanceBefore,
           status: walletTransactionLogs.status,
           transactionId: walletTransactionLogs.transactionId,
+          userData: {
+            username: users.username,
+            firstname: users.firstname,
+            lastname: users.lastname,
+          },
         })
-        .from(walletTransactionLogs);
+        .from(walletTransactionLogs)
+        .leftJoin(users, eq(walletTransactionLogs.userId, users.id));
 
       const conditions = [
         sql`${walletTransactionLogs.walletId} IN (${filterWalletIds})`,
       ];
+
+      // Enhanced search functionality
+      if (search) {
+        const searchConditions = [
+          like(walletTransactionLogs.transactionUniqueId, `%${search}%`),
+          like(walletTransactionLogs.description, `%${search}%`),
+          like(users.username, `%${search}%`),
+          like(users.firstname, `%${search}%`),
+          like(users.lastname, `%${search}%`),
+          like(walletTransactionLogs.referenceId, `%${search}%`),
+        ];
+        conditions.push(or(...searchConditions));
+      }
 
       if (type) {
         conditions.push(eq(walletTransactionLogs.type, type));
@@ -541,6 +600,7 @@ class WalletDao {
         db
           .select({ count: sql`COUNT(*)` })
           .from(walletTransactionLogs)
+          .leftJoin(users, eq(walletTransactionLogs.userId, users.id))
           .where(and(...conditions)),
       ]);
 
@@ -551,6 +611,11 @@ class WalletDao {
         return {
           ...log,
           walletType: matchingWallet ? matchingWallet.type.name : "UNKNOWN",
+          user: {
+            username: log.userData.username,
+            firstname: log.userData.firstname,
+            lastname: log.userData.lastname,
+          },
         };
       });
 
@@ -733,29 +798,29 @@ class WalletDao {
 
   async getTotalWalletBalances(userId) {
     try {
-        const wallets = await this.getUserWallets(userId);
-        
-        const balancePromises = wallets.map(async wallet => {
-            const lockedAmount = await this.getTotalLockedAmount(wallet.wallet.id);
-            const totalBalance = Number(wallet.wallet.balance);
-            const availableBalance = totalBalance - lockedAmount;
-            
-            return {
-                type: wallet.type.name,
-                totalBalance,
-                lockedAmount,
-                availableBalance,
-                href: this.getHrefForWalletType(wallet.type.name)
-            };
-        });
+      const wallets = await this.getUserWallets(userId);
 
-        const totalBalances = await Promise.all(balancePromises);
-        return totalBalances;
+      const balancePromises = wallets.map(async (wallet) => {
+        const lockedAmount = await this.getTotalLockedAmount(wallet.wallet.id);
+        const totalBalance = Number(wallet.wallet.balance);
+        const availableBalance = totalBalance - lockedAmount;
+
+        return {
+          type: wallet.type.name,
+          totalBalance,
+          lockedAmount,
+          availableBalance,
+          href: this.getHrefForWalletType(wallet.type.name),
+        };
+      });
+
+      const totalBalances = await Promise.all(balancePromises);
+      return totalBalances;
     } catch (error) {
-        log.error("Error getting total wallet balances:", error);
-        throw error;
+      log.error("Error getting total wallet balances:", error);
+      throw error;
     }
-}
+  }
 
   getHrefForWalletType(type) {
     switch (type.toUpperCase()) {
@@ -784,7 +849,7 @@ class WalletDao {
 
       return activeLocks;
     } catch (error) {
-      console.log("wallet error,",error);
+      console.log("wallet error,", error);
       log.error("Error getting wallet locks:", error);
       throw error;
     }
@@ -829,6 +894,33 @@ class WalletDao {
       log.error("Error getting available balance:", error);
       throw error;
     }
+  }
+
+  async getAvailableBalanceWithinTx(walletId, tx) {
+    const [wallet] = await tx
+      .select()
+      .from(userWallets)
+      .where(eq(userWallets.id, walletId))
+      .for("update")
+      .limit(1);
+
+    if (!wallet) {
+      throw new Error("Wallet not found");
+    }
+
+    const [{ totalLocked }] = await tx
+      .select({
+        totalLocked: sql`COALESCE(SUM(amount), 0)`,
+      })
+      .from(walletLocks)
+      .where(
+        and(
+          eq(walletLocks.walletId, walletId),
+          eq(walletLocks.status, "ACTIVE")
+        )
+      );
+
+    return parseFloat(wallet.balance) - parseFloat(totalLocked || 0);
   }
 
   async lockWalletAmount(walletId, amount, reason, userId) {
@@ -883,7 +975,10 @@ class WalletDao {
           .select()
           .from(walletLocks)
           .where(
-            and(eq(walletLocks.walletId, lockId), eq(walletLocks.status, "ACTIVE"))
+            and(
+              eq(walletLocks.walletId, lockId),
+              eq(walletLocks.status, "ACTIVE")
+            )
           )
           .limit(1);
 
@@ -1079,6 +1174,130 @@ class WalletDao {
       log.error("Error getting all wallet locks:", error);
       throw error;
     }
+  }
+
+  async updateWalletBalanceWithinTx(
+    walletId,
+    amount,
+    type,
+    description = "",
+    referenceId = null,
+    userId,
+    referenceType = "UNKNOWN",
+    transactionUniqueId = null,
+    tx
+  ) {
+    const lockKey = `${this.walletLockPrefix}${walletId}`;
+
+    return await this.lock.acquire(
+      lockKey,
+      async () => {
+        const [wallet] = await tx
+          .select()
+          .from(userWallets)
+          .where(eq(userWallets.id, walletId))
+          .for("update")
+          .limit(1);
+
+        if (!wallet) {
+          throw new Error("Wallet not found");
+        }
+
+        const balanceBefore = parseFloat(wallet.balance);
+        let balanceAfter;
+
+        if (type === "DEBIT") {
+          const availableBalance = await this.getAvailableBalanceWithinTx(
+            walletId,
+            tx
+          );
+          if (availableBalance < parseFloat(amount)) {
+            throw {
+              statusCode: 400,
+              messageCode: "INSUFFICIENT_BALANCE",
+              message: "Insufficient available balance for transaction",
+            };
+          }
+          balanceAfter = balanceBefore - parseFloat(amount);
+        } else {
+          balanceAfter = balanceBefore + parseFloat(amount);
+        }
+
+        const [updatedWallet] = await tx
+          .update(userWallets)
+          .set({
+            balance: balanceAfter,
+            lastTransactionAt: new Date(),
+            updatedAt: new Date(),
+            version: sql`${userWallets.version} + 1`,
+          })
+          .where(
+            and(
+              eq(userWallets.id, walletId),
+              eq(userWallets.version, wallet.version)
+            )
+          )
+          .returning();
+
+        if (!updatedWallet) {
+          throw {
+            statusCode: 409,
+            messageCode: "CONCURRENT_UPDATE",
+            message: "Wallet was updated by another transaction",
+          };
+        }
+
+        const finalTransactionUniqueId =
+          transactionUniqueId || crypto.randomBytes(6).toString("hex");
+
+        const [transaction] = await tx
+          .insert(walletTransactions)
+          .values({
+            transactionUniqueId: finalTransactionUniqueId,
+            fromWalletId: type === "DEBIT" ? walletId : null,
+            toWalletId: type === "CREDIT" ? walletId : null,
+            amount: parseFloat(amount),
+            type,
+            description,
+            reference: referenceId,
+            status: "SUCCESS",
+            balanceBefore,
+            balanceAfter,
+            createdBy: userId,
+            completedAt: new Date(),
+          })
+          .returning();
+
+        const [transactionLog] = await tx
+          .insert(walletTransactionLogs)
+          .values({
+            transactionUniqueId: finalTransactionUniqueId,
+            walletId,
+            transactionId: transaction.id,
+            type,
+            amount: parseFloat(amount),
+            balanceBefore,
+            balanceAfter,
+            description,
+            referenceType,
+            referenceId,
+            userId,
+            status: "SUCCESS",
+            additionalMetadata: JSON.stringify({
+              originalDescription: description,
+              transactionDetails: transaction,
+            }),
+          })
+          .returning();
+
+        return {
+          wallet: updatedWallet,
+          transaction,
+          transactionLog,
+        };
+      },
+      { timeout: this.lockTTL }
+    );
   }
 }
 

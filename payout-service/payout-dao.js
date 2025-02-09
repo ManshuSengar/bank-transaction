@@ -632,7 +632,6 @@ class PayoutDao {
 
   async processCallback(callbackData) {
     try {
-        // Log raw callback
         const [systemLog] = await db
             .insert(systemCallbackLogs)
             .values({
@@ -696,8 +695,6 @@ class PayoutDao {
                     transaction.id,
                     transaction.userId,
                     "PAYOUT_REFUND",
-                    null,
-                    tx
                 );
             }
 
@@ -797,8 +794,6 @@ class PayoutDao {
         transaction.id,
         transaction.userId,
         "PAYOUT_REFUND",
-        null,
-        tx
       );
 
       // Return the wallet update result

@@ -43,13 +43,13 @@ const callbackLogs = pgTable('callback_logs', {
 
 const systemCallbackLogs = pgTable('system_callback_logs', {
     id: serial('id').primaryKey(),
+    transactionId: varchar('transaction_id', { length: 2000 }),
     encryptedData: text('encrypted_data').notNull(),
     decryptedData: jsonb('decrypted_data'),
     payinTransactionId: integer('payin_transaction_id').references(() => payinTransactions.id),
     status: varchar('status', { length: 20 }).default('PENDING'),
     createdAt: timestamp('created_at').defaultNow()
 });
-
 const userCallbackLogs = pgTable('user_callback_logs', {
     id: serial('id').primaryKey(),
     transactionId:varchar('transaction_id', { length: 2000 }).notNull(),

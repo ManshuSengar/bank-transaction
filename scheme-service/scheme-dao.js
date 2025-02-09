@@ -401,46 +401,46 @@ class SchemeDao {
       throw error;
     }
   }
-  async assignSchemeToUser(userId, schemeId, assignedBy) {
-    try {
-      return await db.transaction(async (tx) => {
-        const existingAssignment = await tx
-          .select()
-          .from(userSchemes)
-          .where(
-            and(
-              eq(userSchemes.userId, userId),
-              eq(userSchemes.schemeId, schemeId),
-              eq(userSchemes.status, "ACTIVE")
-            )
-          )
-          .limit(1);
+  // async assignSchemeToUser(userId, schemeId, assignedBy) {
+  //   try {
+  //     return await db.transaction(async (tx) => {
+  //       const existingAssignment = await tx
+  //         .select()
+  //         .from(userSchemes)
+  //         .where(
+  //           and(
+  //             eq(userSchemes.userId, userId),
+  //             eq(userSchemes.schemeId, schemeId),
+  //             eq(userSchemes.status, "ACTIVE")
+  //           )
+  //         )
+  //         .limit(1);
 
-        if (existingAssignment.length > 0) {
-          const error = new Error("Scheme is already assigned to this user");
-          error.statusCode = 400;
-          error.messageCode = "SCHEME_ALREADY_ASSIGNED";
-          throw error;
-        }
+  //       if (existingAssignment.length > 0) {
+  //         const error = new Error("Scheme is already assigned to this user");
+  //         error.statusCode = 400;
+  //         error.messageCode = "SCHEME_ALREADY_ASSIGNED";
+  //         throw error;
+  //       }
 
-        // Assign new scheme without deactivating existing ones
-        const [assignment] = await tx
-          .insert(userSchemes)
-          .values({
-            userId,
-            schemeId,
-            status: "ACTIVE",
-            createdBy: assignedBy,
-          })
-          .returning();
+  //       // Assign new scheme without deactivating existing ones
+  //       const [assignment] = await tx
+  //         .insert(userSchemes)
+  //         .values({
+  //           userId,
+  //           schemeId,
+  //           status: "ACTIVE",
+  //           createdBy: assignedBy,
+  //         })
+  //         .returning();
 
-        return assignment;
-      });
-    } catch (error) {
-      log.error("Error assigning scheme to user:", error);
-      throw error;
-    }
-  }
+  //       return assignment;
+  //     });
+  //   } catch (error) {
+  //     log.error("Error assigning scheme to user:", error);
+  //     throw error;
+  //   }
+  // }
 
   async logSchemeTransaction(transactionData) {
     try {
@@ -457,6 +457,16 @@ class SchemeDao {
 
   async getUserSchemes(userId, productId = null) {
     try {
+      // Build conditions array for better control
+      const conditions = [
+        eq(userSchemes.userId, userId),
+        eq(userSchemes.status, "ACTIVE")
+      ];
+  
+      if (productId) {
+        conditions.push(eq(schemes.productId, productId));
+      }
+  
       let query = db
         .select({
           scheme: schemes,
@@ -465,7 +475,10 @@ class SchemeDao {
           api: apiConfigs,
         })
         .from(userSchemes)
-        .innerJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+        .innerJoin(
+          schemes,
+          eq(userSchemes.schemeId, schemes.id)
+        )
         .leftJoin(
           schemeCharges,
           and(
@@ -474,53 +487,199 @@ class SchemeDao {
           )
         )
         .leftJoin(apiConfigs, eq(schemeCharges.apiConfigId, apiConfigs.id))
-        .where(
-          and(eq(userSchemes.userId, userId), eq(userSchemes.status, "ACTIVE"))
-        );
-
-      if (productId) {
-        query = query.where(eq(schemes.productId, productId));
-      }
-
+        .where(and(...conditions)); // Apply all conditions using and()
+  
       const results = await query;
-
-      // Use a Map to track unique charges by their ID for each scheme
-      const schemesMap = new Map();
-
+  
+      // Use Set to track processed schemes
+      const processedSchemes = new Set();
+      const groupedSchemes = [];
+  
       results.forEach((row) => {
-        if (!schemesMap.has(row.scheme.id)) {
-          // Initialize new scheme entry
-          schemesMap.set(row.scheme.id, {
-            ...row.scheme,
-            assignmentId: row.assignment.id,
-            charges: new Map(), // Use Map to track unique charges
-          });
-        }
-
-        const schemeEntry = schemesMap.get(row.scheme.id);
-
-        // Only add charge if it exists and hasn't been added yet
-        if (row.charges && !schemeEntry.charges.has(row.charges.id)) {
-          schemeEntry.charges.set(row.charges.id, {
-            ...row.charges,
-            api: row.api,
-          });
-        }
+        if (!row.scheme || processedSchemes.has(row.scheme.id)) return;
+  
+        const schemeWithCharges = {
+          ...row.scheme,
+          assignmentId: row.assignment.id,
+          charges: results
+            .filter(r => r.scheme.id === row.scheme.id && r.charges)
+            .map(r => ({
+              ...r.charges,
+              api: r.api
+            }))
+        };
+  
+        groupedSchemes.push(schemeWithCharges);
+        processedSchemes.add(row.scheme.id);
       });
-
-      // Convert Map to array format with charges array
-      const groupedSchemes = Array.from(schemesMap.values()).map((scheme) => ({
-        ...scheme,
-        charges: Array.from(scheme.charges.values()),
-      }));
-
+  
       return groupedSchemes;
     } catch (error) {
       log.error("Error getting user schemes:", error);
       throw error;
     }
   }
+  
+  // async getUsersWithSchemes({
+  //   page = 1,
+  //   limit = 10,
+  //   status = null,
+  //   productId = null,
+  // }) {
+  //   try {
+  //     const offset = (page - 1) * limit;
 
+  //     // Build the query with optional filters
+  //     let query = db
+  //       .select({
+  //         user: {
+  //           id: users.id,
+  //           username: users.username,
+  //           firstname: users.firstname,
+  //           lastname: users.lastname,
+  //           emailId: users.emailId,
+  //           phoneNo: users.phoneNo,
+  //           isActive: users.isActive,
+  //         },
+  //         schemeDetails: sql`
+  //                       COALESCE(
+  //                           json_agg(
+  //                               DISTINCT jsonb_build_object(
+  //                                   'schemeId', ${schemes.id},
+  //                                   'schemeName', ${schemes.name},
+  //                                   'status', ${userSchemes.status},
+  //                                   'assignedAt', ${userSchemes.createdAt},
+  //                                   'product', jsonb_build_object(
+  //                                       'id', ${products.id},
+  //                                       'name', ${products.name}
+  //                                   )
+  //                               )
+  //                           ) FILTER (WHERE ${schemes.id} IS NOT NULL),
+  //                           '[]'
+  //                       )
+  //                   `.as("schemeDetails"),
+  //       })
+  //       .from(users)
+  //       .leftJoin(userSchemes, eq(users.id, userSchemes.userId))
+  //       .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+  //       .leftJoin(products, eq(schemes.productId, products.id));
+
+  //     // Apply filters
+  //     if (status) {
+  //       query = query.where(eq(userSchemes.status, status));
+  //     }
+
+  //     if (productId) {
+  //       query = query.where(eq(products.id, productId));
+  //     }
+
+  //     // Add grouping
+  //     query = query
+  //       .groupBy(users.id)
+  //       .orderBy(desc(users.createdAt))
+  //       .limit(limit)
+  //       .offset(offset);
+
+  //     // Execute main query
+  //     const usersData = await query;
+
+  //     // Get total count
+  //     const [{ count }] = await db
+  //       .select({
+  //         count: sql`COUNT(DISTINCT ${users.id})`,
+  //       })
+  //       .from(users)
+  //       .leftJoin(userSchemes, eq(users.id, userSchemes.userId))
+  //       .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+  //       .leftJoin(products, eq(schemes.productId, products.id))
+  //       .where(query.where);
+
+  //     // Process the results
+  //     const processedUsers = usersData.map((userData) => ({
+  //       ...userData.user,
+  //       schemes: userData.schemeDetails,
+  //       schemeStatus:
+  //         userData.schemeDetails.length > 0 ? "ASSIGNED" : "NOT_ASSIGNED",
+  //     }));
+
+  //     return {
+  //       data: processedUsers,
+  //       pagination: {
+  //         page,
+  //         limit,
+  //         total: Number(count),
+  //         pages: Math.ceil(Number(count) / limit),
+  //       },
+  //     };
+  //   } catch (error) {
+  //     log.error("Error getting users with schemes:", error);
+  //     throw error;
+  //   }
+  // }
+
+  async assignSchemeToUser(userId, schemeId, assignedBy) {
+    try {
+      return await db.transaction(async (tx) => {
+        // Get the scheme details to check product
+        const [scheme] = await tx
+          .select()
+          .from(schemes)
+          .where(eq(schemes.id, schemeId))
+          .limit(1);
+  
+        if (!scheme) {
+          const error = new Error("Scheme not found");
+          error.statusCode = 404;
+          error.messageCode = "SCHEME_NOT_FOUND";
+          throw error;
+        }
+  
+        // Check if user already has a scheme for this product
+        const existingAssignment = await tx
+          .select({
+            userScheme: userSchemes,
+            scheme: schemes,
+          })
+          .from(userSchemes)
+          .innerJoin(schemes, eq(userSchemes.schemeId, schemes.id))
+          .where(
+            and(
+              eq(userSchemes.userId, userId),
+              eq(schemes.productId, scheme.productId),
+              eq(userSchemes.status, "ACTIVE")
+            )
+          )
+          .limit(1);
+  
+        if (existingAssignment.length > 0) {
+          // Deactivate existing scheme for this product
+          await tx
+            .update(userSchemes)
+            .set({
+              status: "INACTIVE",
+              updatedAt: new Date()
+            })
+            .where(eq(userSchemes.id, existingAssignment[0].userScheme.id));
+        }
+  
+        // Assign new scheme
+        const [assignment] = await tx
+          .insert(userSchemes)
+          .values({
+            userId,
+            schemeId,
+            status: "ACTIVE",
+            createdBy: assignedBy,
+          })
+          .returning();
+  
+        return assignment;
+      });
+    } catch (error) {
+      log.error("Error assigning scheme to user:", error);
+      throw error;
+    }
+  }
   
   async getUsersWithSchemes({
     page = 1,
@@ -530,8 +689,7 @@ class SchemeDao {
   }) {
     try {
       const offset = (page - 1) * limit;
-
-      // Build the query with optional filters
+  
       let query = db
         .select({
           user: {
@@ -544,48 +702,73 @@ class SchemeDao {
             isActive: users.isActive,
           },
           schemeDetails: sql`
-                        COALESCE(
-                            json_agg(
-                                DISTINCT jsonb_build_object(
-                                    'schemeId', ${schemes.id},
-                                    'schemeName', ${schemes.name},
-                                    'status', ${userSchemes.status},
-                                    'assignedAt', ${userSchemes.createdAt},
-                                    'product', jsonb_build_object(
-                                        'id', ${products.id},
-                                        'name', ${products.name}
-                                    )
-                                )
-                            ) FILTER (WHERE ${schemes.id} IS NOT NULL),
-                            '[]'
-                        )
-                    `.as("schemeDetails"),
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'schemeId', ${schemes.id},
+                'schemeName', ${schemes.name},
+                'status', ${userSchemes.status},
+                'assignedAt', ${userSchemes.createdAt},
+                'product', jsonb_build_object(
+                  'id', ${products.id},
+                  'name', ${products.name}
+                ),
+                'charges', (
+                  SELECT json_agg(
+                    jsonb_build_object(
+                      'id', sc.id,
+                      'minAmount', sc.minAmount,
+                      'maxAmount', sc.maxAmount,
+                      'chargeType', sc.chargeType,
+                      'chargeValue', sc.chargeValue,
+                      'gst', sc.gst,
+                      'tds', sc.tds
+                    )
+                  )
+                  FROM scheme_charges sc
+                  WHERE sc.schemeId = ${schemes.id}
+                  AND sc.status = 'ACTIVE'
+                )
+              )
+            ) FILTER (WHERE ${schemes.id} IS NOT NULL AND ${userSchemes.status} = 'ACTIVE')
+          `.as("schemeDetails"),
         })
         .from(users)
         .leftJoin(userSchemes, eq(users.id, userSchemes.userId))
         .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
         .leftJoin(products, eq(schemes.productId, products.id));
-
-      // Apply filters
+  
       if (status) {
         query = query.where(eq(userSchemes.status, status));
       }
-
+  
       if (productId) {
         query = query.where(eq(products.id, productId));
       }
-
-      // Add grouping
+  
       query = query
         .groupBy(users.id)
         .orderBy(desc(users.createdAt))
         .limit(limit)
         .offset(offset);
-
-      // Execute main query
+  
       const usersData = await query;
-
-      // Get total count
+  
+      const processedUsers = usersData.map((userData) => ({
+        ...userData.user,
+        schemes: userData.schemeDetails || [],
+        schemesByProduct: (userData.schemeDetails || []).reduce((acc, scheme) => {
+          if (!acc[scheme.product.id]) {
+            acc[scheme.product.id] = {
+              productId: scheme.product.id,
+              productName: scheme.product.name,
+              scheme: scheme
+            };
+          }
+          return acc;
+        }, {}),
+        schemeStatus: userData.schemeDetails?.length > 0 ? "ASSIGNED" : "NOT_ASSIGNED",
+      }));
+  
       const [{ count }] = await db
         .select({
           count: sql`COUNT(DISTINCT ${users.id})`,
@@ -595,15 +778,7 @@ class SchemeDao {
         .leftJoin(schemes, eq(userSchemes.schemeId, schemes.id))
         .leftJoin(products, eq(schemes.productId, products.id))
         .where(query.where);
-
-      // Process the results
-      const processedUsers = usersData.map((userData) => ({
-        ...userData.user,
-        schemes: userData.schemeDetails,
-        schemeStatus:
-          userData.schemeDetails.length > 0 ? "ASSIGNED" : "NOT_ASSIGNED",
-      }));
-
+  
       return {
         data: processedUsers,
         pagination: {

@@ -173,7 +173,6 @@ schemeRouter.get('/',
         }
 });
 
-// Assign scheme to user
 schemeRouter.post('/assign',
     authenticateToken,
     // authorize(['manage_schemes']),

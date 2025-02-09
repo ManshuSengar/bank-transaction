@@ -18,7 +18,7 @@ async function makeEncryptionRequest(uniqueId) {
     });
     return response.data.encryptedData;
   } catch (error) {
-    console.error(`Encryption failed for ${uniqueId}:`, error.message);
+    console.log(`Encryption failed for ${uniqueId}:`, error);
     throw error;
   }
 }
