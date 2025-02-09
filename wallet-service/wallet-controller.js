@@ -869,7 +869,7 @@ walletRouter.get(
         "Balance After": log.balanceAfter,
         Description: log.description,
         Status: log.status,
-        "Created At": new Date(log.createdAt).toLocaleString(),
+        "Created At": moment.utc(log.createdAt).format("DD/MM/YYYY HH:mm:ss"),
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(excelData);
