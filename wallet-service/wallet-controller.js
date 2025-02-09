@@ -103,38 +103,32 @@ walletRouter.get("/my-wallets", authenticateToken, async (req, res) => {
 
 walletRouter.get("/transaction-logs", authenticateToken, async (req, res) => {
   try {
-    console.log("Query parameters:", req.query);
     const {
-      type,
-      referenceType,
       page = 1,
       limit = 10,
+      type,
       walletType,
       startDate,
       endDate,
+      search,
     } = req.query;
 
-    // Validate and prepare filters
     const filters = {
       userId: req.user.userId,
       page: parseInt(page),
       limit: parseInt(limit),
     };
 
-    // Add optional type filter
     if (type && type.trim() !== "") {
       filters.type = type.toUpperCase().trim();
-    }
-
-    // Add optional reference type filter
-    if (referenceType && referenceType.trim() !== "") {
-      filters.referenceType = referenceType.toUpperCase().trim();
     }
     if (startDate && endDate) {
       filters.startDate = startDate;
       filters.endDate = endDate;
     }
-    // If wallet type is specified, find matching wallet IDs
+    if (search && search.trim() !== "") {
+      filters.search = search.trim();
+    }
     if (walletType && walletType.trim() !== "") {
       const userWallets = await walletDao.getUserWallets(req.user.userId);
       const matchingWalletIds = userWallets
@@ -142,8 +136,6 @@ walletRouter.get("/transaction-logs", authenticateToken, async (req, res) => {
           (w) => w.type.name.toUpperCase() === walletType.toUpperCase().trim()
         )
         .map((w) => w.wallet.id);
-
-      console.log("Matching Wallet IDs:", matchingWalletIds);
 
       if (matchingWalletIds.length === 0) {
         return res.status(200).send({
@@ -158,13 +150,9 @@ walletRouter.get("/transaction-logs", authenticateToken, async (req, res) => {
           },
         });
       }
-
       filters.walletIds = matchingWalletIds;
     }
 
-    console.log("Final Filters:", JSON.stringify(filters, null, 2));
-
-    // Retrieve transaction logs
     const transactionLogs = await walletDao.getAdvancedWalletTransactionLogs(
       filters
     );
@@ -184,7 +172,6 @@ walletRouter.get("/transaction-logs", authenticateToken, async (req, res) => {
     });
   }
 });
-
 // Get specific wallet details
 walletRouter.get("/:walletId", authenticateToken, async (req, res) => {
   try {

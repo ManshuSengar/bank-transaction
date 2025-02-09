@@ -279,56 +279,59 @@ payinRouter.get("/user/transactions", authenticateToken, async (req, res) => {
 
 payinRouter.get("/admin/transactions", async (req, res) => {
   try {
-    const {
-      startDate,
-      endDate,
-      status,
-      search,
-      minAmount,
-      maxAmount,
-      page = 1,
-      limit = 10,
-    } = req.query;
+      const {
+          startDate,
+          endDate,
+          status,
+          search,
+          minAmount,
+          maxAmount,
+          page = 1,
+          limit = 10,
+      } = req.query;
 
-    const transactions = await payinDao.getAdminFilteredTransactions({
-      startDate,
-      endDate,
-      status,
-      search,
-      minAmount: minAmount ? parseFloat(minAmount) : null,
-      maxAmount: maxAmount ? parseFloat(maxAmount) : null,
-      page: parseInt(page),
-      limit: parseInt(limit),
-    });
-    res.send({
-      messageCode: "ADMIN_TRANSACTIONS_FETCHED",
-      message: "All user payin transactions retrieved successfully",
-      data: transactions.data.map((transaction) => ({
-        transactionId: transaction?.transactionId,
-        amount: transaction.amount,
-        uniqueId: transaction.uniqueId,
-        chargeValue: transaction.chargeValue,
-        gstAmount: transaction.gstAmount,
-        status: transaction.status,
-        createdAt: transaction.createdAt,
-        updatedAt:transaction.updatedAt,
-        userId: transaction.userId,
-        username: transaction.user.username,
-        firstname: transaction.user.firstname,
-        lastname: transaction.user.lastname,
-        emailId: transaction.user.emailId,
-        phoneNo: transaction.user.phoneNo,
-      })),
-      pagination: transactions.pagination,
-      summary: transactions.summary,
-    });
+      const transactions = await payinDao.getAdminFilteredTransactions({
+          startDate,
+          endDate,
+          status,
+          search,
+          minAmount: minAmount ? parseFloat(minAmount) : null,
+          maxAmount: maxAmount ? parseFloat(maxAmount) : null,
+          page: parseInt(page),
+          limit: parseInt(limit),
+      });
+
+      res.send({
+          messageCode: "ADMIN_TRANSACTIONS_FETCHED",
+          message: "All user payin transactions retrieved successfully",
+          data: transactions.data.map((transaction) => ({
+              transactionId: transaction?.transactionId,
+              amount: transaction.amount,
+              uniqueId: transaction.uniqueId,
+              chargeValue: transaction.chargeValue,
+              gstAmount: transaction.gstAmount,
+              status: transaction.status,
+              createdAt: transaction.createdAt,
+              updatedAt: transaction.updatedAt,
+              userId: transaction.userId,
+              apiConfigName: transaction.apiConfig?.name || 'N/A',
+              apiConfigUrl: transaction.apiConfig?.baseUrl || 'N/A',
+              username: transaction.user.username,
+              firstname: transaction.user.firstname,
+              lastname: transaction.user.lastname,
+              emailId: transaction.user.emailId,
+              phoneNo: transaction.user.phoneNo,
+          })),
+          pagination: transactions.pagination,
+          summary: transactions.summary,
+      });
   } catch (error) {
-    console.log("Error getting admin transactions:", error);
-    log.error("Error getting admin transactions:", error);
-    res.status(500).send({
-      messageCode: "ERR_GET_ADMIN_TRANSACTIONS",
-      message: "Error retrieving admin payin transactions",
-    });
+      console.log("Error getting admin transactions:", error);
+      log.error("Error getting admin transactions:", error);
+      res.status(500).send({
+          messageCode: "ERR_GET_ADMIN_TRANSACTIONS",
+          message: "Error retrieving admin payin transactions",
+      });
   }
 });
 

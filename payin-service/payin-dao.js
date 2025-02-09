@@ -25,7 +25,7 @@ const { users } = require("../user-service/db/schema");
 const IndianNameEmailGenerator = require("../payin-service/utlis");
 const { walletTransactions } = require("../wallet-service/db/schema");
 const nameEmailGenerator = new IndianNameEmailGenerator();
-
+const {  apiConfigs } = require('../api-config-service/db/schema');
 class PayinDao {
   async logVendorResponseError(params) {
     try {
@@ -546,7 +546,13 @@ class PayinDao {
           or(
             like(payinTransactions.uniqueId, `%${search}%`),
             like(payinTransactions.vendorTransactionId, `%${search}%`),
-            like(payinTransactions.transactionId, `%${search}%`) // Added this line
+            like(payinTransactions.transactionId, `%${search}%`),
+            like(users.username, `%${search}%`),
+            like(users.firstname, `%${search}%`),
+            like(users.lastname, `%${search}%`),
+            like(users.emailId, `%${search}%`),
+            like(users.phoneNo, `%${search}%`),
+            like(apiConfigs.name, `%${search}%`)
           )
         );
       }
@@ -557,7 +563,7 @@ class PayinDao {
         db
           .select({
             id: payinTransactions.id,
-            transactionId: payinTransactions?.transactionId,
+            transactionId: payinTransactions.transactionId,
             amount: payinTransactions.amount,
             uniqueId: payinTransactions.uniqueId,
             chargeValue: payinTransactions.chargeValue,
@@ -566,6 +572,10 @@ class PayinDao {
             createdAt: payinTransactions.createdAt,
             updatedAt: payinTransactions.updatedAt,
             userId: payinTransactions.userId,
+            apiConfig: {
+              name: apiConfigs.name,
+              baseUrl: apiConfigs.baseUrl,
+            },
             user: {
               username: users.username,
               firstname: users.firstname,
@@ -576,6 +586,10 @@ class PayinDao {
           })
           .from(payinTransactions)
           .leftJoin(users, eq(payinTransactions.userId, users.id))
+          .leftJoin(
+            apiConfigs,
+            eq(payinTransactions.apiConfigId, apiConfigs.id)
+          )
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .limit(limit)
           .offset(offset)
@@ -586,10 +600,14 @@ class PayinDao {
             count: sql`count(*)`,
           })
           .from(payinTransactions)
+          .leftJoin(users, eq(payinTransactions.userId, users.id))
+          .leftJoin(
+            apiConfigs,
+            eq(payinTransactions.apiConfigId, apiConfigs.id)
+          )
           .where(conditions.length > 0 ? and(...conditions) : undefined),
       ]);
 
-      // console.log("transactions--> ", transactions[0]);
       const [summary] = await db
         .select({
           totalAmount: sql`SUM(amount)`,
@@ -747,7 +765,12 @@ class PayinDao {
           transaction.transactionId,
           transaction.id
         );
-        console.log("isPayInTransactionSettled--> ",isPayInTransactionSettled,isSuccess, transaction.id);
+        console.log(
+          "isPayInTransactionSettled--> ",
+          isPayInTransactionSettled,
+          isSuccess,
+          transaction.id
+        );
         if (isPayInTransactionSettled < 2) {
           if (isSuccess) {
             await walletDao.updateWalletBalance(
