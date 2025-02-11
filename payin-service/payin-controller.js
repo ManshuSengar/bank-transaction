@@ -1031,7 +1031,7 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
               }
 
               // Process transactions in batches
-              const batchSize = 50;
+              const batchSize = 200;
               for (let i = 0; i < data.length; i += batchSize) {
                   const batch = data.slice(i, i + batchSize);
                   
@@ -1047,7 +1047,7 @@ payinRouter.post("/admin/bulk-check-status", authenticateToken, async (req, res)
                               return;
                           }
                           console.log("transaction Id--> ",uniqueId);
-                          const transaction = await payinDao.getTransactionByUniqueId(uniqueId);
+                          const transaction = await payinDao.getTransactionByTransactionId(uniqueId);
                           console.log("transaction Id--> ",transaction);
 
 

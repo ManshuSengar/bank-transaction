@@ -547,12 +547,12 @@ class PayinDao {
             like(payinTransactions.uniqueId, `%${search}%`),
             like(payinTransactions.vendorTransactionId, `%${search}%`),
             like(payinTransactions.transactionId, `%${search}%`),
-            like(users.username, `%${search}%`),
-            like(users.firstname, `%${search}%`),
-            like(users.lastname, `%${search}%`),
-            like(users.emailId, `%${search}%`),
-            like(users.phoneNo, `%${search}%`),
-            like(apiConfigs.name, `%${search}%`)
+            // like(users.username, `%${search}%`),
+            // like(users.firstname, `%${search}%`),
+            // like(users.lastname, `%${search}%`),
+            // like(users.emailId, `%${search}%`),
+            // like(users.phoneNo, `%${search}%`),
+            // like(apiConfigs.name, `%${search}%`)
           )
         );
       }
@@ -708,6 +708,19 @@ class PayinDao {
     }
   }
 
+  async getTransactionByTransactionId(transactionId) {
+    try {
+      const [transaction] = await db
+        .select()
+        .from(payinTransactions)
+        .where(eq(payinTransactions.transactionId, transactionId))
+        .limit(1);
+      return transaction;
+    } catch (error) {
+      log.error("Error getting transaction:", error);
+      throw error;
+    }
+  }
   async isPayInTrxSettled(transactionId, id) {
     const result = await db
       .select({ count: count() })
@@ -715,7 +728,7 @@ class PayinDao {
       .where(
         or(
           eq(walletTransactions.reference, transactionId),
-          eq(walletTransactions.id, id)
+          eq(walletTransactions.reference, id)
         )
       );
     console.log("Checking for transactionId:", transactionId, "and id:", id);
@@ -744,7 +757,7 @@ class PayinDao {
             )
           )
           .returning();
-
+          console.log("updatedTransaction--> ",updatedTransaction);
         if (!updatedTransaction) {
           return null; // Indicate no update happened
         }
@@ -802,6 +815,7 @@ class PayinDao {
         return updatedTransaction;
       });
     } catch (error) {
+      console.log("error--> ",error);
       log.error("Error processing status change:", error);
       throw error;
     }
