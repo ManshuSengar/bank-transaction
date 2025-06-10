@@ -657,3 +657,194 @@ export const RfExternalRating = () => {
     </div>
   );
 };
+
+import React from 'react';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Button, Paper, IconButton, Grid } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import AddIcon from '@mui/icons-material/Add';
+import { useAppSelector } from '../../../app/hooks';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import moment from 'moment';
+
+
+const ExternalRatingTableForm = () => {
+    const { applId, appDataNew } = useAppSelector((state: any) => state.userStore);
+    const validationSchema = Yup.object().shape({
+        ratings: Yup.array().of(
+            Yup.object().shape({
+                agencyName: Yup.string().required("Required"),
+                instrument: Yup.string().required("Required"),
+                amount: Yup.number().typeError("Must be a number").required("Required"),
+                externalRatingDesc: Yup.string().required("Required"),
+                ratingDate: Yup.string().required("Required"),
+                // prevRating: Yup.string().required("Required"),
+                // prevratingDate: Yup.string().required("Required"),
+                // precPrevRating: Yup.string().required("Required"),
+                // precPrevRatingDate: Yup.string().required("Required")
+            })
+        ),
+    })
+
+    const initialValues = {
+        ratings: [
+            {
+                id: 1,
+                applId: applId,
+                agencyName: "",
+                instrument: "",
+                amount: "",
+                ratingDate: null,
+                externalRatingDesc: "",
+                //   prevRating: "",
+                //   prevratingDate: null,
+                //   precPrevRating: "",
+                //   precPrevRatingDate: null,
+            },
+        ],
+    }
+
+    //   const [submitForm, { isLoading, isSuccess, isError }] = useSubmitFormMutation();
+
+    const handleSubmit = () => {
+
+    }
+
+    return (
+        <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+        >
+            {({ values, setFieldValue, errors, touched, handleChange }) => (
+                <Form>
+                    <FieldArray name="ratings">
+                        {({ push, remove }) => (
+                            <>
+                                {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                        && loginCookiesData?.regType === "Maker" && */}
+                                <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
+                                    variant="contained" color="primary" style={{ display: 'block' }}
+                                    onClick={() => push({
+                                        applId: applId,
+                                        agencyName: "",
+                                        instrument: "",
+                                        amount: "",
+                                        outlook: "",
+                                        ratingDate: null,
+                                        externalRatingDesc: ""
+                                    })
+                                    }>
+                                    Add <AddCircleIcon />
+                                </Button>
+                                {/* } */}
+                                <div className="wrap-inner-table mt-0 mb-0 table-responsive">
+                                    <Table className="table mb-0" sx={{ minWidth: '100%' }} aria-label="external ratings table">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell width={'100px'}> </TableCell>
+                                                <TableCell width={'350px'} ><b>Name of Rating Agency</b></TableCell>
+                                                <TableCell width={'150px'}><b>Instrument</b></TableCell>
+                                                <TableCell width={'150px'}><b>Amount (in ₹ crore)</b></TableCell>
+                                                <TableCell width={'250px'}><b>Rating</b></TableCell>
+                                                <TableCell width={'250px'}><b>Outlook</b></TableCell>
+                                                <TableCell width={'250px'}><b>Date of Rating </b></TableCell>
+
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {values?.ratings?.map((exRating: any, index: number) => (
+                                                <TableRow key={index + 1}>
+                                                    {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                                                                && loginCookiesData?.regType === "Maker" && */}
+                                                    <TableCell width={'100px'}>
+                                                        <IconButton aria-label="delete" color="error"
+                                                            //onClick={() => exRating?.id ? handleClickOpen(exRating.id) : remove(index)}
+                                                            disabled={values.ratings.length === 1}>
+                                                            <DeleteIcon />
+                                                        </IconButton>
+                                                    </TableCell>
+                                                    {/* } */}
+                                                    <TableCell width={'350px'}>
+                                                        <Grid item xs={12}>
+                                                            <EnhancedDropDown
+                                                                label=""
+                                                                name={`ratings.${index}.agencyName`}
+                                                                domain="mstr/getRatingAgency"
+                                                            />
+                                                        </Grid>
+                                                    </TableCell>
+                                                    <TableCell width={'150px'}>
+                                                        <TextBoxField label=""
+                                                            name={`ratings.${index}.instrument`} />
+                                                    </TableCell>
+                                                    <TableCell width={'150px'}>
+                                                        <TextBoxField label=""
+                                                            name={`ratings.${index}.amount`} type="number" />
+                                                    </TableCell>
+                                                    <TableCell width={'250px'}>
+                                                        <Grid item xs={12}>
+                                                            <EnhancedDropDown
+                                                                label=""
+                                                                name={`ratings.${index}.externalRatingDesc`}
+                                                                domain="mstr/getRatingCode"
+                                                            />
+                                                        </Grid>
+                                                    </TableCell>
+
+                                                    <TableCell width={'250px'}>
+                                                        <TextBoxField label=""
+                                                            name={`ratings.${index}.outlook`} />
+                                                    </TableCell>
+
+                                                    <TableCell width={'250px'} className='cldrAll'>
+                                                        <AdvanceDatePickerField label=""
+                                                            name={`ratings.${index}.ratingDate`}
+                                                            onChange={(date: Date) => {
+                                                                setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
+                                                            }}
+                                                            disableFuture={true}
+                                                        />
+                                                    </TableCell>
+
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                    {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                                                && loginCookiesData?.regType === "Maker" && */}
+                                    <div className='mt-3'>
+                                        <Button
+                                            //disabled={btnsDisabled ? true : false}
+                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                            type='submit'
+                                            variant="contained"> Save <CheckCircleOutlineIcon />
+                                        </Button>
+
+                                        {/* <Button
+                        //disabled={btnsDisabled ? true : false}
+                        className="sbmtBtn sbmtBtn_scn  mt-0 mb-3 ms-3"
+                        type='submit'
+                        //onClick={() => handleClickSetAction('02')}
+                        variant="contained"> Submit <SaveAsIcon />
+                    </Button> */}
+                                    </div>
+                                    {/* } */}
+                                </div>
+                            </>
+                        )}
+                    </FieldArray>
+                </Form>
+            )}
+        </Formik>
+    );
+};
+
+export default ExternalRatingTableForm;
+
+
