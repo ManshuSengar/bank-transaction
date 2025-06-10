@@ -35,6 +35,10 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import FinancialTable from "../common-components/FinancialTable";
 import { TextAreaField } from "../../../components/framework/TextAreaAuto";
 import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
+import { RfBriefBackground } from "./RfBriefBackground";
+import { RfInternalRating } from "./RfInternalRating";
+import { RfExternalRating } from "./RfExternalRating";
+import { RfRateOfIntrest } from "./RfRateOfIntrest";
 
 interface TabPanelProps {
     children?: React.ReactNode;
@@ -211,528 +215,61 @@ const IntresetRateFixation = () => {
                                             aria-controls="panel2X-content"
                                             id="panel2X-header"
                                         >
-                                            Background
+                                           Brief Background
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-                                                            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-                                                            <TableCell><b>Remarks</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
+                                            <RfBriefBackground />
+                                        </AccordionDetails>
+                                    </Accordion>
 
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>1</TableCell>
-                                                            <TableCell>Name of the Borrower</TableCell>
-
-                                                            <TableCell className="fldsSizeCstm">
-                                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                    <InputLabel id="">Select Borrower</InputLabel>
-                                                                    <Select
-                                                                        labelId=""
-                                                                        id="demo-select-small"
-                                                                        value={borrower}
-                                                                        label="Select Borrower"
-                                                                        onChange={handleChangeBrw}
-                                                                    >
-                                                                        <MenuItem value={0}>Borrower 1</MenuItem>
-                                                                        <MenuItem value={1}>Borrower 2</MenuItem>
-                                                                    </Select>
-                                                                </FormControl>
-
-                                                                {/* <FormControl fullWidth>
-                                                                                                  <FormControl fullWidth
-                                                                                                      error={Boolean(touched.borrowerName && errors.borrowerName)}
-                                                                                                  >
-                                                                                                      <Autocomplete
-                                                                                                          options={topBorrowers}
-                                                                                                          getOptionLabel={(option) => option.label}
-                                                                                                          value={values.borrowerName}
-                                                                                                          onChange={(_, value) => {
-                                                                                                              setFieldValue("borrowerName", value)
-                                                                                                              setBorrowerSelected(value as any)
-                                                                                                          }}
-                                                                                                          onBlur={handleBlur}
-                                                                                                          renderInput={(params) => (
-                                                                                                              <TextField
-                                                                                                                  {...params}
-                                                                                                                  label="Select Borrower"
-                                                                                                                  name="borrowerName"
-                                                                                                                  variant="outlined"
-                                                                                                                  error={Boolean(touched.borrowerName && errors.borrowerName)}
-                                                                                                                  helperText={
-                                                                                                                      touched.borrowerName && errors.borrowerName
-                                                                                                                          ? (errors.borrowerName as string)
-                                                                                                                          : ""}
-                                                                                                                  style={{
-                                                                                                                      fontSize: '11px',
-                                                                                                                      paddingTop: '0 !important',
-                                                                                                                      paddingBottom: '0 !important'
-                                                                                                                  }}
-                                                                                                              />
-                                                                                                          )}
-                                                                                                      />
-                                                                                                  </FormControl>
-                                                                                              </FormControl> */}
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>2</TableCell>
-                                                            <TableCell>Scheme</TableCell>
-
-                                                            <TableCell className="fldsSizeCstm">
-                                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                    <Autocomplete
-                                                                        disablePortal
-                                                                        options={topSchemes}
-                                                                        sx={{ width: 300 }}
-                                                                        renderInput={(params: any) => <TextField {...params} label="Scheme" />}
-                                                                    />
-                                                                </FormControl>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>3</TableCell>
-                                                            <TableCell>Sanctioned Limit</TableCell>
-                                                            <TableCell>
-                                                                <strong> Credit Limit of &#8377; 4.5 crore</strong>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>4</TableCell>
-                                                            <TableCell>Details of Sanction</TableCell>
-
-                                                            <TableCell>
-                                                                Sanctioned by <strong>CCC-CGM/2025/366</strong> in its <strong>6752</strong> meeting held on <strong> 24/04/2025</strong>.
-
-
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>5</TableCell>
-                                                            <TableCell>Validity of Sanction</TableCell>
-
-                                                            <TableCell>29/05/2025</TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}>6</TableCell>
-                                                            <TableCell>External rating at the time of sanction</TableCell>
-
-                                                            <TableCell>
-                                                                <ExternalRatingTableForm />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}>7</TableCell>
-                                                            <TableCell>Latest External Rating</TableCell>
-
-                                                            <TableCell>
-                                                                <ExternalRatingTableForm />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell>8</TableCell>
-                                                            <TableCell>Internal Score - At Sanction</TableCell>
-
-                                                            <TableCell>
-                                                                <Table>
-                                                                    <TableRow>
-                                                                        <TableCell style={{ border: '0px' }}>
-                                                                            <Table className="rtnTbl">
-                                                                                <TableHead>
-                                                                                    <TableRow>
-                                                                                        <TableCell>
-                                                                                            <b>FY</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b>Internal Score</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b> Comments</b>
-                                                                                        </TableCell>
-                                                                                    </TableRow>
-                                                                                </TableHead>
-
-                                                                                <TableRow>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="FY"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="Internal Score"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        Textarea
-                                                                                    </TableCell>
-                                                                                </TableRow>
-
-                                                                                <TableRow>
-                                                                                    <TableCell colSpan={3}>
-                                                                                        <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                                                                                            Add <AddCircleIcon />
-                                                                                        </Button>
-                                                                                    </TableCell>
-                                                                                </TableRow>
-                                                                            </Table>
-
-                                                                        </TableCell>
-                                                                    </TableRow>
-
-                                                                </Table>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>9</TableCell>
-                                                            <TableCell>Internal Score - at Last Review / Present </TableCell>
-
-                                                            <TableCell>
-                                                                <Table>
-                                                                    <TableRow>
-                                                                        <TableCell style={{ border: '0px' }}>
-                                                                            <Table className="rtnTbl">
-                                                                                <TableHead>
-                                                                                    <TableRow>
-                                                                                        <TableCell>
-                                                                                            <b>FY</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b>Internal Score</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b> Comments</b>
-                                                                                        </TableCell>
-                                                                                    </TableRow>
-                                                                                </TableHead>
-
-                                                                                <TableRow>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="FY"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="Internal Score"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        Textarea
-                                                                                    </TableCell>
-                                                                                </TableRow>
-
-                                                                                <TableRow>
-                                                                                    <TableCell colSpan={3}>
-                                                                                        <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                                                                                            Add <AddCircleIcon />
-                                                                                        </Button>
-                                                                                    </TableCell>
-                                                                                </TableRow>
-                                                                            </Table>
-
-                                                                        </TableCell>
-                                                                    </TableRow>
-
-                                                                </Table>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>10</TableCell>
-                                                            <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate </TableCell>
-
-                                                            <TableCell>
-                                                                <div className="alnSet flxWrp">
-                                                                    <TextField
-                                                                        label="Sanctioning Committee"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    /> <TextField
-                                                                        label="minutes"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    /> has sanctioned term loan of  <TextField
-                                                                        label="Sanctioned Amount"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />crore to  <TextField
-                                                                        label="NBFC Name"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    /> and requested for approval from <TextField
-                                                                        label="Committee name"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />
-                                                                    <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                        <InputLabel id="">Select</InputLabel>
-                                                                        <Select
-                                                                            labelId=""
-                                                                            id=""
-                                                                            value={borrower}
-                                                                            label="Borrower"
-                                                                            onChange={handleChangeBrw}
-                                                                        >
-                                                                            <MenuItem value={0}>One</MenuItem>
-                                                                            <MenuItem value={1}>Two</MenuItem>
-                                                                        </Select>
-                                                                    </FormControl> for RoI of  <TextField
-                                                                        label="Interest Rate"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    /> by exercising discretion of
-                                                                    <TextField
-                                                                        label="minutes"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />valid till
-                                                                    <TextField
-                                                                        label="Date"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />
-                                                                    <TextField
-                                                                        label="Appraisal"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>10</TableCell>
-                                                            <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate </TableCell>
-                                                            <TableCell>
-                                                                <strong>CCC-CGM/2025/366</strong> has sanctioned term loan of <strong>220 crore</strong> to Test NBFC and requested for approval from <strong>CCC-CGM/2025/366</strong> for RoI of 4.5% by exercising discretion of discretion from minutes/appraisal valid till <strong> 24/04/2025</strong>.
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>11</TableCell>
-                                                            <TableCell>Disbursement already made out of above sanction / present o/s. under loan</TableCell>
-
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                    <TextField
-                                                                        label="Disbursement"
-                                                                        id=""
-                                                                        size="small" className="fnt_sml"
-                                                                    />
-                                                                </FormControl>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>12</TableCell>
-                                                            <TableCell>Rate of interest applied on new disbursements/ resets done during last 6 months and details of existing loans</TableCell>
-
-                                                            <TableCell>
-                                                                <Table className="rtnTbl">
-                                                                    <TableHead>
-                                                                        <TableRow>
-                                                                            <TableCell colSpan={10}><b>Disbursement</b></TableCell>
-                                                                        </TableRow>
-                                                                        <TableRow>
-                                                                            <TableCell><b>Loan Account</b></TableCell>
-                                                                            <TableCell><b>Date of Disbursement</b></TableCell>
-                                                                            <TableCell><b>Amount Disbursed</b></TableCell>
-                                                                            <TableCell><b>Amount o/s </b></TableCell>
-                                                                            <TableCell><b>ROI</b></TableCell>
-                                                                            <TableCell><b>Benchmark</b></TableCell>
-                                                                            <TableCell><b>Fixed/Floating </b></TableCell>
-                                                                            <TableCell><b>Reset Clause </b></TableCell>
-                                                                        </TableRow>
-                                                                    </TableHead>
-                                                                    <TableBody>
-                                                                        <TableRow>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Loan Account"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Date of Disbursement"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Amount Disbursed"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Amount o/s"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="ROI"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Benchmark"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Fixed/Floating"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Reset Clause"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    </TableBody>
-                                                                </Table>
-
-                                                                <Table className="mt-4 rtnTbl">
-                                                                    <TableHead>
-                                                                        <TableRow>
-                                                                            <TableCell colSpan={10}><b>Reset</b></TableCell>
-                                                                        </TableRow>
-                                                                        <TableRow>
-                                                                            <TableCell><b>Loan Account</b></TableCell>
-                                                                            <TableCell><b>Date of Reset</b></TableCell>
-                                                                            <TableCell><b>Amount Disbursed</b></TableCell>
-                                                                            <TableCell><b>Amount o/s </b></TableCell>
-                                                                            <TableCell><b>ROI</b></TableCell>
-                                                                            <TableCell><b>Benchmark</b></TableCell>
-                                                                            <TableCell><b>Fixed/Floating </b></TableCell>
-                                                                            <TableCell><b>Reset Clause </b></TableCell>
-                                                                        </TableRow>
-                                                                    </TableHead>
-                                                                    <TableBody>
-                                                                        <TableRow>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Loan Account"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Date of Disbursement"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Amount Disbursed"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Amount o/s"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="ROI"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Benchmark"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Fixed/Floating"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <TextField
-                                                                                    label="Reset Clause"
-                                                                                    id=""
-                                                                                    size="small" className="fnt_sml"
-                                                                                />
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    </TableBody>
-                                                                </Table>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>13</TableCell>
-                                                            <TableCell>Present total o/s under all loans</TableCell>
-
-                                                            <TableCell>
-                                                                <div className="alnSet"> &#8377;
-                                                                    <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                        <TextField
-                                                                            label="Amount"
-                                                                            id=""
-                                                                            size="small" className="fnt_sml"
-                                                                        />
-                                                                    </FormControl> crore
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-
+                                     {/* __________Background___________ */}
+                                     <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel20X"}
+                                        onChange={onOpenChange("panel20X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel20X-content"
+                                            id="panel20X-header"
+                                        >
+                                           External Rating
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfExternalRating />
+                                        </AccordionDetails>
+                                    </Accordion>
+                                     {/* __________Background___________ */}
+                                     <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel21X"}
+                                        onChange={onOpenChange("panel21X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel21X-content"
+                                            id="panel21X-header"
+                                        >
+                                           Internal Rating 
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfInternalRating />
+                                        </AccordionDetails>
+                                    </Accordion> {/* __________Background___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel22X"}
+                                        onChange={onOpenChange("panel22X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel22X-content"
+                                            id="panel22X-header"
+                                        >
+                                          Rate of Intrest
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfRateOfIntrest />
                                         </AccordionDetails>
                                     </Accordion>
 
@@ -1809,883 +1346,592 @@ const IntresetRateFixation = () => {
 
 export default memo(IntresetRateFixation);
 
- https://dev-nbfc.sidbi.in/refapi/interestratefixation/savefixationinterestrate
-                                                                                                                                                                                                                                        
-  {
-  "applId": "string",
-  "memorandum": "string",
-  "disbRate": 0,
-  "proposedDisb": "string",
-  "sanctionAmt": 0,
-  "nameOfBorrower": "string",
-  "schCd": "string",
-  "sancLimit": 0,
-  "sancBy": "string",
-  "meetingNo": 0,
-  "meetingDate": "2025-06-10",
-  "sancValidity": "2025-06-10",
-  "roiSancTerms": "string",
-  "presentOs": 0,
-  "presentTotalOs": 0,
-  "saveStatus": "string"
-}
-
-  url -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getfixationinterestrate/1212' \
-  -H 'accept: */*'                                                                                                                    
-                                                                                                                      
-                                                                                                                      
-                                                                                                                      
-                                                                                                                      
-
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { customBaseQuery } from "../../app/commonApi";
-import { ProfileDetailsValues } from "../../models/application-form/profileDetails";
-import { MembershipValues } from "../../models/application-form/memberProfileAuditor";
-import { ComplianceValues } from "../../models/application-form/complianceDetails";
-import { DisclosureValues } from "../../models/application-form/disclosureDetails";
-
-const BASE_PATH = 'appl';
-interface DataItem {
-    id: number;
-    originalField: string;
-}
-
-interface TransformedDataItem {
-    id: number;
-    transformedField: string;
-}
-export const applicationFormApi = createApi({
-    reducerPath: 'applicationFormApi',
-    baseQuery: customBaseQuery,
-    tagTypes: ['productScheme', 'profileDetails', 'profileAuditor', 'losListing',
-        'Rating', 'ComplianceValues', 'Disclosure', 'FinancialDetails', "finalSubmit",
-        "declaration", "earning", "liquidityProfile", "onlineDashBoard", "getApplcatnCountByUserId", "genOnlineReportByApplId"],
-    endpoints: (builder) => ({
-        getDashApplFormData: builder.query<any, any>({
-            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=ONLINE&userId=${userId}`,
-            providesTags: ['onlineDashBoard']
-        }),
-        getDashApplLOSFormData: builder.query<any, any>({
-            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=LOS&userId=${userId}`,
-            providesTags: ['onlineDashBoard']
-        }),
-        getApplcatnCountByUserId: builder.query<any, any>({
-            query: (params) => ({
-                url: `${BASE_PATH}/getCntFrApplcatnbyUserId`,
-                params: { ...params },
-            }),
-        }),
-        genOnlineReportByApplId: builder.query<any, { scheme: string; applId: string }>({
-            query: (params) => ({
-                url: `${BASE_PATH}/genOnlineReport`,
-                params,
-            }),
-            providesTags: ['genOnlineReportByApplId'],
-        }),
-        // genOnlineReportByApplId: builder.query<any, any>({
-        //     query: (params) => ({
-        //         url: `${BASE_PATH}/genOnlineReport`,
-        //         params: { ...params },
-        //     }),
-        //     providesTags: ['genOnlineReportByApplId']
-        // }),
-
-        getCntFrApplcatnFormData: builder.query<any, void>({
-            query: () => `${BASE_PATH}/getCntFrApplcatn?type=LOS`,
-            providesTags: ['onlineDashBoard']
-        }),
-        getBasicFormData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getApplForm/${applId}`,
-            providesTags: ['productScheme']
-        }),
-        saveBasicFormTerms: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveApplForm`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`productScheme`],
-        }),
-        getProfileDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcProfileDet/${applId}`,
-            providesTags: ['profileDetails']
-        }),
-        saveProfileDetails: builder.mutation<any, ProfileDetailsValues>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcProfileDet`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`profileDetails`],
-        }),
-
-        getAddressByPinCode: builder.query<any, string>({
-            query: (pinCode) => `mstr/getStDisDtl?pincode=${pinCode}`,
-        }),
-
-        getProfileAuditorDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcAuditorDet/${applId}`,
-            providesTags: ['profileAuditor']
-        }),
-        saveProfileAuditorDetails: builder.mutation<any, MembershipValues>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcAuditorDet`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`profileAuditor`],
-        }),
-
-        getRatingDetails: builder.query<any, string>({
-            query: (applId) => `appl/externalRating/${applId}`,
-            providesTags: ['Rating'],
-            transformResponse: (response: any) => {
-                return {
-                    ratings: response
-                }
-            },
-        }),
-        saveRatingDetails: builder.mutation<any, MembershipValues>({
-            query: (data) => ({
-                url: `appl/externalRating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`Rating`],
-        }),
-
-        getComplianceDetails: builder.query<any, string>({
-            query: (applId) => `appl/getNbfcSecurity/${applId}`,
-            providesTags: ['ComplianceValues'],
-        }),
-        saveComplianceDetails: builder.mutation<any, ComplianceValues>({
-            query: (data) => ({
-                url: `appl/saveNbfcSecurity`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`ComplianceValues`],
-        }),
-
-        getDisclosureDetails: builder.query<any, string>({
-            query: (applId) => `appl/getNbfcDisclosure/${applId}`,
-            providesTags: ['Disclosure'],
-        }),
-        saveDisclosureDetails: builder.mutation<any, DisclosureValues>({
-            query: (data) => ({
-                url: `appl/saveNbfcDisclosure`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`Disclosure`],
-        }),
-
-        getNbfcDetails: builder.query<any, string>({
-            query: (nbfcId) => `/nbfc/getNbfcName?nbfcId=${nbfcId}`,
-        }),
-
-        getListingDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getApplFormListing/${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        saveListingFormTerms: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveApplFormListing`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['losListing'],
-        }),
-
-        getMenuSectionFormData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getSection?applId=${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        deleteStockListingDetailsById: builder.mutation<any, any>({
-            query: ({ applId, index }) => ({
-                url: `${BASE_PATH}/delApplFormListing/${applId}/${index}`,
-                method: 'DELETE',
-            }),
-            invalidatesTags: ['losListing'],
-        }),
-
-        getBorrowerDetails: builder.query<any, string>({
-            query: (applId) => `appl/getBriefApplDetailsS?applId=${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        getFinancialDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/FinancialDtls/${applId}`,
-            providesTags: ['FinancialDetails']
-        }),
-
-        saveFinancialDetailsFormTerms: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/FinancialDtls/`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`FinancialDetails`],
-        }),
-
-        getDeclaration: builder.query<any, string>({
-            query: () => `mstr/getApplDecl`,
-            providesTags: [`declaration`],
-        }),
 
 
-        getDeclarationDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcDeclaration/${applId}`,
-            providesTags: [`declaration`],
-        }),
+import React from 'react'
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Tabs,
+  Typography,
+  TextField,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  SelectChangeEvent,
+  Button,
+  Autocomplete,
+} from "@mui/material";
+import Tab from "@mui/material/Tab";
+import Box from "@mui/material/Box";
+import Section from "../../nbfc/Section";
+import { useParams } from "react-router-dom";
+import Workflow from "../../workflow/Workflow";
+import { useAppSelector } from "../../../app/hooks";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ReviewOfNBFC from "../../monitoringPages/reviewModule/ReviewOfNBFC/ReviewOfNBFC";
+import MonitoringExternalRating from "../../monitoringPages/reviewModule/MonitoringExternalRating/MonitoringExternalRating";
+import ComplianceToPCAFramwork from "../../monitoringPages/reviewModule/complianceToPca/ComplianceToPCAFramwork";
+import CriticalEvents from "../../monitoringPages/reviewModule/CriticalEvents/CriticalEvents";
+import AnyOtherPendingComments from "../../monitoringPages/reviewModule/AnyOtherPendingComments/AnyOtherPendingComments";
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import FinancialTable from "../common-components/FinancialTable";
+import { TextAreaField } from "../../../components/framework/TextAreaAuto";
+import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
 
-        saveDeclaration: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcDeclaration`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`declaration`],
-        }),
 
-        getStockStatus: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getListingDet/${applId}`,
-            providesTags: ['losListing']
-        }),
 
-        saveStockStatus: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveListingDet`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`losListing`],
-        }),
+export const RfBriefBackground = () => {
 
-        getEarnigDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getEaringsProfile/${applId}`,
-            providesTags: ['earning']
-        }),
+  const [value, setValue] = React.useState(0);
+  const { id } = useParams();
+  console.log("id", id);
+  const { applId, } = useAppSelector((state: { userStore: any; }) => state.userStore);
 
-        saveEarnigDetails: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveEaringsProfile`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`earning`],
-        }),
-
-        getLiquidityDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getLiquidityProfile/${applId}`,
-            providesTags: ['liquidityProfile']
-        }),
-
-        saveliquidityProfile: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveLiquidityProfile`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`liquidityProfile`],
-        }),
-
-        getTranxYr: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getTranxYr?applId=${applId}`,
-        }),
-        getBriefApplDetailsForStore: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
-        }),
-
-        getSchDetail: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getSchDetail?applId=${applId}`,
-        }),
-
-        getCashflowProject: builder.query<any, string>({
-            query: (applId) => `appl/getBusinessProj/${applId}`,
-        }),
-
-        getCashflowProjectCash: builder.query<any, string>({
-            query: (applId) => `appl/getPrjCashFlow/${applId}`,
-        }),
-        getCashflowProjectCashMain: builder.query<any, string>({
-            query: (applId) => `appl/getCashFlowPrj/${applId}`,
-        }),
-        getApplicationList: builder.query<any, any>({
-            query: (data) => `appl/getApplByStatus?type=${data.portal}&userId=${data.userId}&statusCode=${data.valueOne}`,
-        }),
-
-        getBriefApplDetailsData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
-
-        }),
-
-        getAppReportData: builder.query<any, any>({
-            query: ({ applId, schId }) => `appl/genOnlineReport?applId=${applId}&scheme=${schId}`,
-        }),
-
-        getStockExchangeValue: builder.query<any, any>({
-            query: () => `mstr/getStockExchange`,
-
-        }),
-
-        updateFinalSubmit: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/appl/updateFinalSubmit`,
-                method: 'PUT',
-                body: data,
-            }),
-            invalidatesTags: [`finalSubmit`],
-        }),
-    }),
-});
-
-export const {
-    useLazyGenOnlineReportByApplIdQuery,
-    useGenOnlineReportByApplIdQuery,
-    useGetBriefApplDetailsDataQuery,
-    useGetApplcatnCountByUserIdQuery,
-    useGetBasicFormDataQuery,
-    useSaveBasicFormTermsMutation,
-    useSaveProfileDetailsMutation,
-    useGetProfileDetailsQuery,
-    useGetAddressByPinCodeQuery,
-    useLazyGetAddressByPinCodeQuery,
-    useSaveProfileAuditorDetailsMutation,
-    useGetProfileAuditorDetailsQuery,
-    useGetRatingDetailsQuery,
-    useSaveRatingDetailsMutation,
-    useGetComplianceDetailsQuery,
-    useSaveComplianceDetailsMutation,
-    useGetDisclosureDetailsQuery,
-    useSaveDisclosureDetailsMutation,
-    useGetNbfcDetailsQuery,
-    useGetFinancialDetailsQuery,
-    useSaveFinancialDetailsFormTermsMutation,
-    useGetListingDetailsQuery,
-    useGetBorrowerDetailsQuery,
-    useSaveListingFormTermsMutation,
-    useGetMenuSectionFormDataQuery,
-    useDeleteStockListingDetailsByIdMutation,
-    useGetDeclarationQuery,
-    useSaveDeclarationMutation,
-    useGetDeclarationDetailsQuery,
-    useGetStockStatusQuery,
-    useSaveStockStatusMutation,
-    useGetEarnigDetailsQuery,
-    useSaveEarnigDetailsMutation,
-    useGetLiquidityDetailsQuery,
-    useSaveliquidityProfileMutation,
-    useLazyGetTranxYrQuery,
-    useLazyGetBriefApplDetailsForStoreQuery,
-    useLazyGetSchDetailQuery,
-    useGetCashflowProjectQuery,
-    useGetCashflowProjectCashQuery,
-    useGetCashflowProjectCashMainQuery,
-    useGetDashApplFormDataQuery,
-    useGetCntFrApplcatnFormDataQuery,
-    useGetDashApplLOSFormDataQuery,
-    useGetApplicationListQuery,
-    useLazyGetAppReportDataQuery,
-    useUpdateFinalSubmitMutation,
-    useGetStockExchangeValueQuery
-} = applicationFormApi;
-                                                                                                                      
-                                                                                                                      
-                                                                                                                      
-
-                                                                                                                      
-                                                                                                                      
-                                                                                                                      
-                                                                                                                      
- import { Formik, Form } from 'formik';
-import { Button, Card, CardContent, Grid } from '@mui/material';
-import { TextBoxField } from '../../../../components/framework/TextBoxField';
-import { EnhancedDropDown } from '../../../../components/framework/EnhancedDropDown';
-import FormLoader from '../../../../loader/FormLoader';
-import AutoSave from '../../../../components/framework/AutoSave';
-import { useGetProfileDetailsQuery, useSaveProfileDetailsMutation, useLazyGetAddressByPinCodeQuery, useGetNbfcDetailsQuery }
-    from '../../../../features/application-form/applicationForm';
-import { differenceInYears } from 'date-fns';
-import { AdvanceTextBoxField } from '../../../../components/framework/AdvanceTextBoxField';
-import { initialValues, validationSchema } from '../../../../models/application-form/profileDetails';
-import { TextAreaField } from '../../../../components/framework/TextAreaAuto';
-import { AdvanceDatePickerField, CheckboxField } from '../../../../components/framework/EnhancedComponents';
-import { useAppSelector } from '../../../../app/hooks';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { connect } from 'react-redux';
-import moment from 'moment';
-import { OnlineSnackbar } from "../../../../components/shared/OnlineSnackbar";
-import { useState } from 'react';
-import ConfirmationAlertDialog from '../../../../models/application-form/ConfirmationAlertDialog';
-
-const ProfileDetailsDefault = ({ applId }: any) => {
-    const [saveProfileDetails] = useSaveProfileDetailsMutation();
-    const { userData } = useAppSelector((state: any) => state.userStore);
-    const { data: profileData, isLoading } = useGetProfileDetailsQuery(applId, { skip: !applId, refetchOnMountOrArgChange: true });
-    const [getStateDistrict] = useLazyGetAddressByPinCodeQuery();
-    const { data: nbfcData, isLoading: isNbfcLoading } = useGetNbfcDetailsQuery(userData?.nbfcId, { skip: !userData?.nbfcId });
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<any>("");
-    const [severity, setSeverity] = useState<string>("success");
-
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<any>("");
-    const [actionVal, setActionVal] = useState<any>("");
-
-    const handleClose = () => {
-        setOpenSnackbar(false);
-    };
-    const handleCloseConfirmation = () => {
-        setActionVal(null);
-        setOpenConfirmation(false);
-    };
-    const initialFormValues = {
-        ...(profileData || initialValues),
-        applId,
-        panNo: nbfcData?.nbfcPanNo || '',
-        nbfcMFIId: nbfcData?.nbfcId
+  const [expanded, setExpanded] = React.useState("");
+  const onOpenChange =
+    (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
+      setExpanded(isExpanded ? panel : false);
     };
 
-    const handleSubmitConfirmation = (values: any) => {
-        setOpenConfirmation(false);
-        handleSubmitApis(values);
+  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    setValue(newValue);
+  };
+
+  const [borrower, setBorrower] = React.useState('');
+
+  const handleChangeBrw = (event: SelectChangeEvent) => {
+    setBorrower(event.target.value);
+  };
+
+  const topBorrowers = [
+    { label: 'Borrower 1', nbfcId: 1 },
+    { label: 'Borrower 2', nbfcId: 2 },
+    { label: 'Borrower 3', nbfcId: 3 },
+    { label: 'Borrower 4', nbfcId: 4 },
+  ];
+
+  const topSchemes = [
+    { label: 'Scheme of refinance to nbfcs', schCd: 'a' },
+    { label: 'Scheme 2', schCd: 'b' },
+    { label: 'Scheme 3', schCd: 'c' },
+    { label: 'Scheme 4', schCd: 'd' },
+    { label: 'Scheme 5', schCd: 'e' },
+    { label: "Scheme 6", schCd: 'f' }
+  ];
+
+  const options = [
+    { label: "Excellent", value: "Excellent" },
+    { label: "Good", value: "Good" },
+    { label: "Satisfactory", value: "Satisfactory" },
+    { label: "Moderate", value: "Moderate" },
+    { label: "Poor", value: "Poor" },
+    { label: "Default", value: "Default" },
+  ];
+  const dummyLoanAccounts: any[] = [
+    {
+      id: 1, loanAccountNo: '000405007899', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
+      currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
+      loanStatus: 'Approved'
+    },
+    {
+      id: 2, loanAccountNo: '000405007877', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
+      currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
+      loanStatus: 'Approved'
     }
+  ];
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
 
-    const handleSubmit = async (values: any) => {
-        let requestBody = { ...values };
-        requestBody.saveStatus = actionVal;
-        if (actionVal === '02') {
-            setFormData(requestBody);
-            setOpenConfirmation(true);
-        } else {
-            handleSubmitApis(requestBody);
-        }
-        setActionVal(null);
-    };
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>Name of the Borrower</TableCell>
 
-    const handleSubmitApis = async (values: any) => {
-        try {
-            if (await saveProfileDetails(values).unwrap()) {
-                if (values.saveStatus === '02' || values.saveStatus === '01') {
-                    setOpenSnackbar(true);
-                    setSeverity("success");
-                }
-                if (values.saveStatus === '02') {
-                    setSnackMsg("Section submitted successfully");
-                } else if (values.saveStatus === '01') {
-                    setSnackMsg("Record saved successfully");
-                }
-                return true;
-            }
-            setActionVal(null);
-            return false;
+            <TableCell className="fldsSizeCstm">
+              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
+                <InputLabel id="">Select Borrower</InputLabel>
+                <Select
+                  labelId=""
+                  id="demo-select-small"
+                  value={borrower}
+                  label="Select Borrower"
+                  onChange={handleChangeBrw}
+                >
+                  <MenuItem value={0}>Borrower 1</MenuItem>
+                  <MenuItem value={1}>Borrower 2</MenuItem>
+                </Select>
+              </FormControl>
+            </TableCell>
+          </TableRow>
 
-        } catch (err) {
-            console.error("Error saving profile details:", err);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("Failed to save");
-            return false;
-        }
-    };
-    const calculateVintage = (dateOfIncorporation: string) => {
-        if (!dateOfIncorporation) return 0;
-        const incorporationDate = new Date(dateOfIncorporation);
-        return differenceInYears(new Date(), incorporationDate);
-    };
+          <TableRow>
+            <TableCell>2</TableCell>
+            <TableCell>Scheme</TableCell>
 
-    const handlePinCodeChange = async (setFieldValue: any, pincode: string, prefix: 'regd' | 'corp') => {
-        setFieldValue(`${prefix}StateCd`, "");
-        setFieldValue(`${prefix}DistrictCd`, "");
-        
-        if (pincode?.length === 6) {
-            try {
-                const data = await getStateDistrict(pincode).unwrap();
-                if (data?.length > 0) {
-                    const address = data?.[0];
-                    setTimeout(() => {
-                        setFieldValue(`${prefix}StateCd`, address?.stateName);
-                        setFieldValue(`${prefix}DistrictCd`, address?.distName);
-                    }, 100);
-                }
-            } catch (error) {
-                console.error('Error fetching address:', error);
-            }
-        }
-    };
-
-    const handleClickSetAction = (action: any) => {
-        setActionVal(action);
-    };
-
-    if (isLoading) return <FormLoader />;
-
-    return (
-
-        <Card>
-            <CardContent className='p-0'>
-                <div className="wrap-appraisal-area">
-                    <ConfirmationAlertDialog
-                        id={applId}
-                        type={4}
-                        open={openConfirmation}
-                        handleClose={handleCloseConfirmation}
-                        handleDelete={handleSubmitConfirmation}
-                        values={formData}
-                    />
-                    <div className='custome-form'>
-                        <Formik
-                            initialValues={initialFormValues}
-                            onSubmit={handleSubmit}
-                            validateOnChange={true}
-                            validateOnBlur={true}
-                            validationSchema={validationSchema}
-                            enableReinitialize={true}
-                        >
-                            {({ values, setFieldValue }) => (
-                                <Form>
-                                    <fieldset disabled={values?.saveStatus === "02"}>
-                                        {values?.saveStatus !== "02" &&
-                                            <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={5000} />
-                                        }
-                                        <Grid container className='form-grid pt-2'>
-                                            <Grid spacing={2} container className='p-0'>
-                                                <Grid item xs={12} md={4}>
-                                                    <TextBoxField
-                                                        label="PAN Number"
-                                                        name="panNo"
-                                                        disabled={true}
-                                                        className='disabled-inputs-lbl'
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <TextBoxField
-                                                        label="CIN Number"
-                                                        name="cinNo"
-                                                        restrictedCharacters="<>"
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <TextBoxField
-                                                        label="LEI Number"
-                                                        name="leiNo"
-                                                        restrictedCharacters="<>"
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <AdvanceDatePickerField
-                                                        label="LEI Renewal Date"
-                                                        name="leiDate"
-                                                        disablePast={true}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <AdvanceDatePickerField
-                                                        label="Date of Incorporation"
-                                                        name="dateOfIncorporation"
-                                                        disableFuture={true}
-                                                        onChange={(date: Date) => {
-                                                            setFieldValue('dateOfIncorporation', moment(date).format("DD-MM-YYYY"));
-                                                        }}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <AdvanceDatePickerField
-                                                        label="Date of commencement"
-                                                        name="dateOfComm"
-                                                        disableFuture={true}
-                                                        onChange={(date: Date) => {
-                                                            setFieldValue('dateOfComm', moment(date).format("DD-MM-YYYY"));
-                                                            setFieldValue('vintage', calculateVintage(date.toISOString()));
-                                                        }}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <AdvanceTextBoxField
-                                                        label="Vintage (Years)"
-                                                        name="vintage"
-                                                        type="number"
-                                                        disabled={true}
-                                                        className='disabled-inputs-lbl'
-                                                        
-                                                    />
-                                                </Grid>
-                                                <Grid item xs={12} md={4}>
-                                                    <TextBoxField
-                                                        label="RBI Registration Number"
-                                                        name="rbiRegNo"
-                                                        restrictedCharacters="<>"
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <AdvanceDatePickerField
-                                                        label="RBI Registration Date"
-                                                        name="rbiRegDate"
-                                                        disableFuture={true}
-                                                    />
-                                                </Grid>
-                                                <Grid item xs={12} md={4}>
-                                                    <EnhancedDropDown
-                                                        label="Constitution"
-                                                        name="constitution"
-                                                        domain="mstr/getConstitution"
-                                                        disabled={values.saveStatus === "02"}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <EnhancedDropDown
-                                                        label="NBFC Layer"
-                                                        name="nbfcLayer"
-                                                        domain="mstr/getNbfcLayerTypes"
-                                                        disabled={values.saveStatus === "02"}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <EnhancedDropDown
-                                                        label="NBFC Type"
-                                                        name="nbfcType"
-                                                        domain="mstr/getNbfcTypes"
-                                                        disabled={values.saveStatus === "02"}
-                                                    />
-                                                </Grid>
-
-                                                <Grid item xs={12} md={4}>
-                                                    <EnhancedDropDown
-                                                        label="NBFC Classification"
-                                                        name="nbfcClassification"
-                                                        domain="mstr/getclassification"
-                                                        disabled={values.saveStatus === "02"}
-                                                    />
-                                                </Grid>
-                                                {
-                                                    applId?.toString()?.startsWith("M") && (
-                                                        <Grid item xs={12} md={4}>
-                                                            <TextBoxField
-                                                                label="COCA"
-                                                                name="coca"
-                                                            />
-                                                        </Grid>
-                                                    )
-
-                                                }
-
-                                                {
-                                                    applId?.toString()?.startsWith("M") && (
-                                                        <Grid item xs={12} md={4}>
-                                                            <TextBoxField
-                                                                label="MFI Grading"
-                                                                name="grading"
-                                                            />
-                                                        </Grid>
-                                                    )}
-                                                {
-                                                    applId?.toString()?.startsWith("M") && (
-                                                        <Grid item xs={12} md={4}>
-                                                            <TextBoxField
-                                                                label="Credit Bureau"
-                                                                name="creditBureau"
-                                                            />
-                                                        </Grid>
-                                                    )}
-                                            </Grid>
-                                            <Grid item xs={12}>
-                                                <div className='mirDtls mt-4'>
-                                                    <p className='mb-2 pt-0'><b>Registered Address</b></p>
-                                                    <Grid container spacing={2}>
-                                                        <Grid item xs={12} className='text_count'>
-                                                            <TextAreaField
-                                                                label="Address"
-                                                                name="regdAddress"
-                                                                maxLength={300}
-                                                                restrictedCharacters="<>"
-                                                            />
-                                                        </Grid>
-
-                                                        <Grid item xs={12} md={3}>
-                                                            <AdvanceTextBoxField
-                                                                label="PIN Code"
-                                                                name="regdPincode"
-                                                                type="number"
-                                                                onCustomChange={(value: any) => handlePinCodeChange(setFieldValue, value, 'regd')}
-                                                                
-                                                            />
-                                                        </Grid>
-
-                                                        <Grid item xs={12} md={3}>
-                                                            <TextBoxField
-                                                                label="State"
-                                                                name="regdStateCd"
-                                                                disabled={true}
-                                                                className='disabled-inputs-lbl'
-                                                            />
-                                                        </Grid>
-
-                                                        <Grid item xs={12} md={3}>
-                                                            <TextBoxField
-                                                                label="District"
-                                                                name="regdDistrictCd"
-                                                                restrictedCharacters="<>"
-                                                                disabled={true}
-                                                                className='disabled-inputs-lbl'
-                                                            />
-                                                        </Grid>
-
-                                                        <Grid item xs={12} md={3}>
-                                                            <TextBoxField
-                                                                label="City"
-                                                                name="regdCity"
-                                                                restrictedCharacters="<>"
-                                                            />
-                                                        </Grid>
-                                                    </Grid>
-                                                </div>
-                                            </Grid>
+            <TableCell className="fldsSizeCstm">
+              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
+                <Autocomplete
+                  disablePortal
+                  options={topSchemes}
+                  sx={{ width: 300 }}
+                  renderInput={(params: any) => <TextField {...params} label="Scheme" />}
+                />
+              </FormControl>
+            </TableCell>
+          </TableRow>
 
 
-                                            <Grid item xs={12}>
-                                                <div className="flex items-center space-x-2 mt-2">
-                                                    <CheckboxField
-                                                        checkboxLabel="Same as Registered Address"
-                                                        onChange={(checked: boolean) => {
-                                                            if (checked) {
-                                                                setFieldValue('isSameRegdAddr', 'Y');
-                                                                setFieldValue('corpAddress', values.regdAddress);
-                                                                setFieldValue('corpPincode', values.regdPincode);
-                                                                setFieldValue('corpStateCd', values.regdStateCd);
-                                                                setFieldValue('corpDistrictCd', values.regdDistrictCd);
-                                                                setFieldValue('corpCity', values.regdCity);
-                                                            } else {
-                                                                setFieldValue('isSameRegdAddr', 'N');
-                                                            }
-                                                        }}
-                                                        name={'isSameRegdAddr'}
-                                                        label={''}
-                                                        disabled={values.saveStatus === "02"}
-                                                    />
-                                                </div>
-                                            </Grid>
+          <TableRow>
+            <TableCell>3</TableCell>
+            <TableCell>Sanctioned Limit</TableCell>
+            <TableCell>
+              <strong> Credit Limit of &#8377; 4.5 crore</strong>
+            </TableCell>
+          </TableRow>
 
-                                            {values?.isSameRegdAddr === "N" && (
-                                                <Grid item xs={12}>
-                                                    <div className='mirDtls mt-0 mb-3'>
-                                                        <p className='mb-2 pt-0'><b>Corporate Address</b></p>
-                                                        <Grid container spacing={2}>
-                                                            <Grid item xs={12} className='text_count'>
-                                                                <TextAreaField
-                                                                    label="Address"
-                                                                    name="corpAddress"
-                                                                    maxLength={300}
-                                                                    restrictedCharacters="<>"
-                                                                />
-                                                            </Grid>
 
-                                                            <Grid item xs={12} md={3}>
-                                                                <AdvanceTextBoxField
-                                                                    label="PIN Code"
-                                                                    name="corpPincode"
-                                                                    type="number"
-                                                                    onCustomChange={(value: any) => {
-                                                                        setFieldValue('corpPincode', value);
-                                                                        handlePinCodeChange(setFieldValue, value, 'corp');
-                                                                    }}
-                                                                />
-                                                            </Grid>
+          <TableRow>
+            <TableCell>4</TableCell>
+            <TableCell>Details of Sanction</TableCell>
 
-                                                            <Grid item xs={12} md={3}>
-                                                                <TextBoxField
-                                                                    label="State"
-                                                                    name="corpStateCd"
-                                                                    disabled={true}
-                                                                    className='disabled-inputs-lbl'
-                                                                />
-                                                            </Grid>
+            <TableCell>
+              Sanctioned by <strong>CCC-CGM/2025/366</strong> in its <strong>6752</strong> meeting held on <strong> 24/04/2025</strong>.
 
-                                                            <Grid item xs={12} md={3}>
-                                                                <TextBoxField
-                                                                    label="District"
-                                                                    name="corpDistrictCd"
-                                                                     disabled={true}
-                                                                     className='disabled-inputs-lbl'
-                                                                />
-                                                            </Grid>
 
-                                                            <Grid item xs={12} md={3}>
-                                                                <TextBoxField
-                                                                    label="City"
-                                                                    name="corpCity"
-                                                                    restrictedCharacters="<>"
-                                                                />
-                                                            </Grid>
-                                                        </Grid>
-                                                    </div>
-                                                </Grid>
-                                            )}
+            </TableCell>
+          </TableRow>
 
-                                            <Grid item xs={12} className='text_count'>
-                                                <TextAreaField
-                                                    label="Brief history of the company"
-                                                    name="compBrifHistory"
-                                                    maxLength={4000}
-                                                    restrictedCharacters="<>"
-                                                />
-                                            </Grid>
+          <TableRow>
+            <TableCell>5</TableCell>
+            <TableCell>Validity of Sanction</TableCell>
 
-                                            {values.nbfcType === 'MFI' && (
-                                                <Grid item xs={12} md={4}>
-                                                    <TextBoxField
-                                                        label="SRO Membership Number"
-                                                        name="sroNo"
-                                                        type="number"
-                                                        restrictedCharacters="<>"
-                                                    />
-                                                </Grid>
-                                            )}
+            <TableCell>29/05/2025</TableCell>
+          </TableRow>
 
-                                         
-                                            {values?.saveStatus !== "02" &&
-                                                <Button className="sbmtBtn psn_btn mt-0 mb-3 ms-0" type='submit'
-                                                    onClick={() => handleClickSetAction('01')}
-                                                    variant="contained"> Save <CheckCircleOutlineIcon />
-                                                </Button>
-                                            }
-                                            {values?.saveStatus !== "02" &&
-                                                <Button className="sbmtBtn sbmtBtn_scn psn_btn mt-0 mb-3 ms-3" type='submit'
-                                                    onClick={() => handleClickSetAction('02')}
-                                                    variant="contained"> Submit <SaveAsIcon />
-                                                </Button>
-                                            }
-                                            
-                                        </Grid>
-                                    </fieldset>
-                                </Form>
-                            )}
-                        </Formik>
-                    </div>
-                    <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
-                        handleSnackClose={handleClose} />
-                </div>
-            </CardContent>
-        </Card>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}>6</TableCell>
+            <TableCell>External rating at the time of sanction</TableCell>
 
-    );
-};
+            <TableCell>
+              <ExternalRatingTableForm />
+            </TableCell>
+          </TableRow>
 
-export default connect((state: any) => {
-    return {
-        applId: state.userStore.applId
-    };
-})(ProfileDetailsDefault)
+          <TableRow>
+            <TableCell style={{ width: '6%' }}>7</TableCell>
+            <TableCell>Latest External Rating</TableCell>
+
+            <TableCell>
+              <ExternalRatingTableForm />
+            </TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>8</TableCell>
+            <TableCell>Internal Score - At Sanction</TableCell>
+
+            <TableCell>
+              <Table>
+                <TableRow>
+                  <TableCell style={{ border: '0px' }}>
+                    <Table className="rtnTbl">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>
+                            <b>FY</b>
+                          </TableCell>
+                          <TableCell>
+                            <b>Internal Score</b>
+                          </TableCell>
+                          <TableCell>
+                            <b> Comments</b>
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+
+                      <TableRow>
+                        <TableCell>
+                          <TextField
+                            label="FY"
+                            id=""
+                            size="small" className="fnt_sml"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            label="Internal Score"
+                            id=""
+                            size="small" className="fnt_sml"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          Textarea
+                        </TableCell>
+                      </TableRow>
+
+                      <TableRow>
+                        <TableCell colSpan={3}>
+                          <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
+                            Add <AddCircleIcon />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </Table>
+
+                  </TableCell>
+                </TableRow>
+
+              </Table>
+            </TableCell>
+          </TableRow>
+
+          <TableRow>
+            <TableCell>9</TableCell>
+            <TableCell>Internal Score - at Last Review / Present </TableCell>
+
+            <TableCell>
+              <Table>
+                <TableRow>
+                  <TableCell style={{ border: '0px' }}>
+                    <Table className="rtnTbl">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>
+                            <b>FY</b>
+                          </TableCell>
+                          <TableCell>
+                            <b>Internal Score</b>
+                          </TableCell>
+                          <TableCell>
+                            <b> Comments</b>
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+
+                      <TableRow>
+                        <TableCell>
+                          <TextField
+                            label="FY"
+                            id=""
+                            size="small" className="fnt_sml"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            label="Internal Score"
+                            id=""
+                            size="small" className="fnt_sml"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          Textarea
+                        </TableCell>
+                      </TableRow>
+
+                      <TableRow>
+                        <TableCell colSpan={3}>
+                          <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
+                            Add <AddCircleIcon />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </Table>
+
+                  </TableCell>
+                </TableRow>
+
+              </Table>
+            </TableCell>
+          </TableRow>
+
+
+          {/* <TableRow>
+            <TableCell>10</TableCell>
+            <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate </TableCell>
+
+            <TableCell>
+              <div className="alnSet flxWrp">
+                <TextField
+                  label="Sanctioning Committee"
+                  id=""
+                  size="small" className="fnt_sml"
+                /> <TextField
+                  label="minutes"
+                  id=""
+                  size="small" className="fnt_sml"
+                /> has sanctioned term loan of  <TextField
+                  label="Sanctioned Amount"
+                  id=""
+                  size="small" className="fnt_sml"
+                />crore to  <TextField
+                  label="NBFC Name"
+                  id=""
+                  size="small" className="fnt_sml"
+                /> and requested for approval from <TextField
+                  label="Committee name"
+                  id=""
+                  size="small" className="fnt_sml"
+                />
+                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
+                  <InputLabel id="">Select</InputLabel>
+                  <Select
+                    labelId=""
+                    id=""
+                    value={borrower}
+                    label="Borrower"
+                    onChange={handleChangeBrw}
+                  >
+                    <MenuItem value={0}>One</MenuItem>
+                    <MenuItem value={1}>Two</MenuItem>
+                  </Select>
+                </FormControl> for RoI of  <TextField
+                  label="Interest Rate"
+                  id=""
+                  size="small" className="fnt_sml"
+                /> by exercising discretion of
+                <TextField
+                  label="minutes"
+                  id=""
+                  size="small" className="fnt_sml"
+                />valid till
+                <TextField
+                  label="Date"
+                  id=""
+                  size="small" className="fnt_sml"
+                />
+                <TextField
+                  label="Appraisal"
+                  id=""
+                  size="small" className="fnt_sml"
+                />
+              </div>
+            </TableCell>
+          </TableRow> */}
+
+          <TableRow>
+            <TableCell>10</TableCell>
+            <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate </TableCell>
+            <TableCell>
+              <strong>CCC-CGM/2025/366</strong> has sanctioned term loan of <strong>220 crore</strong> to Test NBFC and requested for approval from <strong>CCC-CGM/2025/366</strong> for RoI of 4.5% by exercising discretion of discretion from minutes/appraisal valid till <strong> 24/04/2025</strong>.
+            </TableCell>
+          </TableRow>
+
+          <TableRow>
+            <TableCell>11</TableCell>
+            <TableCell>Disbursement already made out of above sanction / present o/s. under loan</TableCell>
+
+            <TableCell>
+              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
+                <TextField
+                  label="Disbursement"
+                  id=""
+                  size="small" className="fnt_sml"
+                />
+              </FormControl>
+            </TableCell>
+          </TableRow>
+
+
+          <TableRow>
+            <TableCell>12</TableCell>
+            <TableCell>Rate of interest applied on new disbursements/ resets done during last 6 months and details of existing loans</TableCell>
+
+            <TableCell>
+              <Table className="rtnTbl">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}><b>Disbursement</b></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Loan Account</b></TableCell>
+                    <TableCell><b>Date of Disbursement</b></TableCell>
+                    <TableCell><b>Amount Disbursed</b></TableCell>
+                    <TableCell><b>Amount o/s </b></TableCell>
+                    <TableCell><b>ROI</b></TableCell>
+                    <TableCell><b>Benchmark</b></TableCell>
+                    <TableCell><b>Fixed/Floating </b></TableCell>
+                    <TableCell><b>Reset Clause </b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <TextField
+                        label="Loan Account"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Date of Disbursement"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Amount Disbursed"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Amount o/s"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="ROI"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Benchmark"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Fixed/Floating"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Reset Clause"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+
+              <Table className="mt-4 rtnTbl">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}><b>Reset</b></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Loan Account</b></TableCell>
+                    <TableCell><b>Date of Reset</b></TableCell>
+                    <TableCell><b>Amount Disbursed</b></TableCell>
+                    <TableCell><b>Amount o/s </b></TableCell>
+                    <TableCell><b>ROI</b></TableCell>
+                    <TableCell><b>Benchmark</b></TableCell>
+                    <TableCell><b>Fixed/Floating </b></TableCell>
+                    <TableCell><b>Reset Clause </b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <TextField
+                        label="Loan Account"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Date of Disbursement"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Amount Disbursed"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Amount o/s"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="ROI"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Benchmark"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Fixed/Floating"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        label="Reset Clause"
+                        id=""
+                        size="small" className="fnt_sml"
+                      />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableCell>
+          </TableRow>
+
+
+          <TableRow>
+            <TableCell>13</TableCell>
+            <TableCell>Present total o/s under all loans</TableCell>
+
+            <TableCell>
+              <div className="alnSet"> &#8377;
+                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
+                  <TextField
+                    label="Amount"
+                    id=""
+                    size="small" className="fnt_sml"
+                  />
+                </FormControl> crore
+              </div>
+            </TableCell>
+          </TableRow>
+
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+
