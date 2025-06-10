@@ -1,850 +1,276 @@
+import React from 'react';
 import {
-  FormControl, Grid, IconButton, Table, TableBody, Button,
-  TableCell, TableHead, TableRow
-} from "@mui/material"
-import { TextBoxField } from "../../../components/framework/TextBoxField";
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
+} from "@mui/material";
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useDeleteExternalRatingByIdMutation, useGetExternalRatingByIdQuery, useSaveExternalRatingMutation }
-  from "../../../features/appraisal/introAppraisalApi";
-import { profileInitialValues, validationSchema } from '../../../models/appraisal/externalRating';
-import AutoSave from "../../../components/framework/AutoSave";
-import { Formik, Form, FieldArray } from "formik";
-import { RichTextField } from "../../../components/framework/RichTextField";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
-import FormLoader from "../../../loader/FormLoader";
-import { useGetMfiProfileByIdQuery, useSaveMfiProfileMutation } from "../../../features/appraisal/mfiProfileApi";
-import Cookies from "js-cookie";
-import { useEffect, useState } from "react";
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
-import moment from "moment";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import { useAppSelector } from '../../../app/hooks';
+import {
+  useGetExternalRatingSanctionQuery,
+  useGetExternalRatingPresentQuery,
+  useSaveExternalRatingMutation
+} from '../../../features/appraisal/interestRateFixationApi';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import moment from 'moment';
+import Cookies from 'js-cookie';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { useState } from 'react';
 
+const RfExternalRating = () => {
+  const { applId, currentModuleStatus } = useAppSelector((state) => state.userStore);
+  const loginData: any = Cookies.get("user") || null;
+  const loginCookiesData: any = loginData ? JSON.parse(loginData) : {};
 
-const ExternalRating = ({ applId, currentModuleStatus }: any) => {
-  const { data: externalRatingData } = useGetExternalRatingByIdQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-});
-  const [updateExternalRating] = useSaveExternalRatingMutation();
-  const [deleteExternalRating] = useDeleteExternalRatingByIdMutation();
+  // Fetch sanction time ratings (read-only)
+  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(applId, {
+    skip: !applId,
+    refetchOnMountOrArgChange: true,
+  });
 
-  const { data: mfiProfileData, isLoading: isLoadingProfile } = useGetMfiProfileByIdQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-});
-  const [updateMfiProfile] = useSaveMfiProfileMutation();
+  // Fetch latest ratings (editable)
+  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(applId, {
+    skip: !applId,
+    refetchOnMountOrArgChange: true,
+  });
 
+  const [saveExternalRating] = useSaveExternalRatingMutation();
+
+  // Snackbar state for feedback
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<any>("");
-  const [severity, setSeverity] = useState<string | any>("success");
-  const [actionVal, setActionVal] = useState<any>("");
-  const [index, setIndex] = useState(0);
-  const [open, setOpen] = useState(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+
+  const initialValues = {
+    ratings: presentRatings || [],
+  };
+
+  const validationSchema = Yup.object().shape({
+    ratings: Yup.array().of(
+      Yup.object().shape({
+        agencyName: Yup.string().required("Required"),
+        instrument: Yup.string().required("Required"),
+        amtCr: Yup.number().typeError("Must be a number").required("Required"),
+        ratingDesc: Yup.string().required("Required"),
+        outLook: Yup.string().required("Required"),
+        ratingDt: Yup.date().required("Required"),
+      })
+    ),
+  });
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const finalValue = values.ratings.map((rating: any, index: number) => ({
+        ...rating,
+        applId,
+        id: index + 1,
+        saveStatus: '01', // Assuming '01' is for save, adjust as needed
+      }));
+      await saveExternalRating(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Latest External Rating saved successfully");
+    } catch (error) {
+      console.error("Error saving latest external rating:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Latest External Rating");
+    }
+  };
 
   const handleSnackClose = () => {
     setOpenSnackbar(false);
   };
 
-  const handleClickSetAction = (action: any) => {
-    setActionVal(action);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
-
-  const handleClickOpen = (index: number) => {
-    setIndex(index);
-    setOpen(true);
-  };
-
-  const handleDelete = async (applId: any, index: number) => {
-    handleClose();
-    try {
-      if (await deleteExternalRating({ applId, index }).unwrap()) {
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Record Deleted successfully");
-      }
-    } catch (error) {
-      console.error("Error saving compliance position:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to delete");
-    }
-  }
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const finalValue = values.ratings.map((rating: any, index: any) => {
-        return {
-          ...rating, applId, saveStatus: actionVal, id: index + 1
-        }
-      });
-      if (await updateExternalRating(finalValue).unwrap()) {
-        if (actionVal === '01') {
-          setOpenSnackbar(true);
-          setSeverity("success");
-          setSnackMsg("Record saved successfully");
-          return false;
-        }
-        setActionVal(null);
-        return true;
-      }
-      return false;
-    }
-    catch (err) {
-      console.error("Error saving data:", err);
-    }
-  };
-
-
-  const profileHandleSubmit = async (values: any) => {
-    try {
-      const finalValue = { ...values, applId, saveStatus: actionVal }
-      if (await updateMfiProfile(finalValue).unwrap()) {
-        if (actionVal === '01') {
-          setOpenSnackbar(true);
-          setSeverity("success");
-          setSnackMsg("Record saved successfully");
-          return false;
-        }
-        setActionVal(null);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error("Error saving data:", err);
-    }
-  };
-
-  const [initialValues, setInitialValues] = useState<any>({ data: [] });
-  useEffect(() => {
-    if (externalRatingData) {
-      setInitialValues({ ratings: externalRatingData });
-    }
-  }, [externalRatingData]);
-
-  const loginData: any = Cookies.get("user") || null;
-  const loginCookiesData: any = JSON.parse(loginData);
+  const isEditable = (currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') &&
+    loginCookiesData?.regType === "Maker";
 
   return (
-    <>
-      <ConfirmationAlertDialog
-        id={applId}
-        index={index}
-        type={2}
-        open={open}
-        handleClose={handleClose}
-        handleDelete={handleDelete}
-      />
-      <div className='custome-form'>
+    <div className="wrap-inner-table mt-0">
+      {/* Sanction Time External Rating (Read-Only) */}
+      <h3>External Rating at the Time of Sanction</h3>
+      {isLoadingSanction ? (
+        <p>Loading...</p>
+      ) : (
+        <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
+          <TableHead>
+            <TableRow>
+              <TableCell><b>Name of Rating Agency</b></TableCell>
+              <TableCell><b>Instrument</b></TableCell>
+              <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+              <TableCell><b>Rating</b></TableCell>
+              <TableCell><b>Outlook</b></TableCell>
+              <TableCell><b>Date of Rating</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sanctionRatings?.length > 0 ? (
+              sanctionRatings.map((rating: any, index: number) => (
+                <TableRow key={index}>
+                  <TableCell>{rating.agencyName}</TableCell>
+                  <TableCell>{rating.instrument}</TableCell>
+                  <TableCell>{rating.amtCr}</TableCell>
+                  <TableCell>{rating.ratingDesc}</TableCell>
+                  <TableCell>{rating.outLook}</TableCell>
+                  <TableCell>{moment(rating.ratingDt).format("DD-MM-YYYY")}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6}>No data available</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      )}
+
+      {/* Latest External Rating (Editable) */}
+      <h3>Latest External Rating</h3>
+      {isLoadingPresent ? (
+        <p>Loading...</p>
+      ) : (
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
-          validateOnChange={true}
-          validateOnBlur={true}
           enableReinitialize={true}
         >
           {({ values, setFieldValue }) => (
             <Form>
-              <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                || loginCookiesData?.regType === "Checker"}>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                  && loginCookiesData?.regType === "Maker" &&
-                  <AutoSave debounceMs={10000} values={values} handleSubmit={handleSubmit} />
-                }
-                <FieldArray name="ratings">
-                  {({ push, remove }) => (
-                    <>
-                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                        && loginCookiesData?.regType === "Maker" &&
-                        <Button type="submit" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
-                          variant="contained" color="primary" style={{ display: 'block' }}
-                          onClick={() => push({
-                            applId: applId,
-                            agencyName: "",
-                            instrument: "",
-                            amount: "",
-                            outlook: "",
-                            ratingDate: null,
-                            prevRating: "",
-                            prevratingDate: null,
-                            precPrevRating: "",
-                            precPrevRatingDate: null,
-                            externalRatingDesc: ""
-                          })
-                          }>
-                          Add <AddCircleIcon />
-                        </Button>
-                      }
-                      <div className="wrap-inner-table mt-2">
-                        <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                          <TableHead>
-                            <TableRow>
-                              {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                                && loginCookiesData?.regType === "Maker" &&
-                                <TableCell width={'3%'}> </TableCell>
-                              }
-                              <TableCell><b>Name of Rating Agency</b></TableCell>
-                              <TableCell width={'10%'}><b>Instrument</b></TableCell>
-                              <TableCell width={'10%'}><b>Amount (in ₹ crore)</b></TableCell>
-                              <TableCell width={'10%'}><b>Rating</b></TableCell>
-                              <TableCell width={'10%'}><b>Outlook</b></TableCell>
-                              <TableCell width={'12%'}><b>Date of Rating </b></TableCell>
-                              <TableCell width={'8%'}><b>Previous Rating</b></TableCell>
-                              <TableCell width={'12%'}><b>Date of Previous Rating</b></TableCell>
-                              <TableCell width={'8%'}><b>Preceding Previous Rating</b></TableCell>
-                              <TableCell width={'12%'}><b>Date of Rating Preceding Previous Rating</b></TableCell>
+              <FieldArray name="ratings">
+                {({ push, remove }) => (
+                  <>
+                    {isEditable && (
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        className="text-capitalize mt-1 mb-3"
+                        onClick={() => push({
+                          applId,
+                          agencyName: "",
+                          instrument: "",
+                          amtCr: "",
+                          ratingDesc: "",
+                          outLook: "",
+                          ratingDt: null,
+                        })}
+                      >
+                        Add <AddCircleIcon />
+                      </Button>
+                    )}
+                    <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell><b>Name of Rating Agency</b></TableCell>
+                          <TableCell><b>Instrument</b></TableCell>
+                          <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                          <TableCell><b>Rating</b></TableCell>
+                          <TableCell><b>Outlook</b></TableCell>
+                          <TableCell><b>Date of Rating</b></TableCell>
+                          {isEditable && <TableCell><b>Actions</b></TableCell>}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {values.ratings.length > 0 ? (
+                          values.ratings.map((rating: any, index: number) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <EnhancedDropDown
+                                  label=""
+                                  name={`ratings.${index}.agencyName`}
+                                  domain="mstr/getRatingAgency"
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.instrument`}
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.amtCr`}
+                                  type="number"
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <EnhancedDropDown
+                                  label=""
+                                  name={`ratings.${index}.ratingDesc`}
+                                  domain="mstr/getRatingCode"
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.outLook`}
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <AdvanceDatePickerField
+                                  label=""
+                                  name={`ratings.${index}.ratingDt`}
+                                  onChange={(date: Date) => setFieldValue(`ratings.${index}.ratingDt`, date)}
+                                  disableFuture={true}
+                                  disabled={!isEditable}
+                                />
+                              </TableCell>
+                              {isEditable && (
+                                <TableCell>
+                                  <IconButton
+                                    aria-label="delete"
+                                    color="error"
+                                    onClick={() => remove(index)}
+                                    disabled={values.ratings.length === 1}
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </TableCell>
+                              )}
                             </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {values?.ratings?.map((exRating: any, index: number) => (
-                              <TableRow key={index + 1}>
-                                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                                  && loginCookiesData?.regType === "Maker" &&
-                                  <TableCell>
-                                    <IconButton aria-label="delete" color="error"
-                                      onClick={() => exRating?.id ? handleClickOpen(exRating.id) : remove(index)}
-                                      disabled={values.ratings.length === 1}>
-                                      <DeleteIcon />
-                                    </IconButton>
-                                  </TableCell>
-                                }
-                                <TableCell>
-                                  <Grid item xs={12}>
-                                    <EnhancedDropDown
-                                      label=""
-                                      name={`ratings.${index}.agencyName`}
-                                      domain="mstr/getRatingAgency"
-                                    />
-                                  </Grid>
-                                </TableCell>
-                                <TableCell>
-                                  <TextBoxField label=""
-                                    name={`ratings.${index}.instrument`} />
-                                </TableCell>
-                                <TableCell>
-                                  <TextBoxField label=""
-                                    name={`ratings.${index}.amount`} type="number" />
-                                </TableCell>
-                                <TableCell>
-                                  <Grid item xs={12}>
-                                    <EnhancedDropDown
-                                      label=""
-                                      name={`ratings.${index}.externalRatingDesc`}
-                                      domain="mstr/getRatingCode"
-                                    />
-                                  </Grid>
-                                </TableCell>
-
-                                <TableCell>
-                                  <TextBoxField label=""
-                                    name={`ratings.${index}.outlook`} />
-                                </TableCell>
-
-                                <TableCell>
-                                  <AdvanceDatePickerField label=""
-                                    name={`ratings.${index}.ratingDate`}
-                                    onChange={(date: Date) => {
-                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
-                                    }}
-                                    disableFuture={true}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Grid item xs={12}>
-                                    <EnhancedDropDown
-                                      label=""
-                                      name={`ratings.${index}.prevRating`}
-                                      domain="mstr/getRatingCode"
-                                    />
-                                  </Grid>
-                                </TableCell>
-                                <TableCell>
-                                  <AdvanceDatePickerField label=""
-                                    name={`ratings.${index}.prevratingDate`}
-                                    onChange={(date: Date) => {
-                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
-                                    }}
-                                    disableFuture={true}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Grid item xs={12}>
-                                    <EnhancedDropDown
-                                      label=""
-                                      name={`ratings.${index}.precPrevRating`}
-                                      domain="mstr/getRatingCode"
-                                    />
-                                  </Grid>
-                                </TableCell>
-                                <TableCell>
-                                  <AdvanceDatePickerField label=""
-                                    name={`ratings.${index}.precPrevRatingDate`}
-                                    onChange={(date: Date) => {
-                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
-                                    }}
-                                    disableFuture={true}
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                          && loginCookiesData?.regType === "Maker" &&
-                          <Grid item xs={12} sx={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
-                            <Button type="submit" size="small"
-                              onClick={() => handleClickSetAction('01')}
-                              className="sbmtBtn psn_btn mt-3 mb-3 ms-3" variant="contained" >
-                              Save <CheckCircleOutlineIcon />
-                            </Button>
-                          </Grid>
-                        }
-                      </div>
-                    </>
-                  )}
-                </FieldArray>
-              </fieldset>
-            </Form>
-          )}
-        </Formik>
-
-        {!isLoadingProfile ? <Formik
-          initialValues={mfiProfileData || { ...profileInitialValues, applId }}
-          validationSchema={validationSchema}
-          onSubmit={profileHandleSubmit}
-          validateOnChange={true}
-          validateOnBlur={true}
-          enableReinitialize={true}
-        >
-          {({ values }) => (
-            <Form>
-              <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                || loginCookiesData?.regType === "Checker"}>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                  && loginCookiesData?.regType === "Maker" &&
-                  <AutoSave debounceMs={5000} values={values} handleSubmit={profileHandleSubmit} />
-                }
-                <div className="wrap-inner-table mt-2">
-                  <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>
-                          <FormControl fullWidth>
-                            <TextBoxField
-                              label="Tagged Rating"
-                              name="taggedRating" />
-                          </FormControl>
-                        </TableCell>
-                        <TableCell>
-                          <FormControl fullWidth>
-                            <TextBoxField
-                              label="Lowest Rating"
-                              name="lowestRating" />
-                          </FormControl>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <Grid spacing={2} padding={4} container className='form-grid'>
-                  <Grid item xs={12} sm={6} lg={12}>
-                    <TextAreaField label="Rating Movement "
-                      name="ratingMovement" />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6} lg={12}>
-                    <TextAreaField label="Summary of External Rating Report"
-                      name="ratingExtract" />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6} lg={12}>
-                    <label><b className="ht_text">External Credit Rating of Holding Company</b></label>
-                    <div className="wrap-richtext">
-                      <RichTextField label=""
-                        name="extRatHoldComp"
-                        disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                          || loginCookiesData?.regType === "Checker"} />
-                    </div>
-                  </Grid>
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3} lg={12} className="mt-2">
-                  <b className="ht_text">Business Prospects</b>
-                </Grid>
-                <div className="wrap-inner-table mt-1">
-                  <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell colSpan={2}><b>Strength</b></TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell colSpan={2}>
-                          <div className="wrap-richtext">
-                            <RichTextField label=""
-                              name="strength"
-                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                || loginCookiesData?.regType === "Checker"} />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-
-                    <TableHead>
-                      <TableRow>
-                        <TableCell><b>Weakness</b></TableCell>
-                        <TableCell><b>Comments on Weaknesses</b></TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>
-                          <div className="wrap-richtext">
-                            <RichTextField label=""
-                              name="weakness"
-                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                || loginCookiesData?.regType === "Checker"} />
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="wrap-richtext">
-                            <RichTextField label=""
-                              name="weaknessComments"
-                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                || loginCookiesData?.regType === "Checker"} />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <Grid spacing={2} padding={4} container className='form-grid pb-0'>
-                  <Grid item xs={12} sm={6} md={3} lg={12}>
-                    <b className="ht_text">Rating Sensitivity Factors</b>
-                  </Grid>
-                  <Grid item xs={12} sm={12} md={12} lg={12} className="pt-1">
-                    <div className="wrap-inner-table mt-0">
-                      <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                        <TableHead>
+                          ))
+                        ) : (
                           <TableRow>
-                            <TableCell colSpan={2}><b>Upward Factors</b></TableCell>
+                            <TableCell colSpan={isEditable ? 7 : 6}>No data available</TableCell>
                           </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell colSpan={2}>
-                              <div className="wrap-richtext">
-                                <RichTextField label=""
-                                  name="upwardFactors"
-                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                    || loginCookiesData?.regType === "Checker"} />
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-
-                        <TableHead>
-                          <TableRow>
-                            <TableCell><b>Downward Factors</b></TableCell>
-                            <TableCell><b>Comments on Downward Factors</b></TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell>
-                              <div className="wrap-richtext">
-                                <RichTextField label=""
-                                  name="downwardFactors"
-                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                    || loginCookiesData?.regType === "Checker"} />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="wrap-richtext">
-                                <RichTextField label=""
-                                  name="downFactorsComments"
-                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
-                                    || loginCookiesData?.regType === "Checker"} />
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </Grid>
-                </Grid>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                  && loginCookiesData?.regType === "Maker" &&
-                  <Grid item xs={12} sx={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
-                    <Button type="submit" size="small"
-                      onClick={() => handleClickSetAction('01')}
-                      className="sbmtBtn psn_btn ms-0 mt-0" variant="contained" >
-                      Save <CheckCircleOutlineIcon />
-                    </Button>
-                  </Grid>
-                }
-              </fieldset>
-            </Form>
-          )}
-        </Formik> : <FormLoader />}
-
-        <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
-          handleSnackClose={handleSnackClose} submitCall={false} />
-      </div>
-    </>
-  )
-}
-
-export default ExternalRating;
-
-
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
-import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
-
-export const RfExternalRating = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>External rating at the time of sanction</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
-
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { customBaseQuery } from "../../app/commonApi";
-
-export const interestRateFixationApi = createApi({
-    reducerPath: 'interestRateFixationApi',
-    baseQuery: customBaseQuery,
-    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating'],
-    endpoints: (builder) => ({
-        getFixationInterestRate: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
-            providesTags: ['BriefBackground']
-        }),
-        saveInternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveinternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['InternalRating'],
-        }),
-        getInternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getInternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getExternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        getExternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        saveExternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveexternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['ExternalRating'],
-        }),
-    }),
-});
-
-export const {
-    useGetFixationInterestRateQuery,
-    useSaveInternalRatingMutation,
-    useGetInternalRatingPresentQuery,
-    useGetInternalRatingSanctionQuery,
-    useGetExternalRatingSanctionQuery,
-    useGetExternalRatingPresentQuery,
-    useSaveExternalRatingMutation,
-} = interestRateFixationApi;
-
-
-
-[
-  {
-    "id": 0,
-    "applId": "string",
-    "agencyName": "string",
-    "instrument": "string",
-    "amtCr": 0,
-    "ratingDt": "2025-06-10",
-    "ratingId": 0,
-    "prevRating": "string",
-    "prevRatingDt": "2025-06-10",
-    "precPrevRating": "string",
-    "precPrevDt": "2025-06-10",
-    "saveStatus": "string",
-    "ratingDesc": "string",
-    "outLook": "string",
-    "ratingType": "string"
-  }
-]
-
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
-import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
-
-export const RfExternalRating = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>External rating at the time of sanction</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
-
-import React from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Button, Paper, IconButton, Grid } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { Formik, FieldArray, Form } from 'formik';
-import * as Yup from 'yup';
-import AddIcon from '@mui/icons-material/Add';
-import { useAppSelector } from '../../../app/hooks';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import moment from 'moment';
-
-
-const ExternalRatingTableForm = () => {
-    const { applId, appDataNew } = useAppSelector((state: any) => state.userStore);
-    const validationSchema = Yup.object().shape({
-        ratings: Yup.array().of(
-            Yup.object().shape({
-                agencyName: Yup.string().required("Required"),
-                instrument: Yup.string().required("Required"),
-                amount: Yup.number().typeError("Must be a number").required("Required"),
-                externalRatingDesc: Yup.string().required("Required"),
-                ratingDate: Yup.string().required("Required"),
-                // prevRating: Yup.string().required("Required"),
-                // prevratingDate: Yup.string().required("Required"),
-                // precPrevRating: Yup.string().required("Required"),
-                // precPrevRatingDate: Yup.string().required("Required")
-            })
-        ),
-    })
-
-    const initialValues = {
-        ratings: [
-            {
-                id: 1,
-                applId: applId,
-                agencyName: "",
-                instrument: "",
-                amount: "",
-                ratingDate: null,
-                externalRatingDesc: "",
-                //   prevRating: "",
-                //   prevratingDate: null,
-                //   precPrevRating: "",
-                //   precPrevRatingDate: null,
-            },
-        ],
-    }
-
-    //   const [submitForm, { isLoading, isSuccess, isError }] = useSubmitFormMutation();
-
-    const handleSubmit = () => {
-
-    }
-
-    return (
-        <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            onSubmit={handleSubmit}
-        >
-            {({ values, setFieldValue, errors, touched, handleChange }) => (
-                <Form>
-                    <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                            <>
-                                {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                        && loginCookiesData?.regType === "Maker" && */}
-                                <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
-                                    variant="contained" color="primary" style={{ display: 'block' }}
-                                    onClick={() => push({
-                                        applId: applId,
-                                        agencyName: "",
-                                        instrument: "",
-                                        amount: "",
-                                        outlook: "",
-                                        ratingDate: null,
-                                        externalRatingDesc: ""
-                                    })
-                                    }>
-                                    Add <AddCircleIcon />
-                                </Button>
-                                {/* } */}
-                                <div className="wrap-inner-table mt-0 mb-0 table-responsive">
-                                    <Table className="table mb-0" sx={{ minWidth: '100%' }} aria-label="external ratings table">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell width={'100px'}> </TableCell>
-                                                <TableCell width={'350px'} ><b>Name of Rating Agency</b></TableCell>
-                                                <TableCell width={'150px'}><b>Instrument</b></TableCell>
-                                                <TableCell width={'150px'}><b>Amount (in ₹ crore)</b></TableCell>
-                                                <TableCell width={'250px'}><b>Rating</b></TableCell>
-                                                <TableCell width={'250px'}><b>Outlook</b></TableCell>
-                                                <TableCell width={'250px'}><b>Date of Rating </b></TableCell>
-
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {values?.ratings?.map((exRating: any, index: number) => (
-                                                <TableRow key={index + 1}>
-                                                    {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                                                                && loginCookiesData?.regType === "Maker" && */}
-                                                    <TableCell width={'100px'}>
-                                                        <IconButton aria-label="delete" color="error"
-                                                            //onClick={() => exRating?.id ? handleClickOpen(exRating.id) : remove(index)}
-                                                            disabled={values.ratings.length === 1}>
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    </TableCell>
-                                                    {/* } */}
-                                                    <TableCell width={'350px'}>
-                                                        <Grid item xs={12}>
-                                                            <EnhancedDropDown
-                                                                label=""
-                                                                name={`ratings.${index}.agencyName`}
-                                                                domain="mstr/getRatingAgency"
-                                                            />
-                                                        </Grid>
-                                                    </TableCell>
-                                                    <TableCell width={'150px'}>
-                                                        <TextBoxField label=""
-                                                            name={`ratings.${index}.instrument`} />
-                                                    </TableCell>
-                                                    <TableCell width={'150px'}>
-                                                        <TextBoxField label=""
-                                                            name={`ratings.${index}.amount`} type="number" />
-                                                    </TableCell>
-                                                    <TableCell width={'250px'}>
-                                                        <Grid item xs={12}>
-                                                            <EnhancedDropDown
-                                                                label=""
-                                                                name={`ratings.${index}.externalRatingDesc`}
-                                                                domain="mstr/getRatingCode"
-                                                            />
-                                                        </Grid>
-                                                    </TableCell>
-
-                                                    <TableCell width={'250px'}>
-                                                        <TextBoxField label=""
-                                                            name={`ratings.${index}.outlook`} />
-                                                    </TableCell>
-
-                                                    <TableCell width={'250px'} className='cldrAll'>
-                                                        <AdvanceDatePickerField label=""
-                                                            name={`ratings.${index}.ratingDate`}
-                                                            onChange={(date: Date) => {
-                                                                setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
-                                                            }}
-                                                            disableFuture={true}
-                                                        />
-                                                    </TableCell>
-
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                    {/* {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                                                && loginCookiesData?.regType === "Maker" && */}
-                                    <div className='mt-3'>
-                                        <Button
-                                            //disabled={btnsDisabled ? true : false}
-                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                            type='submit'
-                                            variant="contained"> Save <CheckCircleOutlineIcon />
-                                        </Button>
-
-                                        {/* <Button
-                        //disabled={btnsDisabled ? true : false}
-                        className="sbmtBtn sbmtBtn_scn  mt-0 mb-3 ms-3"
-                        type='submit'
-                        //onClick={() => handleClickSetAction('02')}
-                        variant="contained"> Submit <SaveAsIcon />
-                    </Button> */}
-                                    </div>
-                                    {/* } */}
-                                </div>
-                            </>
                         )}
-                    </FieldArray>
-                </Form>
-            )}
+                      </TableBody>
+                    </Table>
+                    {isEditable && (
+                      <Grid item xs={12} sx={{ mt: 2 }}>
+                        <Button type="submit" variant="contained" color="primary">
+                          Save
+                        </Button>
+                      </Grid>
+                    )}
+                  </>
+                )}
+              </FieldArray>
+            </Form>
+          )}
         </Formik>
-    );
+      )}
+
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
 };
 
-export default ExternalRatingTableForm;
-
-
+export default RfExternalRating;
