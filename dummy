@@ -16,14 +16,11 @@ import { TextBoxField } from '../../../components/framework/TextBoxField';
 import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
 import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
 import moment from 'moment';
-import Cookies from 'js-cookie';
 import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
 import { useState } from 'react';
 
 const RfExternalRating = () => {
-  const { applId, currentModuleStatus } = useAppSelector((state) => state.userStore);
-  const loginData: any = Cookies.get("user") || null;
-  const loginCookiesData: any = loginData ? JSON.parse(loginData) : {};
+  const { applId } = useAppSelector((state) => state.userStore);
 
   // Fetch sanction time ratings (read-only)
   const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(applId, {
@@ -85,182 +82,188 @@ const RfExternalRating = () => {
     setOpenSnackbar(false);
   };
 
-  const isEditable = (currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') &&
-    loginCookiesData?.regType === "Maker";
-
   return (
     <div className="wrap-inner-table mt-0">
-      {/* Sanction Time External Rating (Read-Only) */}
-      <h3>External Rating at the Time of Sanction</h3>
-      {isLoadingSanction ? (
-        <p>Loading...</p>
-      ) : (
-        <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
-          <TableHead>
-            <TableRow>
-              <TableCell><b>Name of Rating Agency</b></TableCell>
-              <TableCell><b>Instrument</b></TableCell>
-              <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-              <TableCell><b>Rating</b></TableCell>
-              <TableCell><b>Outlook</b></TableCell>
-              <TableCell><b>Date of Rating</b></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sanctionRatings?.length > 0 ? (
-              sanctionRatings.map((rating: any, index: number) => (
-                <TableRow key={index}>
-                  <TableCell>{rating.agencyName}</TableCell>
-                  <TableCell>{rating.instrument}</TableCell>
-                  <TableCell>{rating.amtCr}</TableCell>
-                  <TableCell>{rating.ratingDesc}</TableCell>
-                  <TableCell>{rating.outLook}</TableCell>
-                  <TableCell>{moment(rating.ratingDt).format("DD-MM-YYYY")}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6}>No data available</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      )}
-
-      {/* Latest External Rating (Editable) */}
-      <h3>Latest External Rating</h3>
-      {isLoadingPresent ? (
-        <p>Loading...</p>
-      ) : (
-        <Formik
-          initialValues={initialValues}
-          validationSchema={validationSchema}
-          onSubmit={handleSubmit}
-          enableReinitialize={true}
-        >
-          {({ values, setFieldValue }) => (
-            <Form>
-              <FieldArray name="ratings">
-                {({ push, remove }) => (
-                  <>
-                    {isEditable && (
-                      <Button
-                        type="button"
-                        size="small"
-                        variant="contained"
-                        color="primary"
-                        className="text-capitalize mt-1 mb-3"
-                        onClick={() => push({
-                          applId,
-                          agencyName: "",
-                          instrument: "",
-                          amtCr: "",
-                          ratingDesc: "",
-                          outLook: "",
-                          ratingDt: null,
-                        })}
-                      >
-                        Add <AddCircleIcon />
-                      </Button>
-                    )}
-                    <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell><b>Name of Rating Agency</b></TableCell>
-                          <TableCell><b>Instrument</b></TableCell>
-                          <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                          <TableCell><b>Rating</b></TableCell>
-                          <TableCell><b>Outlook</b></TableCell>
-                          <TableCell><b>Date of Rating</b></TableCell>
-                          {isEditable && <TableCell><b>Actions</b></TableCell>}
+      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {/* Row for External rating at the time of sanction */}
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>External rating at the time of sanction</TableCell>
+            <TableCell>
+              {isLoadingSanction ? (
+                <p>Loading...</p>
+              ) : (
+                <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><b>Name of Rating Agency</b></TableCell>
+                      <TableCell><b>Instrument</b></TableCell>
+                      <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                      <TableCell><b>Rating</b></TableCell>
+                      <TableCell><b>Outlook</b></TableCell>
+                      <TableCell><b>Date of Rating</b></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sanctionRatings?.length > 0 ? (
+                      sanctionRatings.map((rating: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{rating.agencyName}</TableCell>
+                          <TableCell>{rating.instrument}</TableCell>
+                          <TableCell>{rating.amtCr}</TableCell>
+                          <TableCell>{rating.ratingDesc}</TableCell>
+                          <TableCell>{rating.outLook}</TableCell>
+                          <TableCell>{moment(rating.ratingDt).format("DD-MM-YYYY")}</TableCell>
                         </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {values.ratings.length > 0 ? (
-                          values.ratings.map((rating: any, index: number) => (
-                            <TableRow key={index}>
-                              <TableCell>
-                                <EnhancedDropDown
-                                  label=""
-                                  name={`ratings.${index}.agencyName`}
-                                  domain="mstr/getRatingAgency"
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField
-                                  label=""
-                                  name={`ratings.${index}.instrument`}
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField
-                                  label=""
-                                  name={`ratings.${index}.amtCr`}
-                                  type="number"
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <EnhancedDropDown
-                                  label=""
-                                  name={`ratings.${index}.ratingDesc`}
-                                  domain="mstr/getRatingCode"
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField
-                                  label=""
-                                  name={`ratings.${index}.outLook`}
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <AdvanceDatePickerField
-                                  label=""
-                                  name={`ratings.${index}.ratingDt`}
-                                  onChange={(date: Date) => setFieldValue(`ratings.${index}.ratingDt`, date)}
-                                  disableFuture={true}
-                                  disabled={!isEditable}
-                                />
-                              </TableCell>
-                              {isEditable && (
-                                <TableCell>
-                                  <IconButton
-                                    aria-label="delete"
-                                    color="error"
-                                    onClick={() => remove(index)}
-                                    disabled={values.ratings.length === 1}
-                                  >
-                                    <DeleteIcon />
-                                  </IconButton>
-                                </TableCell>
-                              )}
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell colSpan={isEditable ? 7 : 6}>No data available</TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                    {isEditable && (
-                      <Grid item xs={12} sx={{ mt: 2 }}>
-                        <Button type="submit" variant="contained" color="primary">
-                          Save
-                        </Button>
-                      </Grid>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6}>No data available</TableCell>
+                      </TableRow>
                     )}
-                  </>
-                )}
-              </FieldArray>
-            </Form>
-          )}
-        </Formik>
-      )}
+                  </TableBody>
+                </Table>
+              )}
+            </TableCell>
+          </TableRow>
+
+          {/* Row for Latest External Rating */}
+          <TableRow>
+            <TableCell>2</TableCell>
+            <TableCell>Latest External Rating</TableCell>
+            <TableCell>
+              {isLoadingPresent ? (
+                <p>Loading...</p>
+              ) : (
+                <Formik
+                  initialValues={initialValues}
+                  validationSchema={validationSchema}
+                  onSubmit={handleSubmit}
+                  enableReinitialize={true}
+                >
+                  {({ values, setFieldValue }) => (
+                    <Form>
+                      <FieldArray name="ratings">
+                        {({ push, remove }) => (
+                          <>
+                            <Button
+                              type="button"
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              className="text-capitalize mt-1 mb-3"
+                              onClick={() => push({
+                                applId,
+                                agencyName: "",
+                                instrument: "",
+                                amtCr: "",
+                                ratingDesc: "",
+                                outLook: "",
+                                ratingDt: null,
+                              })}
+                            >
+                              Add <AddCircleIcon />
+                            </Button>
+                            <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell><b>Name of Rating Agency</b></TableCell>
+                                  <TableCell><b>Instrument</b></TableCell>
+                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                                  <TableCell><b>Rating</b></TableCell>
+                                  <TableCell><b>Outlook</b></TableCell>
+                                  <TableCell><b>Date of Rating</b></TableCell>
+                                  <TableCell><b>Actions</b></TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {values.ratings.length > 0 ? (
+                                  values.ratings.map((rating: any, index: number) => (
+                                    <TableRow key={index}>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.agencyName`}
+                                          domain="mstr/getRatingAgency"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.instrument`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.amtCr`}
+                                          type="number"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.ratingDesc`}
+                                          domain="mstr/getRatingCode"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.outLook`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <AdvanceDatePickerField
+                                          label=""
+                                          name={`ratings.${index}.ratingDt`}
+                                          onChange={(date: Date) => setFieldValue(`ratings.${index}.ratingDt`, date)}
+                                          disableFuture={true}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <IconButton
+                                          aria-label="delete"
+                                          color="error"
+                                          onClick={() => remove(index)}
+                                          disabled={values.ratings.length === 1}
+                                        >
+                                          <DeleteIcon />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={7}>No data available</TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                            <Grid item xs={12} sx={{ mt: 2 }}>
+                              <Button type="submit" variant="contained" color="primary">
+                                Save
+                              </Button>
+                            </Grid>
+                          </>
+                        )}
+                      </FieldArray>
+                    </Form>
+                  )}
+                </Formik>
+              )}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
       <NbfcSnackbar
         open={openSnackbar}
