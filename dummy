@@ -1,558 +1,143 @@
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, TextField, FormControl, InputLabel, Select, MenuItem, Autocomplete } from "@mui/material";
-
-export const RfBriefBackground = () => {
-  const [borrower, setBorrower] = React.useState('');
-
-  const handleChangeBrw = (event:any) => {
-    setBorrower(event.target.value);
-  };
-
-  const topSchemes = [
-    { label: 'Scheme of refinance to nbfcs', schCd: 'a' },
-    { label: 'Scheme 2', schCd: 'b' },
-    { label: 'Scheme 3', schCd: 'c' },
-    { label: 'Scheme 4', schCd: 'd' },
-    { label: 'Scheme 5', schCd: 'e' },
-    { label: "Scheme 6", schCd: 'f' }
-  ];
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="brief background table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Name of the Borrower</TableCell>
-            <TableCell className="fldsSizeCstm">
-              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                <InputLabel id="">Select Borrower</InputLabel>
-                <Select
-                  labelId=""
-                  id="demo-select-small"
-                  value={borrower}
-                  label="Select Borrower"
-                  onChange={handleChangeBrw}
-                >
-                  <MenuItem value={0}>Borrower 1</MenuItem>
-                  <MenuItem value={1}>Borrower 2</MenuItem>
-                </Select>
-              </FormControl>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Scheme</TableCell>
-            <TableCell className="fldsSizeCstm">
-              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                <Autocomplete
-                  disablePortal
-                  options={topSchemes}
-                  sx={{ width: 300 }}
-                  renderInput={(params) => <TextField {...params} label="Scheme" />}
-                />
-              </FormControl>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>3</TableCell>
-            <TableCell>Sanctioned amount</TableCell>
-            <TableCell>
-              <strong> TL of ₹ 4.5 crore</strong>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>4</TableCell>
-            <TableCell>Details of Sanction</TableCell>
-            <TableCell>
-              Sanctioned by <strong>CCC-CGM/2025/366</strong> in its <strong>6752</strong> meeting held on <strong> 24/04/2025</strong>.
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>5</TableCell>
-            <TableCell>Validity of Sanction</TableCell>
-            <TableCell>29/05/2025</TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>6</TableCell>
-            <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate</TableCell>
-            <TableCell>
-              <strong>CCC-CGM/2025/366</strong> has sanctioned term loan of <strong>220 crore</strong> to Test NBFC and requested for approval from <strong>CCC-CGM/2025/366</strong> for RoI of 4.5% by exercising discretion of discretion from minutes/appraisal valid till <strong> 24/04/2025</strong>.
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>7</TableCell>
-            <TableCell>Disbursement already made out of above sanction / present o/s. under loan</TableCell>
-            <TableCell>
-              <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                <TextField label="Disbursement" size="small" className="fnt_sml" />
-              </FormControl>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>8</TableCell>
-            <TableCell>Present total o/s under all loans</TableCell>
-            <TableCell>
-              <div className="alnSet"> ₹
-                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                  <TextField label="Amount" size="small" className="fnt_sml" />
-                </FormControl> crore
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
-
-
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { customBaseQuery } from "../../app/commonApi";
-import { ProfileDetailsValues } from "../../models/application-form/profileDetails";
-import { MembershipValues } from "../../models/application-form/memberProfileAuditor";
-import { ComplianceValues } from "../../models/application-form/complianceDetails";
-import { DisclosureValues } from "../../models/application-form/disclosureDetails";
 
-const BASE_PATH = 'appl';
-interface DataItem {
-    id: number;
-    originalField: string;
-}
-
-interface TransformedDataItem {
-    id: number;
-    transformedField: string;
-}
-export const applicationFormApi = createApi({
-    reducerPath: 'applicationFormApi',
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
     baseQuery: customBaseQuery,
-    tagTypes: ['productScheme', 'profileDetails', 'profileAuditor', 'losListing',
-        'Rating', 'ComplianceValues', 'Disclosure', 'FinancialDetails', "finalSubmit",
-        "declaration", "earning", "liquidityProfile", "onlineDashBoard", "getApplcatnCountByUserId", "genOnlineReportByApplId"],
+    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating'],
     endpoints: (builder) => ({
-        getDashApplFormData: builder.query<any, any>({
-            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=ONLINE&userId=${userId}`,
-            providesTags: ['onlineDashBoard']
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground']
         }),
-        getDashApplLOSFormData: builder.query<any, any>({
-            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=LOS&userId=${userId}`,
-            providesTags: ['onlineDashBoard']
-        }),
-        getApplcatnCountByUserId: builder.query<any, any>({
-            query: (params) => ({
-                url: `${BASE_PATH}/getCntFrApplcatnbyUserId`,
-                params: { ...params },
-            }),
-        }),
-        genOnlineReportByApplId: builder.query<any, { scheme: string; applId: string }>({
-            query: (params) => ({
-                url: `${BASE_PATH}/genOnlineReport`,
-                params,
-            }),
-            providesTags: ['genOnlineReportByApplId'],
-        }),
-        // genOnlineReportByApplId: builder.query<any, any>({
-        //     query: (params) => ({
-        //         url: `${BASE_PATH}/genOnlineReport`,
-        //         params: { ...params },
-        //     }),
-        //     providesTags: ['genOnlineReportByApplId']
-        // }),
-
-        getCntFrApplcatnFormData: builder.query<any, void>({
-            query: () => `${BASE_PATH}/getCntFrApplcatn?type=LOS`,
-            providesTags: ['onlineDashBoard']
-        }),
-        getBasicFormData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getApplForm/${applId}`,
-            providesTags: ['productScheme']
-        }),
-        saveBasicFormTerms: builder.mutation<any, any[]>({
+        saveInternalRating: builder.mutation<any, any[]>({
             query: (data) => ({
-                url: `${BASE_PATH}/saveApplForm`,
+                url: `interestratefixation/saveinternalrating`,
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: [`productScheme`],
+            invalidatesTags: ['InternalRating'],
         }),
-        getProfileDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcProfileDet/${applId}`,
-            providesTags: ['profileDetails']
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating']
         }),
-        saveProfileDetails: builder.mutation<any, ProfileDetailsValues>({
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
             query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcProfileDet`,
+                url: `interestratefixation/saveexternalrating`,
                 method: 'POST',
                 body: data,
             }),
-            invalidatesTags: [`profileDetails`],
-        }),
-
-        getAddressByPinCode: builder.query<any, string>({
-            query: (pinCode) => `mstr/getStDisDtl?pincode=${pinCode}`,
-        }),
-
-        getProfileAuditorDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcAuditorDet/${applId}`,
-            providesTags: ['profileAuditor']
-        }),
-        saveProfileAuditorDetails: builder.mutation<any, MembershipValues>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcAuditorDet`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`profileAuditor`],
-        }),
-
-        getRatingDetails: builder.query<any, string>({
-            query: (applId) => `appl/externalRating/${applId}`,
-            providesTags: ['Rating'],
-            transformResponse: (response: any) => {
-                return {
-                    ratings: response
-                }
-            },
-        }),
-        saveRatingDetails: builder.mutation<any, MembershipValues>({
-            query: (data) => ({
-                url: `appl/externalRating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`Rating`],
-        }),
-
-        getComplianceDetails: builder.query<any, string>({
-            query: (applId) => `appl/getNbfcSecurity/${applId}`,
-            providesTags: ['ComplianceValues'],
-        }),
-        saveComplianceDetails: builder.mutation<any, ComplianceValues>({
-            query: (data) => ({
-                url: `appl/saveNbfcSecurity`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`ComplianceValues`],
-        }),
-
-        getDisclosureDetails: builder.query<any, string>({
-            query: (applId) => `appl/getNbfcDisclosure/${applId}`,
-            providesTags: ['Disclosure'],
-        }),
-        saveDisclosureDetails: builder.mutation<any, DisclosureValues>({
-            query: (data) => ({
-                url: `appl/saveNbfcDisclosure`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`Disclosure`],
-        }),
-
-        getNbfcDetails: builder.query<any, string>({
-            query: (nbfcId) => `/nbfc/getNbfcName?nbfcId=${nbfcId}`,
-        }),
-
-        getListingDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getApplFormListing/${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        saveListingFormTerms: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveApplFormListing`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['losListing'],
-        }),
-
-        getMenuSectionFormData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getSection?applId=${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        deleteStockListingDetailsById: builder.mutation<any, any>({
-            query: ({ applId, index }) => ({
-                url: `${BASE_PATH}/delApplFormListing/${applId}/${index}`,
-                method: 'DELETE',
-            }),
-            invalidatesTags: ['losListing'],
-        }),
-
-        getBorrowerDetails: builder.query<any, string>({
-            query: (applId) => `appl/getBriefApplDetailsS?applId=${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        getFinancialDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/FinancialDtls/${applId}`,
-            providesTags: ['FinancialDetails']
-        }),
-
-        saveFinancialDetailsFormTerms: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/FinancialDtls/`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`FinancialDetails`],
-        }),
-
-        getDeclaration: builder.query<any, string>({
-            query: () => `mstr/getApplDecl`,
-            providesTags: [`declaration`],
-        }),
-
-
-        getDeclarationDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getNbfcDeclaration/${applId}`,
-            providesTags: [`declaration`],
-        }),
-
-        saveDeclaration: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveNbfcDeclaration`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`declaration`],
-        }),
-
-        getStockStatus: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getListingDet/${applId}`,
-            providesTags: ['losListing']
-        }),
-
-        saveStockStatus: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveListingDet`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`losListing`],
-        }),
-
-        getEarnigDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getEaringsProfile/${applId}`,
-            providesTags: ['earning']
-        }),
-
-        saveEarnigDetails: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveEaringsProfile`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`earning`],
-        }),
-
-        getLiquidityDetails: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getLiquidityProfile/${applId}`,
-            providesTags: ['liquidityProfile']
-        }),
-
-        saveliquidityProfile: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/saveLiquidityProfile`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: [`liquidityProfile`],
-        }),
-
-        getTranxYr: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getTranxYr?applId=${applId}`,
-        }),
-        getBriefApplDetailsForStore: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
-        }),
-
-        getSchDetail: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getSchDetail?applId=${applId}`,
-        }),
-
-        getCashflowProject: builder.query<any, string>({
-            query: (applId) => `appl/getBusinessProj/${applId}`,
-        }),
-
-        getCashflowProjectCash: builder.query<any, string>({
-            query: (applId) => `appl/getPrjCashFlow/${applId}`,
-        }),
-        getCashflowProjectCashMain: builder.query<any, string>({
-            query: (applId) => `appl/getCashFlowPrj/${applId}`,
-        }),
-        getApplicationList: builder.query<any, any>({
-            query: (data) => `appl/getApplByStatus?type=${data.portal}&userId=${data.userId}&statusCode=${data.valueOne}`,
-        }),
-
-        getBriefApplDetailsData: builder.query<any, string>({
-            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
-
-        }),
-
-        getAppReportData: builder.query<any, any>({
-            query: ({ applId, schId }) => `appl/genOnlineReport?applId=${applId}&scheme=${schId}`,
-        }),
-
-        getStockExchangeValue: builder.query<any, any>({
-            query: () => `mstr/getStockExchange`,
-
-        }),
-
-        updateFinalSubmit: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `${BASE_PATH}/appl/updateFinalSubmit`,
-                method: 'PUT',
-                body: data,
-            }),
-            invalidatesTags: [`finalSubmit`],
+            invalidatesTags: ['ExternalRating'],
         }),
     }),
 });
 
 export const {
-    useLazyGenOnlineReportByApplIdQuery,
-    useGenOnlineReportByApplIdQuery,
-    useGetBriefApplDetailsDataQuery,
-    useGetApplcatnCountByUserIdQuery,
-    useGetBasicFormDataQuery,
-    useSaveBasicFormTermsMutation,
-    useSaveProfileDetailsMutation,
-    useGetProfileDetailsQuery,
-    useGetAddressByPinCodeQuery,
-    useLazyGetAddressByPinCodeQuery,
-    useSaveProfileAuditorDetailsMutation,
-    useGetProfileAuditorDetailsQuery,
-    useGetRatingDetailsQuery,
-    useSaveRatingDetailsMutation,
-    useGetComplianceDetailsQuery,
-    useSaveComplianceDetailsMutation,
-    useGetDisclosureDetailsQuery,
-    useSaveDisclosureDetailsMutation,
-    useGetNbfcDetailsQuery,
-    useGetFinancialDetailsQuery,
-    useSaveFinancialDetailsFormTermsMutation,
-    useGetListingDetailsQuery,
-    useGetBorrowerDetailsQuery,
-    useSaveListingFormTermsMutation,
-    useGetMenuSectionFormDataQuery,
-    useDeleteStockListingDetailsByIdMutation,
-    useGetDeclarationQuery,
-    useSaveDeclarationMutation,
-    useGetDeclarationDetailsQuery,
-    useGetStockStatusQuery,
-    useSaveStockStatusMutation,
-    useGetEarnigDetailsQuery,
-    useSaveEarnigDetailsMutation,
-    useGetLiquidityDetailsQuery,
-    useSaveliquidityProfileMutation,
-    useLazyGetTranxYrQuery,
-    useLazyGetBriefApplDetailsForStoreQuery,
-    useLazyGetSchDetailQuery,
-    useGetCashflowProjectQuery,
-    useGetCashflowProjectCashQuery,
-    useGetCashflowProjectCashMainQuery,
-    useGetDashApplFormDataQuery,
-    useGetCntFrApplcatnFormDataQuery,
-    useGetDashApplLOSFormDataQuery,
-    useGetApplicationListQuery,
-    useLazyGetAppReportDataQuery,
-    useUpdateFinalSubmitMutation,
-    useGetStockExchangeValueQuery
-} = applicationFormApi;
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+} = interestRateFixationApi;
 
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getfixationinterestrate/1212' \
-  -H 'accept: */*'
 
-{
-  "data": {
-    "applId": null,
-    "memorandum": null,
-    "disbRate": null,
-    "proposedDisb": null,
-    "sanctionAmt": null,
-    "nameOfBorrower": " ",
-    "schCd": " ",
-    "sancLimit": 0,
-    "sancBy": "",
-    "meetingNo": 0,
-    "meetingDate": null,
-    "sancValidity": null,
-    "roiSancTerms": null,
-    "presentOs": null,
-    "presentTotalOs": null,
-    "saveStatus": null
-  },
-  "message": "Success",
-  "status": 200
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
+import { useGetFixationInterestRateQuery } from './path/to/interestRateFixationApi'; // Adjust the import path
+
+interface RfBriefBackgroundProps {
+    applId: string;
 }
 
-curl -X 'POST' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/saveinternalrating' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '[
-  {
-    "id": 0,
-    "applId": "string",
-    "slNo": 0,
-    "intRatingFy": "string",
-    "intRatingDate": "2025-06-10",
-    "intRatingScore": "string",
-    "intRating": "string",
-    "saveStatus": "string",
-    "intRatingType": "string"
-  }
-]'
+export const RfBriefBackground: React.FC<RfBriefBackgroundProps> = ({ applId }) => {
+    const { data, isLoading, error } = useGetFixationInterestRateQuery(applId);
 
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getinternalratingpresent/121' \
-  -H 'accept: */*'
+    if (isLoading) {
+        return <div>Loading...</div>;
+    }
 
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getinternalratingsanction/121' \
-  -H 'accept: */*'
+    if (error) {
+        return <div>Error fetching data</div>;
+    }
 
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getexternalratingsanction/121' \
-  -H 'accept: */*'
+    const backgroundData = data?.data;
 
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getexternalratingpresent/121' \
-  -H 'accept: */*'
-
-curl -X 'POST' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/saveexternalrating' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '[
-  {
-    "id": 0,
-    "applId": "string",
-    "agencyName": "string",
-    "instrument": "string",
-    "amtCr": 0,
-    "ratingDt": "2025-06-10",
-    "ratingId": 0,
-    "prevRating": "string",
-    "prevRatingDt": "2025-06-10",
-    "precPrevRating": "string",
-    "precPrevDt": "2025-06-10",
-    "saveStatus": "string",
-    "ratingDesc": "string",
-    "outLook": "string",
-    "ratingType": "string"
-  }
-]'
-
-
+    return (
+        <div className="wrap-inner-table mt-0">
+            <Table sx={{ minWidth: 650 }} aria-label="brief background table">
+                <TableHead>
+                    <TableRow>
+                        <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+                        <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+                        <TableCell><b>Remarks</b></TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    <TableRow>
+                        <TableCell>1</TableCell>
+                        <TableCell>Name of the Borrower</TableCell>
+                        <TableCell>{backgroundData?.nameOfBorrower || 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>2</TableCell>
+                        <TableCell>Scheme</TableCell>
+                        <TableCell>{backgroundData?.schCd || 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>3</TableCell>
+                        <TableCell>Sanctioned amount</TableCell>
+                        <TableCell>
+                            <strong>TL of ₹ {backgroundData?.sanctionAmt || '0'} crore</strong>
+                        </TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>4</TableCell>
+                        <TableCell>Details of Sanction</TableCell>
+                        <TableCell>
+                            Sanctioned by <strong>{backgroundData?.sancBy || 'N/A'}</strong> in its <strong>{backgroundData?.meetingNo || '0'}</strong> meeting held on <strong>{backgroundData?.meetingDate ? new Date(backgroundData.meetingDate).toLocaleDateString() : 'N/A'}</strong>.
+                        </TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>5</TableCell>
+                        <TableCell>Validity of Sanction</TableCell>
+                        <TableCell>{backgroundData?.sancValidity ? new Date(backgroundData.sancValidity).toLocaleDateString() : 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>6</TableCell>
+                        <TableCell>Rate of interest as per sanctioned terms/ Validity of interest rate</TableCell>
+                        <TableCell>
+                            <strong>{backgroundData?.sancBy || 'N/A'}</strong> has sanctioned term loan of <strong>{backgroundData?.sanctionAmt || '0'} crore</strong> to {backgroundData?.nameOfBorrower || 'N/A'} and requested for approval from <strong>{backgroundData?.sancBy || 'N/A'}</strong> for RoI of {backgroundData?.disbRate || 'N/A'}% by exercising discretion of discretion from minutes/appraisal valid till <strong>{backgroundData?.meetingDate ? new Date(backgroundData.meetingDate).toLocaleDateString() : 'N/A'}</strong>.
+                        </TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>7</TableCell>
+                        <TableCell>Disbursement already made out of above sanction / present o/s. under loan</TableCell>
+                        <TableCell>{backgroundData?.presentOs || 'N/A'}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell>8</TableCell>
+                        <TableCell>Present total o/s under all loans</TableCell>
+                        <TableCell>
+                            <div className="alnSet">₹ {backgroundData?.presentTotalOs || '0'} crore</div>
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+        </div>
+    );
+};
