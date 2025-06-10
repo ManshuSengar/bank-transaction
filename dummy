@@ -1,46 +1,10 @@
 import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
-import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
-
-export const RfExternalRating = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>External rating at the time of sanction</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
-            <TableCell>
-              <ExternalRatingTableForm />
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
-
-import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableRow, TextField, FormControl, InputLabel, Select, MenuItem, Autocomplete } from "@mui/material";
 
 export const RfBriefBackground = () => {
   const [borrower, setBorrower] = React.useState('');
 
-  const handleChangeBrw = (event) => {
+  const handleChangeBrw = (event:any) => {
     setBorrower(event.target.value);
   };
 
@@ -99,9 +63,9 @@ export const RfBriefBackground = () => {
           </TableRow>
           <TableRow>
             <TableCell>3</TableCell>
-            <TableCell>Sanctioned Limit</TableCell>
+            <TableCell>Sanctioned amount</TableCell>
             <TableCell>
-              <strong> Credit Limit of ₹ 4.5 crore</strong>
+              <strong> TL of ₹ 4.5 crore</strong>
             </TableCell>
           </TableRow>
           <TableRow>
@@ -150,212 +114,445 @@ export const RfBriefBackground = () => {
 };
 
 
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, TextField, Button } from "@mui/material";
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
+import { ProfileDetailsValues } from "../../models/application-form/profileDetails";
+import { MembershipValues } from "../../models/application-form/memberProfileAuditor";
+import { ComplianceValues } from "../../models/application-form/complianceDetails";
+import { DisclosureValues } from "../../models/application-form/disclosureDetails";
 
-export const RfInternalRating = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Internal Score - At Sanction</TableCell>
-            <TableCell>
-              <Table className="rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell><b>FY</b></TableCell>
-                    <TableCell><b>Internal Score</b></TableCell>
-                    <TableCell><b>Comments</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="FY" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Internal Score" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextAreaField name="decisionRemarks" label="" maxLength={1000} disabled={false} />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                        Add <AddCircleIcon />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Internal Score - at Last Review / Present</TableCell>
-            <TableCell>
-              <Table className="rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell><b>FY</b></TableCell>
-                    <TableCell><b>Internal Score</b></TableCell>
-                    <TableCell><b>Comments</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="FY" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Internal Score" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextAreaField name="decisionRemarks" label="" maxLength={1000} disabled={false} />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                        Add <AddCircleIcon />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
+const BASE_PATH = 'appl';
+interface DataItem {
+    id: number;
+    originalField: string;
+}
 
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
+interface TransformedDataItem {
+    id: number;
+    transformedField: string;
+}
+export const applicationFormApi = createApi({
+    reducerPath: 'applicationFormApi',
+    baseQuery: customBaseQuery,
+    tagTypes: ['productScheme', 'profileDetails', 'profileAuditor', 'losListing',
+        'Rating', 'ComplianceValues', 'Disclosure', 'FinancialDetails', "finalSubmit",
+        "declaration", "earning", "liquidityProfile", "onlineDashBoard", "getApplcatnCountByUserId", "genOnlineReportByApplId"],
+    endpoints: (builder) => ({
+        getDashApplFormData: builder.query<any, any>({
+            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=ONLINE&userId=${userId}`,
+            providesTags: ['onlineDashBoard']
+        }),
+        getDashApplLOSFormData: builder.query<any, any>({
+            query: (userId) => `${BASE_PATH}/getDashApplDetailsType?type=LOS&userId=${userId}`,
+            providesTags: ['onlineDashBoard']
+        }),
+        getApplcatnCountByUserId: builder.query<any, any>({
+            query: (params) => ({
+                url: `${BASE_PATH}/getCntFrApplcatnbyUserId`,
+                params: { ...params },
+            }),
+        }),
+        genOnlineReportByApplId: builder.query<any, { scheme: string; applId: string }>({
+            query: (params) => ({
+                url: `${BASE_PATH}/genOnlineReport`,
+                params,
+            }),
+            providesTags: ['genOnlineReportByApplId'],
+        }),
+        // genOnlineReportByApplId: builder.query<any, any>({
+        //     query: (params) => ({
+        //         url: `${BASE_PATH}/genOnlineReport`,
+        //         params: { ...params },
+        //     }),
+        //     providesTags: ['genOnlineReportByApplId']
+        // }),
 
-export const RfRateOfInterest = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="rate of interest table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Rate of interest applied on new disbursements/ resets done during last 6 months and details of existing loans</TableCell>
-            <TableCell>
-              <Table className="rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell colSpan={10}><b>Disbursement</b></TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell><b>Loan Account</b></TableCell>
-                    <TableCell><b>Date of Disbursement</b></TableCell>
-                    <TableCell><b>Amount Disbursed</b></TableCell>
-                    <TableCell><b>Amount o/s</b></TableCell>
-                    <TableCell><b>ROI</b></TableCell>
-                    <TableCell><b>Benchmark</b></TableCell>
-                    <TableCell><b>Fixed/Floating</b></TableCell>
-                    <TableCell><b>Reset Clause</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="Loan Account" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Date of Disbursement" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Amount Disbursed" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Amount o/s" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="ROI" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Benchmark" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Fixed/Floating" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Reset Clause" size="small" className="fnt_sml" />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <Table className="mt-4 rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell colSpan={10}><b>Reset</b></TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell><b>Loan Account</b></TableCell>
-                    <TableCell><b>Date of Reset</b></TableCell>
-                    <TableCell><b>Amount Disbursed</b></TableCell>
-                    <TableCell><b>Amount o/s</b></TableCell>
-                    <TableCell><b>ROI</b></TableCell>
-                    <TableCell><b>Benchmark</b></TableCell>
-                    <TableCell><b>Fixed/Floating</b></TableCell>
-                    <TableCell><b>Reset Clause</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="Loan Account" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Date of Reset" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Amount Disbursed" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Amount o/s" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="ROI" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Benchmark" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Fixed/Floating" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Reset Clause" size="small" className="fnt_sml" />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
+        getCntFrApplcatnFormData: builder.query<any, void>({
+            query: () => `${BASE_PATH}/getCntFrApplcatn?type=LOS`,
+            providesTags: ['onlineDashBoard']
+        }),
+        getBasicFormData: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getApplForm/${applId}`,
+            providesTags: ['productScheme']
+        }),
+        saveBasicFormTerms: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveApplForm`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`productScheme`],
+        }),
+        getProfileDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getNbfcProfileDet/${applId}`,
+            providesTags: ['profileDetails']
+        }),
+        saveProfileDetails: builder.mutation<any, ProfileDetailsValues>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveNbfcProfileDet`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`profileDetails`],
+        }),
+
+        getAddressByPinCode: builder.query<any, string>({
+            query: (pinCode) => `mstr/getStDisDtl?pincode=${pinCode}`,
+        }),
+
+        getProfileAuditorDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getNbfcAuditorDet/${applId}`,
+            providesTags: ['profileAuditor']
+        }),
+        saveProfileAuditorDetails: builder.mutation<any, MembershipValues>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveNbfcAuditorDet`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`profileAuditor`],
+        }),
+
+        getRatingDetails: builder.query<any, string>({
+            query: (applId) => `appl/externalRating/${applId}`,
+            providesTags: ['Rating'],
+            transformResponse: (response: any) => {
+                return {
+                    ratings: response
+                }
+            },
+        }),
+        saveRatingDetails: builder.mutation<any, MembershipValues>({
+            query: (data) => ({
+                url: `appl/externalRating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`Rating`],
+        }),
+
+        getComplianceDetails: builder.query<any, string>({
+            query: (applId) => `appl/getNbfcSecurity/${applId}`,
+            providesTags: ['ComplianceValues'],
+        }),
+        saveComplianceDetails: builder.mutation<any, ComplianceValues>({
+            query: (data) => ({
+                url: `appl/saveNbfcSecurity`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`ComplianceValues`],
+        }),
+
+        getDisclosureDetails: builder.query<any, string>({
+            query: (applId) => `appl/getNbfcDisclosure/${applId}`,
+            providesTags: ['Disclosure'],
+        }),
+        saveDisclosureDetails: builder.mutation<any, DisclosureValues>({
+            query: (data) => ({
+                url: `appl/saveNbfcDisclosure`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`Disclosure`],
+        }),
+
+        getNbfcDetails: builder.query<any, string>({
+            query: (nbfcId) => `/nbfc/getNbfcName?nbfcId=${nbfcId}`,
+        }),
+
+        getListingDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getApplFormListing/${applId}`,
+            providesTags: ['losListing']
+        }),
+
+        saveListingFormTerms: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveApplFormListing`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['losListing'],
+        }),
+
+        getMenuSectionFormData: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getSection?applId=${applId}`,
+            providesTags: ['losListing']
+        }),
+
+        deleteStockListingDetailsById: builder.mutation<any, any>({
+            query: ({ applId, index }) => ({
+                url: `${BASE_PATH}/delApplFormListing/${applId}/${index}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['losListing'],
+        }),
+
+        getBorrowerDetails: builder.query<any, string>({
+            query: (applId) => `appl/getBriefApplDetailsS?applId=${applId}`,
+            providesTags: ['losListing']
+        }),
+
+        getFinancialDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/FinancialDtls/${applId}`,
+            providesTags: ['FinancialDetails']
+        }),
+
+        saveFinancialDetailsFormTerms: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/FinancialDtls/`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`FinancialDetails`],
+        }),
+
+        getDeclaration: builder.query<any, string>({
+            query: () => `mstr/getApplDecl`,
+            providesTags: [`declaration`],
+        }),
+
+
+        getDeclarationDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getNbfcDeclaration/${applId}`,
+            providesTags: [`declaration`],
+        }),
+
+        saveDeclaration: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveNbfcDeclaration`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`declaration`],
+        }),
+
+        getStockStatus: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getListingDet/${applId}`,
+            providesTags: ['losListing']
+        }),
+
+        saveStockStatus: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveListingDet`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`losListing`],
+        }),
+
+        getEarnigDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getEaringsProfile/${applId}`,
+            providesTags: ['earning']
+        }),
+
+        saveEarnigDetails: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveEaringsProfile`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`earning`],
+        }),
+
+        getLiquidityDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getLiquidityProfile/${applId}`,
+            providesTags: ['liquidityProfile']
+        }),
+
+        saveliquidityProfile: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveLiquidityProfile`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`liquidityProfile`],
+        }),
+
+        getTranxYr: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getTranxYr?applId=${applId}`,
+        }),
+        getBriefApplDetailsForStore: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
+        }),
+
+        getSchDetail: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getSchDetail?applId=${applId}`,
+        }),
+
+        getCashflowProject: builder.query<any, string>({
+            query: (applId) => `appl/getBusinessProj/${applId}`,
+        }),
+
+        getCashflowProjectCash: builder.query<any, string>({
+            query: (applId) => `appl/getPrjCashFlow/${applId}`,
+        }),
+        getCashflowProjectCashMain: builder.query<any, string>({
+            query: (applId) => `appl/getCashFlowPrj/${applId}`,
+        }),
+        getApplicationList: builder.query<any, any>({
+            query: (data) => `appl/getApplByStatus?type=${data.portal}&userId=${data.userId}&statusCode=${data.valueOne}`,
+        }),
+
+        getBriefApplDetailsData: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getBriefApplDetailsS?applId=${applId}`,
+
+        }),
+
+        getAppReportData: builder.query<any, any>({
+            query: ({ applId, schId }) => `appl/genOnlineReport?applId=${applId}&scheme=${schId}`,
+        }),
+
+        getStockExchangeValue: builder.query<any, any>({
+            query: () => `mstr/getStockExchange`,
+
+        }),
+
+        updateFinalSubmit: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/appl/updateFinalSubmit`,
+                method: 'PUT',
+                body: data,
+            }),
+            invalidatesTags: [`finalSubmit`],
+        }),
+    }),
+});
+
+export const {
+    useLazyGenOnlineReportByApplIdQuery,
+    useGenOnlineReportByApplIdQuery,
+    useGetBriefApplDetailsDataQuery,
+    useGetApplcatnCountByUserIdQuery,
+    useGetBasicFormDataQuery,
+    useSaveBasicFormTermsMutation,
+    useSaveProfileDetailsMutation,
+    useGetProfileDetailsQuery,
+    useGetAddressByPinCodeQuery,
+    useLazyGetAddressByPinCodeQuery,
+    useSaveProfileAuditorDetailsMutation,
+    useGetProfileAuditorDetailsQuery,
+    useGetRatingDetailsQuery,
+    useSaveRatingDetailsMutation,
+    useGetComplianceDetailsQuery,
+    useSaveComplianceDetailsMutation,
+    useGetDisclosureDetailsQuery,
+    useSaveDisclosureDetailsMutation,
+    useGetNbfcDetailsQuery,
+    useGetFinancialDetailsQuery,
+    useSaveFinancialDetailsFormTermsMutation,
+    useGetListingDetailsQuery,
+    useGetBorrowerDetailsQuery,
+    useSaveListingFormTermsMutation,
+    useGetMenuSectionFormDataQuery,
+    useDeleteStockListingDetailsByIdMutation,
+    useGetDeclarationQuery,
+    useSaveDeclarationMutation,
+    useGetDeclarationDetailsQuery,
+    useGetStockStatusQuery,
+    useSaveStockStatusMutation,
+    useGetEarnigDetailsQuery,
+    useSaveEarnigDetailsMutation,
+    useGetLiquidityDetailsQuery,
+    useSaveliquidityProfileMutation,
+    useLazyGetTranxYrQuery,
+    useLazyGetBriefApplDetailsForStoreQuery,
+    useLazyGetSchDetailQuery,
+    useGetCashflowProjectQuery,
+    useGetCashflowProjectCashQuery,
+    useGetCashflowProjectCashMainQuery,
+    useGetDashApplFormDataQuery,
+    useGetCntFrApplcatnFormDataQuery,
+    useGetDashApplLOSFormDataQuery,
+    useGetApplicationListQuery,
+    useLazyGetAppReportDataQuery,
+    useUpdateFinalSubmitMutation,
+    useGetStockExchangeValueQuery
+} = applicationFormApi;
+
+curl -X 'GET' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getfixationinterestrate/1212' \
+  -H 'accept: */*'
+
+{
+  "data": {
+    "applId": null,
+    "memorandum": null,
+    "disbRate": null,
+    "proposedDisb": null,
+    "sanctionAmt": null,
+    "nameOfBorrower": " ",
+    "schCd": " ",
+    "sancLimit": 0,
+    "sancBy": "",
+    "meetingNo": 0,
+    "meetingDate": null,
+    "sancValidity": null,
+    "roiSancTerms": null,
+    "presentOs": null,
+    "presentTotalOs": null,
+    "saveStatus": null
+  },
+  "message": "Success",
+  "status": 200
+}
+
+curl -X 'POST' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/saveinternalrating' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json' \
+  -d '[
+  {
+    "id": 0,
+    "applId": "string",
+    "slNo": 0,
+    "intRatingFy": "string",
+    "intRatingDate": "2025-06-10",
+    "intRatingScore": "string",
+    "intRating": "string",
+    "saveStatus": "string",
+    "intRatingType": "string"
+  }
+]'
+
+curl -X 'GET' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getinternalratingpresent/121' \
+  -H 'accept: */*'
+
+curl -X 'GET' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getinternalratingsanction/121' \
+  -H 'accept: */*'
+
+curl -X 'GET' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getexternalratingsanction/121' \
+  -H 'accept: */*'
+
+curl -X 'GET' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getexternalratingpresent/121' \
+  -H 'accept: */*'
+
+curl -X 'POST' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/saveexternalrating' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json' \
+  -d '[
+  {
+    "id": 0,
+    "applId": "string",
+    "agencyName": "string",
+    "instrument": "string",
+    "amtCr": 0,
+    "ratingDt": "2025-06-10",
+    "ratingId": 0,
+    "prevRating": "string",
+    "prevRatingDt": "2025-06-10",
+    "precPrevRating": "string",
+    "precPrevDt": "2025-06-10",
+    "saveStatus": "string",
+    "ratingDesc": "string",
+    "outLook": "string",
+    "ratingType": "string"
+  }
+]'
+
+
