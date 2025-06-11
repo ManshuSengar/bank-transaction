@@ -1,0 +1,326 @@
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
+import { Formik, Form } from 'formik';
+import * as Yup from 'yup';
+import {
+  useGetDisbursementlistQuery,
+  useGetResetlistQuery,
+  useSaveDisbursementMutation,
+  useSaveResetMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+
+export const RfRateOfInterest = ({ applId }) => {
+  const { data: disbursementData, isLoading: isLoadingDisbursement } = useGetDisbursementlistQuery(applId, {
+    skip: !applId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: resetData, isLoading: isLoadingReset } = useGetResetlistQuery(applId, {
+    skip: !applId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const [saveDisbursement] = useSaveDisbursementMutation();
+  const [saveReset] = useSaveResetMutation();
+
+  const initialValues = {
+    disbursements: disbursementData || [],
+    resets: resetData || [],
+  };
+
+  const validationSchema = Yup.object().shape({
+    disbursements: Yup.array().of(
+      Yup.object().shape({
+        loanAccount: Yup.string().required("Required"),
+        disbDt: Yup.string().required("Required"),
+        disbAmt: Yup.number().required("Required"),
+        osAmt: Yup.number().required("Required"),
+        roi: Yup.number().required("Required"),
+        benchmark: Yup.string().required("Required"),
+        intRateType: Yup.string().required("Required"),
+        resetClause: Yup.string().required("Required"),
+      })
+    ),
+    resets: Yup.array().of(
+      Yup.object().shape({
+        loanAccount: Yup.string().required("Required"),
+        disbDt: Yup.string().required("Required"), // Assuming disbDt is used for reset date
+        disbAmt: Yup.number().required("Required"),
+        osAmt: Yup.number().required("Required"),
+        roi: Yup.number().required("Required"),
+        benchmark: Yup.string().required("Required"),
+        intRateType: Yup.string().required("Required"),
+        resetClause: Yup.string().required("Required"),
+      })
+    ),
+  });
+
+  const handleSubmit = async (values) => {
+    // Placeholder for future save functionality
+    try {
+      const disbursementPayload = values.disbursements.map((item, index) => ({
+        ...item,
+        applId,
+        slNo: index + 1,
+        saveStatus: '01',
+      }));
+      const resetPayload = values.resets.map((item, index) => ({
+        ...item,
+        applId,
+        slNo: index + 1,
+        saveStatus: '01',
+      }));
+
+      await Promise.all([
+        saveDisbursement(disbursementPayload).unwrap(),
+        saveReset(resetPayload).unwrap(),
+      ]);
+      console.log("Data saved successfully");
+    } catch (error) {
+      console.error("Error saving data:", error);
+    }
+  };
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="rate of interest table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>Rate of interest applied on new disbursements/ resets done during last 6 months and details of existing loans</TableCell>
+            <TableCell>
+              <Formik
+                initialValues={initialValues}
+                validationSchema={validationSchema}
+                onSubmit={handleSubmit}
+                enableReinitialize={true}
+              >
+                {({ values }) => (
+                  <Form>
+                    {/* Disbursement Table */}
+                    <Table className="rtnTbl">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell colSpan={10}><b>Disbursement</b></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell><b>Loan Account</b></TableCell>
+                          <TableCell><b>Date of Disbursement</b></TableCell>
+                          <TableCell><b>Amount Disbursed</b></TableCell>
+                          <TableCell><b>Amount o/s</b></TableCell>
+                          <TableCell><b>ROI</b></TableCell>
+                          <TableCell><b>Benchmark</b></TableCell>
+                          <TableCell><b>Fixed/Floating</b></TableCell>
+                          <TableCell><b>Reset Clause</b></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {isLoadingDisbursement ? (
+                          <TableRow>
+                            <TableCell colSpan={8}>Loading...</TableCell>
+                          </TableRow>
+                        ) : values.disbursements.length > 0 ? (
+                          values.disbursements.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.loanAccount`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.disbDt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.disbAmt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.osAmt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.roi`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.benchmark`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.intRateType`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`disbursements.${index}.resetClause`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={8}>No data available</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+
+                    {/* Reset Table */}
+                    <Table className="mt-4 rtnTbl">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell colSpan={10}><b>Reset</b></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell><b>Loan Account</b></TableCell>
+                          <TableCell><b>Date of Reset</b></TableCell>
+                          <TableCell><b>Amount Disbursed</b></TableCell>
+                          <TableCell><b>Amount o/s</b></TableCell>
+                          <TableCell><b>ROI</b></TableCell>
+                          <TableCell><b>Benchmark</b></TableCell>
+                          <TableCell><b>Fixed/Floating</b></TableCell>
+                          <TableCell><b>Reset Clause</b></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {isLoadingReset ? (
+                          <TableRow>
+                            <TableCell colSpan={8}>Loading...</TableCell>
+                          </TableRow>
+                        ) : values.resets.length > 0 ? (
+                          values.resets.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.loanAccount`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.disbDt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.disbAmt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.osAmt`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.roi`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.benchmark`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.intRateType`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`resets.${index}.resetClause`}
+                                  disabled={true}
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={8}>No data available</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+
+                    {/* Save Button (Disabled for now) */}
+                    <Grid item xs={12} sx={{ mt: 2 }}>
+                      <Button
+                        className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                        type="submit"
+                        variant="contained"
+                        disabled
+                      >
+                        Save
+                      </Button>
+                    </Grid>
+                  </Form>
+                )}
+              </Formik>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
