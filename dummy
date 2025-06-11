@@ -1,96 +1,35 @@
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { customBaseQuery } from "../../app/commonApi";
-
-export const interestRateFixationApi = createApi({
-    reducerPath: 'interestRateFixationApi',
-    baseQuery: customBaseQuery,
-    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating'],
-    endpoints: (builder) => ({
-        getFixationInterestRate: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
-            providesTags: ['BriefBackground']
-        }),
-        saveInternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveinternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['InternalRating'],
-        }),
-        getInternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getInternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getExternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        getExternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        saveExternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveexternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['ExternalRating'],
-        }),
-    }),
-});
-
-export const {
-    useGetFixationInterestRateQuery,
-    useSaveInternalRatingMutation,
-    useGetInternalRatingPresentQuery,
-    useGetInternalRatingSanctionQuery,
-    useGetExternalRatingSanctionQuery,
-    useGetExternalRatingPresentQuery,
-    useSaveExternalRatingMutation,
-} = interestRateFixationApi;
-
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
 } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { Formik, FieldArray, Form } from 'formik';
 import * as Yup from 'yup';
-import { useAppSelector } from '../../../app/hooks';
-import {
-  useGetExternalRatingSanctionQuery,
-  useGetExternalRatingPresentQuery,
-  useSaveExternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
 import moment from 'moment';
+import {
+  useGetInternalRatingSanctionQuery,
+  useGetInternalRatingPresentQuery,
+  useSaveInternalRatingMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
 import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { useState } from 'react';
 import AutoSave from '../../../components/framework/AutoSave';
 
-const RfExternalRating = ({ applId }: any) => {
-
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(applId, {
+const RfInternalRating = ({ applId }: any) => {
+  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetInternalRatingSanctionQuery(applId, {
     skip: !applId,
     refetchOnMountOrArgChange: true,
   });
 
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(applId, {
+  const { data: presentRatings, isLoading: isLoadingPresent } = useGetInternalRatingPresentQuery(applId, {
     skip: !applId,
     refetchOnMountOrArgChange: true,
   });
 
-  const [saveExternalRating] = useSaveExternalRatingMutation();
+  const [saveInternalRating] = useSaveInternalRatingMutation();
 
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>("");
@@ -103,12 +42,9 @@ const RfExternalRating = ({ applId }: any) => {
   const validationSchema = Yup.object().shape({
     ratings: Yup.array().of(
       Yup.object().shape({
-        agencyName: Yup.string().required("Required"),
-        instrument: Yup.string().required("Required"),
-        amtCr: Yup.number().typeError("Must be a number").required("Required"),
-        ratingDesc: Yup.string().required("Required"),
-        outLook: Yup.string().required("Required"),
-        ratingDt: Yup.date().required("Required"),
+        intRatingFy: Yup.string().required("Required"),
+        intRatingScore: Yup.string().required("Required"),
+        intRatingDate: Yup.date().required("Required"),
       })
     ),
   });
@@ -120,16 +56,17 @@ const RfExternalRating = ({ applId }: any) => {
         applId,
         id: index + 1,
         saveStatus: '01',
+        intRatingType: 'present',
       }));
-      await saveExternalRating(finalValue).unwrap();
+      await saveInternalRating(finalValue).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
-      setSnackMsg("Latest External Rating saved successfully");
+      setSnackMsg("Latest Internal Rating saved successfully");
     } catch (error) {
-      console.error("Error saving latest external rating:", error);
+      console.error("Error saving latest internal rating:", error);
       setOpenSnackbar(true);
       setSeverity("error");
-      setSnackMsg("Failed to save Latest External Rating");
+      setSnackMsg("Failed to save Latest Internal Rating");
     }
   };
 
@@ -139,7 +76,7 @@ const RfExternalRating = ({ applId }: any) => {
 
   return (
     <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
         <TableHead>
           <TableRow>
             <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
@@ -150,19 +87,16 @@ const RfExternalRating = ({ applId }: any) => {
         <TableBody>
           <TableRow>
             <TableCell>1</TableCell>
-            <TableCell>External rating at the time of sanction</TableCell>
+            <TableCell>Internal Score - At Sanction</TableCell>
             <TableCell>
               {isLoadingSanction ? (
                 <p>Loading...</p>
               ) : (
-                <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
+                <Table sx={{ minWidth: 650 }} aria-label="sanction internal ratings table">
                   <TableHead>
                     <TableRow>
-                      <TableCell><b>Name of Rating Agency</b></TableCell>
-                      <TableCell><b>Instrument</b></TableCell>
-                      <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                      <TableCell><b>Rating</b></TableCell>
-                      <TableCell><b>Outlook</b></TableCell>
+                      <TableCell><b>FY</b></TableCell>
+                      <TableCell><b>Internal Score</b></TableCell>
                       <TableCell><b>Date of Rating</b></TableCell>
                     </TableRow>
                   </TableHead>
@@ -170,17 +104,14 @@ const RfExternalRating = ({ applId }: any) => {
                     {sanctionRatings?.length > 0 ? (
                       sanctionRatings.map((rating: any, index: number) => (
                         <TableRow key={index}>
-                          <TableCell>{rating.agencyName}</TableCell>
-                          <TableCell>{rating.instrument}</TableCell>
-                          <TableCell>{rating.amtCr}</TableCell>
-                          <TableCell>{rating.ratingDesc}</TableCell>
-                          <TableCell>{rating.outLook}</TableCell>
-                          <TableCell>{moment(rating.ratingDt).format("DD-MM-YYYY")}</TableCell>
+                          <TableCell>{rating.intRatingFy}</TableCell>
+                          <TableCell>{rating.intRatingScore}</TableCell>
+                          <TableCell>{moment(rating.intRatingDate).format("DD-MM-YYYY")}</TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6}>No data available</TableCell>
+                        <TableCell colSpan={3}>No data available</TableCell>
                       </TableRow>
                     )}
                   </TableBody>
@@ -191,7 +122,7 @@ const RfExternalRating = ({ applId }: any) => {
 
           <TableRow>
             <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
+            <TableCell>Internal Score - at Last Review / Present</TableCell>
             <TableCell>
               {isLoadingPresent ? (
                 <p>Loading...</p>
@@ -208,28 +139,27 @@ const RfExternalRating = ({ applId }: any) => {
                       <FieldArray name="ratings">
                         {({ push, remove }) => (
                           <>
-                            <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
-                              variant="contained" color="primary" style={{ display: 'block' }}
+                            <Button
+                              type="button"
+                              size='small'
+                              className='text-capitalize mt-1 mb-3 saveBtn'
+                              variant="contained"
+                              color="primary"
+                              style={{ display: 'block' }}
                               onClick={() => push({
                                 applId,
-                                agencyName: "",
-                                instrument: "",
-                                amtCr: "",
-                                ratingDesc: "",
-                                outLook: "",
-                                ratingDt: null,
+                                intRatingFy: "",
+                                intRatingScore: "",
+                                intRatingDate: null,
                               })}
                             >
                               Add <AddCircleIcon />
                             </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
+                            <Table sx={{ minWidth: 650 }} aria-label="latest internal ratings table">
                               <TableHead>
                                 <TableRow>
-                                  <TableCell><b>Name of Rating Agency</b></TableCell>
-                                  <TableCell><b>Instrument</b></TableCell>
-                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                                  <TableCell><b>Rating</b></TableCell>
-                                  <TableCell><b>Outlook</b></TableCell>
+                                  <TableCell><b>FY</b></TableCell>
+                                  <TableCell><b>Internal Score</b></TableCell>
                                   <TableCell><b>Date of Rating</b></TableCell>
                                   <TableCell><b>Actions</b></TableCell>
                                 </TableRow>
@@ -239,42 +169,21 @@ const RfExternalRating = ({ applId }: any) => {
                                   values.ratings.map((rating: any, index: number) => (
                                     <TableRow key={index}>
                                       <TableCell>
-                                        <EnhancedDropDown
+                                        <TextBoxField
                                           label=""
-                                          name={`ratings.${index}.agencyName`}
-                                          domain="mstr/getRatingAgency"
+                                          name={`ratings.${index}.intRatingFy`}
                                         />
                                       </TableCell>
                                       <TableCell>
                                         <TextBoxField
                                           label=""
-                                          name={`ratings.${index}.instrument`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.amtCr`}
-                                          type="number"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.ratingDesc`}
-                                          domain="mstr/getRatingCode"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.outLook`}
+                                          name={`ratings.${index}.intRatingScore`}
                                         />
                                       </TableCell>
                                       <TableCell>
                                         <AdvanceDatePickerField
                                           label=""
-                                          name={`ratings.${index}.ratingDt`}
+                                          name={`ratings.${index}.intRatingDate`}
                                           disableFuture={true}
                                         />
                                       </TableCell>
@@ -292,7 +201,7 @@ const RfExternalRating = ({ applId }: any) => {
                                   ))
                                 ) : (
                                   <TableRow>
-                                    <TableCell colSpan={7}>No data available</TableCell>
+                                    <TableCell colSpan={4}>No data available</TableCell>
                                   </TableRow>
                                 )}
                               </TableBody>
@@ -301,7 +210,9 @@ const RfExternalRating = ({ applId }: any) => {
                               <Button
                                 className="sbmtBtn mt-0 mb-3 ms-2 me-2"
                                 type='submit'
-                                variant="contained"> Save <CheckCircleOutlineIcon />
+                                variant="contained"
+                              >
+                                Save <CheckCircleOutlineIcon />
                               </Button>
                             </Grid>
                           </>
@@ -327,113 +238,4 @@ const RfExternalRating = ({ applId }: any) => {
   );
 };
 
-export default RfExternalRating;
-
-import React from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, TextField, Button } from "@mui/material";
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
-
-export const RfInternalRating = () => {
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Internal Score - At Sanction</TableCell>
-            <TableCell>
-              <Table className="rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell><b>FY</b></TableCell>
-                    <TableCell><b>Internal Score</b></TableCell>
-                    <TableCell><b>Comments</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="FY" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Internal Score" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextAreaField name="decisionRemarks" label="" maxLength={1000} disabled={false} />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                        Add <AddCircleIcon />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Internal Score - at Last Review / Present</TableCell>
-            <TableCell>
-              <Table className="rtnTbl">
-                <TableHead>
-                  <TableRow>
-                    <TableCell><b>FY</b></TableCell>
-                    <TableCell><b>Internal Score</b></TableCell>
-                    <TableCell><b>Comments</b></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <TextField label="FY" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextField label="Internal Score" size="small" className="fnt_sml" />
-                    </TableCell>
-                    <TableCell>
-                      <TextAreaField name="decisionRemarks" label="" maxLength={1000} disabled={false} />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                        Add <AddCircleIcon />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
-
-[
-  {
-    "id": 0,
-    "applId": "string",
-    "slNo": 0,
-    "intRatingFy": "string",
-    "intRatingDate": "2025-06-10",
-    "intRatingScore": "string",
-    "intRating": "string",
-    "saveStatus": "string",
-    "intRatingType": "string"
-  }
-]
-
-
+export default RfInternalRating;
