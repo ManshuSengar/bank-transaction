@@ -405,5 +405,62 @@ const RfInternalRating = ({ applId }: any) => {
 export default RfInternalRating;
 
 
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
+
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
+    baseQuery: customBaseQuery,
+    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating'],
+    endpoints: (builder) => ({
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground']
+        }),
+        saveInternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveinternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['InternalRating'],
+        }),
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveexternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ExternalRating'],
+        }),
+    }),
+});
+
+export const {
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+} = interestRateFixationApi;
+
 
 
