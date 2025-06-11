@@ -1,3 +1,167 @@
+curl -X 'GET' \
+  'http://localhost:8080/refapi/interestratefixation/getresetlist/121' \
+  -H 'accept: */*'
+
+curl -X 'POST' \
+  'http://localhost:8080/refapi/interestratefixation/savereset
+
+[
+  {
+    "applId": "string",
+    "slNo": 0,
+    "loanAccount": "string",
+    "disbDt": "2025-06-11",
+    "disbAmt": 0,
+    "osAmt": 0,
+    "roi": 0,
+    "benchmark": "string",
+    "intRateType": "string",
+    "resetClause": "string",
+    "saveStatus": "string"
+  }
+]
+
+
+curl -X 'GET' \
+  'http://localhost:8080/refapi/interestratefixation/getDisbursementlist/1213' \
+  -H 'accept: */*'
+
+curl -X 'POST' \
+  'http://localhost:8080/refapi/interestratefixation/savedisbursement' \
+
+[
+ {
+    "applId": "string",
+    "slNo": 0,
+    "loanAccount": "string",
+    "disbDt": "2025-06-11",
+    "disbAmt": 0,
+    "osAmt": 0,
+    "roi": 0,
+    "benchmark": "string",
+    "intRateType": "string",
+    "resetClause": "string",
+    "saveStatus": "string"
+  }
+]
+
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
+
+export const RfRateOfInterest = () => {
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="rate of interest table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>Rate of interest applied on new disbursements/ resets done during last 6 months and details of existing loans</TableCell>
+            <TableCell>
+              <Table className="rtnTbl">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}><b>Disbursement</b></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Loan Account</b></TableCell>
+                    <TableCell><b>Date of Disbursement</b></TableCell>
+                    <TableCell><b>Amount Disbursed</b></TableCell>
+                    <TableCell><b>Amount o/s</b></TableCell>
+                    <TableCell><b>ROI</b></TableCell>
+                    <TableCell><b>Benchmark</b></TableCell>
+                    <TableCell><b>Fixed/Floating</b></TableCell>
+                    <TableCell><b>Reset Clause</b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <TextField label="Loan Account" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Date of Disbursement" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Amount Disbursed" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Amount o/s" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="ROI" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Benchmark" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Fixed/Floating" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Reset Clause" size="small" className="fnt_sml" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Table className="mt-4 rtnTbl">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}><b>Reset</b></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Loan Account</b></TableCell>
+                    <TableCell><b>Date of Reset</b></TableCell>
+                    <TableCell><b>Amount Disbursed</b></TableCell>
+                    <TableCell><b>Amount o/s</b></TableCell>
+                    <TableCell><b>ROI</b></TableCell>
+                    <TableCell><b>Benchmark</b></TableCell>
+                    <TableCell><b>Fixed/Floating</b></TableCell>
+                    <TableCell><b>Reset Clause</b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <TextField label="Loan Account" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Date of Reset" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Amount Disbursed" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Amount o/s" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="ROI" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Benchmark" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Fixed/Floating" size="small" className="fnt_sml" />
+                    </TableCell>
+                    <TableCell>
+                      <TextField label="Reset Clause" size="small" className="fnt_sml" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
 import React, { useState } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
@@ -44,7 +208,7 @@ const RfInternalRating = ({ applId }: any) => {
       Yup.object().shape({
         intRatingFy: Yup.string().required("Required"),
         intRatingScore: Yup.string().required("Required"),
-        intRatingDate: Yup.date().required("Required"),
+        intRatingDate: Yup.string().required("Required"),
       })
     ),
   });
@@ -239,3 +403,7 @@ const RfInternalRating = ({ applId }: any) => {
 };
 
 export default RfInternalRating;
+
+
+
+
