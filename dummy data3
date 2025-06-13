@@ -1,0 +1,482 @@
+import React, { useState } from 'react';
+import {
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid, FormControl, FormLabel, RadioGroup, FormControlLabel, Radio
+} from "@mui/material";
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import {
+  useGetExternalRatingPresentQuery,
+  useGetSanctionRatingQuery,
+  useGetSidbiExposureQuery,
+  useSaveSidbiExposureMutation,
+  useSaveSanctionRatingMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import moment from 'moment';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import AutoSave from '../../../components/framework/AutoSave';
+
+interface ExternalRatingProposalProps {
+  irfId: string;
+}
+
+const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }) => {
+  const [downgrade, setDowngrade] = useState('');
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+
+  // API hooks
+  const { data: presentExternalRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: sanctionRating, isLoading: isLoadingSanction } = useGetSanctionRatingQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: sidbiExposure, isLoading: isLoadingSidbi } = useGetSidbiExposureQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const [saveSidbiExposure] = useSaveSidbiExposureMutation();
+  const [saveSanctionRating] = useSaveSanctionRatingMutation();
+
+  const handleDowngradeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setDowngrade(event.target.value);
+  };
+
+  const initialValues = {
+    sidbiExposures: sidbiExposure || [],
+    sanctionRating: sanctionRating || {
+      irfId,
+      ratingFy: "",
+      intScore: "",
+      comments: "",
+      ratingType: ""
+    }
+  };
+
+  const validationSchema = Yup.object().shape({
+    sidbiExposures: Yup.array().of(
+      Yup.object().shape({
+        ratedExposure: Yup.number().typeError("Must be a number").required("Required"),
+        ratingAgency: Yup.string().required("Required"),
+        dateOfRating: Yup.string().required("Required"),
+      })
+    ),
+    sanctionRating: Yup.object().shape({
+      ratingFy: Yup.number().typeError("Must be a number").required("Required"),
+      intScore: Yup.string().required("Required"),
+      comments: Yup.string().required("Required"),
+    })
+  });
+
+  const handleSubmitSidbi = async (values: any) => {
+    try {
+      const finalValue = values.sidbiExposures.map((exposure: any, index: number) => ({
+        ...exposure,
+        irfId,
+        ratingRefId: index + 1,
+        saveStatus: '01',
+      }));
+      await saveSidbiExposure(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("SIDBI Exposure saved successfully");
+    } catch (error) {
+      console.error("Error saving SIDBI Exposure:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save SIDBI Exposure");
+    }
+  };
+
+  const handleSubmitSanction = async (values: any) => {
+    try {
+      await saveSanctionRating(values.sanctionRating).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Sanction Rating saved successfully");
+    } catch (error) {
+      console.error("Error saving Sanction Rating:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Sanction Rating");
+    }
+  };
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  if (isLoadingPresent || isLoadingSanction || isLoadingSidbi) {
+    return <p>Loading...</p>;
+  }
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="external ratings proposal table">
+        <TableBody>
+          <TableRow>
+            <TableCell style={{ width: '31.7%' }}>Any downgrade in External Rating</TableCell>
+            <TableCell>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Select</FormLabel>
+                <RadioGroup
+                  row
+                  aria-label="downgrade"
+                  name="downgrade"
+                  value={downgrade}
+                  onChange={handleDowngradeChange}
+                >
+                  <FormControlLabel value="Yes" control={<Radio size="small" />} label="Yes" />
+                  <FormControlLabel value="No" control={<Radio size="small" />} label="No" />
+                </RadioGroup>
+              </FormControl>
+            </TableCell>
+          </TableRow>
+
+          {downgrade === 'Yes' && (
+            <>
+              {/* Point 1: Rating where SIDBI exposure is covered */}
+              <TableRow>
+                <TableCell style={{ width: '31.7%' }}>1. Rating where SIDBI exposure is covered</TableCell>
+                <TableCell>
+                  <Formik
+                    initialValues={{ sidbiExposures: sidbiExposure || [] }}
+                    validationSchema={Yup.object().shape({
+                      sidbiExposures: Yup.array().of(
+                        Yup.object().shape({
+                          ratedExposure: Yup.number().typeError("Must be a number").required("Required"),
+                          ratingAgency: Yup.string().required("Required"),
+                          dateOfRating: Yup.string().required("Required"),
+                        })
+                      ),
+                    })}
+                    onSubmit={handleSubmitSidbi}
+                    enableReinitialize={true}
+                  >
+                    {({ values }) => (
+                      <Form>
+                        <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmitSidbi} />
+                        <FieldArray name="sidbiExposures">
+                          {({ push, remove }) => (
+                            <>
+                              <Button 
+                                type="button" 
+                                size='small' 
+                                className='text-capitalize mt-1 mb-3 saveBtn'
+                                variant="contained" 
+                                color="primary" 
+                                onClick={() => push({
+                                  irfId,
+                                  ratedExposure: "",
+                                  ratingAgency: "",
+                                  dateOfRating: null,
+                                  ratingRefId: 0,
+                                  saveStatus: "01"
+                                })}
+                              >
+                                Add <AddCircleIcon />
+                              </Button>
+                              <Table className="rtnTbl">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell><b>Rated Exposure (₹ crore)</b></TableCell>
+                                    <TableCell><b>Rating Agency</b></TableCell>
+                                    <TableCell><b>Date of Rating</b></TableCell>
+                                    <TableCell><b>Actions</b></TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {values.sidbiExposures.length > 0 ? (
+                                    values.sidbiExposures.map((exposure: any, index: number) => (
+                                      <TableRow key={index}>
+                                        <TableCell>
+                                          <TextBoxField
+                                            label=""
+                                            name={`sidbiExposures.${index}.ratedExposure`}
+                                            type="number"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <EnhancedDropDown
+                                            label=""
+                                            name={`sidbiExposures.${index}.ratingAgency`}
+                                            domain="mstr/getRatingAgency"
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <AdvanceDatePickerField
+                                            label=""
+                                            name={`sidbiExposures.${index}.dateOfRating`}
+                                            disableFuture={true}
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <IconButton
+                                            aria-label="delete"
+                                            color="error"
+                                            onClick={() => remove(index)}
+                                            disabled={values.sidbiExposures.length === 1}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))
+                                  ) : (
+                                    <TableRow>
+                                      <TableCell colSpan={4}>No data available</TableCell>
+                                    </TableRow>
+                                  )}
+                                </TableBody>
+                              </Table>
+                              <Grid item xs={12} sx={{ mt: 2 }}>
+                                <Button
+                                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                  type='submit'
+                                  variant="contained"
+                                > 
+                                  Save <CheckCircleOutlineIcon />
+                                </Button>
+                              </Grid>
+                            </>
+                          )}
+                        </FieldArray>
+                      </Form>
+                    )}
+                  </Formik>
+                </TableCell>
+              </TableRow>
+
+              {/* Point 2: Present External Rating */}
+              <TableRow>
+                <TableCell style={{ width: '31.7%' }}>2. Present External Rating (from latest review)</TableCell>
+                <TableCell>
+                  <Formik
+                    initialValues={{ 
+                      sanctionRating: sanctionRating || {
+                        irfId,
+                        ratingFy: "",
+                        intScore: "",
+                        comments: "",
+                        ratingType: ""
+                      }
+                    }}
+                    validationSchema={Yup.object().shape({
+                      sanctionRating: Yup.object().shape({
+                        ratingFy: Yup.number().typeError("Must be a number").required("Required"),
+                        intScore: Yup.string().required("Required"),
+                        comments: Yup.string().required("Required"),
+                      })
+                    })}
+                    onSubmit={handleSubmitSanction}
+                    enableReinitialize={true}
+                  >
+                    {({ values }) => (
+                      <Form>
+                        <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmitSanction} />
+                        <Table className="rtnTbl">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell><b>Rating Exposure (₹ crore)</b></TableCell>
+                              <TableCell><b>Rating Agency</b></TableCell>
+                              <TableCell><b>Date of Rating</b></TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name="sanctionRating.ratingFy"
+                                  type="number"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <EnhancedDropDown
+                                  label=""
+                                  name="sanctionRating.intScore"
+                                  domain="mstr/getRatingAgency"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <AdvanceDatePickerField
+                                  label=""
+                                  name="sanctionRating.comments"
+                                  disableFuture={true}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                        <Grid item xs={12} sx={{ mt: 2 }}>
+                          <Button
+                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                            type='submit'
+                            variant="contained"
+                          > 
+                            Save <CheckCircleOutlineIcon />
+                          </Button>
+                        </Grid>
+                      </Form>
+                    )}
+                  </Formik>
+                </TableCell>
+              </TableRow>
+            </>
+          )}
+        </TableBody>
+      </Table>
+
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default ExternalRatingProposal;
+
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
+
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
+    baseQuery: customBaseQuery,
+    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating', 'ROID', 'ROIR','PresentProposal', 'SidbiExposure', 'SanctionRating'],
+    endpoints: (builder) => ({
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground']
+        }),
+        saveInternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveinternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['InternalRating'],
+        }),
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveexternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ExternalRating'],
+        }),
+        getResetlist: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getresetlist/${applId}`,
+            providesTags: ['ROIR']
+        }),
+        saveReset: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savereset`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getDisbursementList: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
+            providesTags: ['ROID']
+        }),
+        saveDisbursement: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savedisbursement`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getPresentProposal: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getpresentproposal/${applId}`,
+            providesTags: ['PresentProposal']
+        }),
+        savePresentProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savepresentproposal`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['PresentProposal'],
+        }),
+        // New APIs for SIDBI Exposure and Sanction Rating
+        getSidbiExposure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsidbiexposure/${irfId}`,
+            providesTags: ['SidbiExposure']
+        }),
+        saveSidbiExposure: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savesidbiexposure`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SidbiExposure'],
+        }),
+        getSanctionRating: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsanctionrating/${irfId}`,
+            providesTags: ['SanctionRating']
+        }),
+        saveSanctionRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savesanctionrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SanctionRating'],
+        }),
+    }),
+});
+
+export const {
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+    useGetDisbursementListQuery,
+    useGetResetlistQuery,
+    useSaveDisbursementMutation,
+    useSaveResetMutation,
+    useGetPresentProposalQuery,
+    useSavePresentProposalMutation,
+    // New hooks
+    useGetSidbiExposureQuery,
+    useSaveSidbiExposureMutation,
+    useGetSanctionRatingQuery,
+    useSaveSanctionRatingMutation,
+} = interestRateFixationApi;
