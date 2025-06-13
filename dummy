@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid, FormControl, FormLabel, RadioGroup, FormControlLabel, Radio
 } from "@mui/material";
@@ -49,8 +49,40 @@ const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }
   const [saveSidbiExposure] = useSaveSidbiExposureMutation();
   const [saveSanctionRating] = useSaveSanctionRatingMutation();
 
-  const handleDowngradeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setDowngrade(event.target.value);
+  // Set downgrade value from API when sanctionRating data is loaded
+  useEffect(() => {
+    if (sanctionRating && sanctionRating.downgradeExtRating) {
+      setDowngrade(sanctionRating.downgradeExtRating);
+    }
+  }, [sanctionRating]);
+
+  const handleDowngradeChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setDowngrade(value);
+    
+    // Save the radio button value immediately to the API
+    try {
+      const updatedSanctionRating = {
+        ...sanctionRating,
+        irfId,
+        downgradeExtRating: value,
+        // Ensure other required fields have default values if not present
+        ratingFy: sanctionRating?.ratingFy || "",
+        intScore: sanctionRating?.intScore || "",
+        comments: sanctionRating?.comments || "",
+        ratingType: sanctionRating?.ratingType || ""
+      };
+      
+      await saveSanctionRating(updatedSanctionRating).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Downgrade rating saved successfully");
+    } catch (error) {
+      console.error("Error saving downgrade rating:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save downgrade rating");
+    }
   };
 
   const initialValues = {
@@ -60,7 +92,8 @@ const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }
       ratingFy: "",
       intScore: "",
       comments: "",
-      ratingType: ""
+      ratingType: "",
+      downgradeExtRating: downgrade
     }
   };
 
@@ -101,7 +134,13 @@ const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }
 
   const handleSubmitSanction = async (values: any) => {
     try {
-      await saveSanctionRating(values.sanctionRating).unwrap();
+      // Include the downgrade value when saving sanction rating
+      const sanctionRatingWithDowngrade = {
+        ...values.sanctionRating,
+        downgradeExtRating: downgrade
+      };
+      
+      await saveSanctionRating(sanctionRatingWithDowngrade).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
       setSnackMsg("Sanction Rating saved successfully");
@@ -261,12 +300,21 @@ const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }
                 <TableCell>
                   <Formik
                     initialValues={{ 
-                      sanctionRating: sanctionRating || {
+                      sanctionRating: {
+                        ...sanctionRating,
+                        irfId,
+                        ratingFy: sanctionRating?.ratingFy || "",
+                        intScore: sanctionRating?.intScore || "",
+                        comments: sanctionRating?.comments || "",
+                        ratingType: sanctionRating?.ratingType || "",
+                        downgradeExtRating: downgrade
+                      } || {
                         irfId,
                         ratingFy: "",
                         intScore: "",
                         comments: "",
-                        ratingType: ""
+                        ratingType: "",
+                        downgradeExtRating: downgrade
                       }
                     }}
                     validationSchema={Yup.object().shape({
@@ -347,14 +395,3 @@ const ExternalRatingProposal: React.FC<ExternalRatingProposalProps> = ({ irfId }
 };
 
 export default ExternalRatingProposal;
-
-
-{
-  "irfId": "string",
-  "ratingFy": "string",
-  "intScore": "string",
-  "comments": "string",
-  "downgradeExtRating": "string"
-}
-
-useGetSanctionRatingQuery
