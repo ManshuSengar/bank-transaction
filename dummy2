@@ -1,1017 +1,143 @@
-import {
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
-    Tabs,
-    Typography,
-    TextField,
-    FormControl,
-    InputLabel,
-    MenuItem,
-    Select,
-    SelectChangeEvent,
-    Autocomplete,
-} from "@mui/material";
-import React, { memo } from "react";
-import Tab from "@mui/material/Tab";
-import Box from "@mui/material/Box";
-import Section from "../../nbfc/Section";
-import { useParams } from "react-router-dom";
-import Workflow from "../../workflow/Workflow";
-import { useAppSelector } from "../../../app/hooks";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ReviewOfNBFC from "../../monitoringPages/reviewModule/ReviewOfNBFC/ReviewOfNBFC";
-import MonitoringExternalRating from "../../monitoringPages/reviewModule/MonitoringExternalRating/MonitoringExternalRating";
-import ComplianceToPCAFramwork from "../../monitoringPages/reviewModule/complianceToPca/ComplianceToPCAFramwork";
-import CriticalEvents from "../../monitoringPages/reviewModule/CriticalEvents/CriticalEvents";
-import AnyOtherPendingComments from "../../monitoringPages/reviewModule/AnyOtherPendingComments/AnyOtherPendingComments";
-import FinancialTable from "../common-components/FinancialTable";
-import { RfBriefBackground } from "./RfBriefBackground";
-import RfInternalRating from "./RfInternalRating";
-import RfExternalRating from "./RfExternalRating";
-import RfRateOfInterest from "./RfRateOfInterest";
-import PresentProposal from "./PresentProposal";
-import ExternalRatingProposal from "./ExternalRatingProposal";
 
-interface TabPanelProps {
-    children?: React.ReactNode;
-    index: number;
-    value: number;
-}
+curl -X 'POST' \
+  'http://localhost:8080/refapi/interestratefixation/savesidbiexposure' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json' \
+  -d '[
+  {
+    "irfId": "string",
+    "ratedExposure": 0,
+    "ratingAgency": "string",
+    "dateOfRating": "2025-06-13",
+    "ratingRefId": 0,
+    "saveStatus": "string"
+  }
+]'
 
-function CustomTabPanel(props: Readonly<TabPanelProps>) {
-    const { children, value, index, ...other } = props;
+curl -X 'GET' \
+  'http://localhost:8080/refapi/interestratefixation/getsidbiexposure/12' \
+  -H 'accept: */*'
 
-    return (
-        <div
-            role="tabpanel"
-            hidden={value !== index}
-            id={`simple-tabpanel-${index}`}
-            aria-labelledby={`simple-tab-${index}`}
-            {...other}
-        >
-            {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-        </div>
-    );
-}
+curl -X 'POST' \
+  'http://localhost:8080/refapi/interestratefixation/savesanctionrating' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "irfId": "string",
+  "ratingFy": "string",
+  "intScore": "string",
+  "comments": "string",
+  "ratingType":"string"
+}'
 
-function a11yProps(index: number) {
-    return {
-        id: `simple-tab-${index}`,
-        "aria-controls": `simple-tabpanel-${index}`,
-    };
-}
+curl -X 'GET' \
+  'http://localhost:8080/refapi/interestratefixation/getsanctionrating/12' \
+  -H 'accept: */*'
 
-const InteresetRateFixation = () => {
-    const [value, setValue] = React.useState(0);
-    const { id } = useParams();
-    console.log("id", id);
-    const { applId } = useAppSelector((state: { userStore: any; }) => state.userStore);
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
 
-    const [expanded, setExpanded] = React.useState("");
-    const onOpenChange =
-        (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
-            setExpanded(isExpanded ? panel : false);
-        };
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
+    baseQuery: customBaseQuery,
+    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating', 'ROID', 'ROIR','PresentProposal'],
+    endpoints: (builder) => ({
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground']
+        }),
+        saveInternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveinternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['InternalRating'],
+        }),
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveexternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ExternalRating'],
+        }),
 
-    const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-        setValue(newValue);
-    };
+        getResetlist: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getresetlist/${applId}`,
+            providesTags: ['ROIR']
+        }),
+        saveReset: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savereset`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getDisbursementList: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
+            providesTags: ['ROID']
+        }),
+        saveDisbursement: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savedisbursement`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getPresentProposal: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getpresentproposal/${applId}`,
+            providesTags: ['PresentProposal']
+        }),
+        savePresentProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savepresentproposal`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['PresentProposal'],
+        }),
+    }),
+});
 
-    const [borrower, setBorrower] = React.useState('');
+export const {
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+    useGetDisbursementListQuery,
+    useGetResetlistQuery,
+    useSaveDisbursementMutation,
+    useSaveResetMutation,
+    useGetPresentProposalQuery,
+    useSavePresentProposalMutation,
+} = interestRateFixationApi;
 
-    const handleChangeBrw = (event: SelectChangeEvent) => {
-        setBorrower(event.target.value);
-    };
-
-    const topBorrowers = [
-        { label: 'Borrower 1', nbfcId: 1 },
-        { label: 'Borrower 2', nbfcId: 2 },
-        { label: 'Borrower 3', nbfcId: 3 },
-        { label: 'Borrower 4', nbfcId: 4 },
-    ];
-
-    const topSchemes = [
-        { label: 'Scheme of refinance to nbfcs', schCd: 'a' },
-        { label: 'Scheme 2', schCd: 'b' },
-        { label: 'Scheme 3', schCd: 'c' },
-        { label: 'Scheme 4', schCd: 'd' },
-        { label: 'Scheme 5', schCd: 'e' },
-        { label: "Scheme 6", schCd: 'f' }
-    ];
-
-    const options = [
-        { label: "Excellent", value: "Excellent" },
-        { label: "Good", value: "Good" },
-        { label: "Satisfactory", value: "Satisfactory" },
-        { label: "Moderate", value: "Moderate" },
-        { label: "Poor", value: "Poor" },
-        { label: "Default", value: "Default" },
-    ];
-
-    const dummyLoanAccounts: any[] = [
-        {
-            id: 1, loanAccountNo: '000405007899', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
-            currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
-            loanStatus: 'Approved'
-        },
-        {
-            id: 2, loanAccountNo: '000405007877', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
-            currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
-            loanStatus: 'Approved'
-        }
-    ];
-
-    return (
-        <div className="wrap-appraisal-area ">
-            <Section>
-                <div className="inner-top-heading">
-                    <Typography
-                        className="wrap-bold"
-                        noWrap
-                        variant="subtitle1"
-                        component="div"
-                        width={'50%'}
-                    >
-                        <h6 className="title ps-1">Non REF Disb Time Fixing</h6>
-                    </Typography>
-                </div>
-
-                <Box className="wrap-tabs" sx={{ width: "100%" }}>
-                    <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-                        <Tabs
-                            className="tabs-header"
-                            value={value}
-                            onChange={handleChange}
-                            aria-label="basic tabs example"
-                        >
-                            <Tab
-                                className="tab-ui"
-                                label="Fixing of Interest Rate"
-                                {...a11yProps(0)}
-                            />
-                            <Tab className="tab-ui" label="Financial" {...a11yProps(1)} />
-                            <Tab className="tab-ui" label="Work Flow " {...a11yProps(2)} />
-                        </Tabs>
-                    </Box>
-                    <CustomTabPanel value={value} index={0}>
-                        <div className="wrap-appraisal-area">
-                            <Section>
-                                <div className="wrap-accordian custome-form text_count pt-3">
-                                    {/* __________Issue under consideration___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panelX"}
-                                        onChange={onOpenChange("panelX")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panelX-content"
-                                            id="panelX-header"
-                                        >
-                                            Issue Under Consideration
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="alnSet fldsSizeCstm">
-                                                Fixation of Interest rate for disbursement of
-                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                    <InputLabel id="">Select</InputLabel>
-                                                    <Select
-                                                        labelId=""
-                                                        id=""
-                                                        value={borrower}
-                                                        label="Borrower"
-                                                        onChange={handleChangeBrw}
-                                                    >
-                                                        <MenuItem value={0}>One</MenuItem>
-                                                        <MenuItem value={1}>Two</MenuItem>
-                                                        <MenuItem value={1}>Three</MenuItem>
-                                                    </Select>
-                                                </FormControl> tranche of <TextField
-                                                    label="Sanctioned Amount"
-                                                    id=""
-                                                    size="small" className="fnt_sml"
-                                                />
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Background___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel2X"}
-                                        onChange={onOpenChange("panel2X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel2X-content"
-                                            id="panel2X-header"
-                                        >
-                                            Brief Background
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <RfBriefBackground applId="121" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________External Rating___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel20X"}
-                                        onChange={onOpenChange("panel20X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel20X-content"
-                                            id="panel20X-header"
-                                        >
-                                            External Rating
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <RfExternalRating applId="N000122" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Internal Rating___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel21X"}
-                                        onChange={onOpenChange("panel21X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel21X-content"
-                                            id="panel21X-header"
-                                        >
-                                            Internal Rating
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <RfInternalRating applId="N000122" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Rate of Interest___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel22X"}
-                                        onChange={onOpenChange("panel22X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel22X-content"
-                                            id="panel22X-header"
-                                        >
-                                            Rate of Interest
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <RfRateOfInterest applId="N000122" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Present Proposal___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel3X"}
-                                        onChange={onOpenChange("panel3X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel3X-content"
-                                            id="panel3X-header"
-                                        >
-                                            Present Proposal
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <PresentProposal applId="N000122" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________External Rating Proposal___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel4X"}
-                                        onChange={onOpenChange("panel4X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel4X-content"
-                                            id="panel4X-header"
-                                        >
-                                            External Rating Proposal
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <ExternalRatingProposal applId="N000122" />
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Approved Interest rate structure of the Bank___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel5X"}
-                                        onChange={onOpenChange("panel5X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel5X-content"
-                                            id="panel5X-header"
-                                        >
-                                            Approved Interest rate structure of the Bank
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-                                                            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-                                                            <TableCell><b>Remarks</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>a</TableCell>
-                                                            <TableCell>Interest rate / reset structure approval by</TableCell>
-                                                            <TableCell>
-                                                                <div className="alnSet">
-                                                                    RiMV vide circular no. 49/ 2024-25 dated January 09, 2025
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>b</TableCell>
-                                                            <TableCell>Approved Structure</TableCell>
-                                                            <TableCell>
-                                                                <p>For AAA/ Upper Layer NBFC - FIMMDA daily yield matrix for NBFC + SIDBI spread of 30 bps over and above FIMMDA benchmark and spread.</p>
-                                                                <p><b>Others -</b> Internal score based & MCLR linked</p>
-                                                                <TextField
-                                                                    label="Approved Structure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>c</TableCell>
-                                                            <TableCell>Discretionary Power</TableCell>
-                                                            <TableCell>
-                                                                <p>Sub Committee of ALCO - 25 bps and ALCO for discretion beyond 25 bps.</p>
-                                                                <TextField
-                                                                    label="Discretionary Power"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-
-                                                {/* ____________Interest Rate applicable for present proposal_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={6}>
-                                                                <h6><b>Interest Rate applicable for present proposal</b></h6>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell colSpan={6}>
-                                                                <b>MCLR</b>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
-                                                            <TableCell><b>Base spread</b></TableCell>
-                                                            <TableCell><b>Internal Score</b></TableCell>
-                                                            <TableCell><b>Internal Score Linked Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Applicable Rate (%)</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="%"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Base spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Internal Score"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Internal Score Linked Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Applicable Rate (%)"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-
-                                                {/* ____________Fixed_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>Fixed</b>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell><b>Rating Grade</b></TableCell>
-                                                            <TableCell><b>Daily yield matrix as on </b></TableCell>
-                                                            <TableCell><b>Tenure</b></TableCell>
-                                                            <TableCell><b>FIMMDA yield for AAA rated NBFCs (Benchmark)</b></TableCell>
-                                                            <TableCell><b>FIMMDA Spread</b></TableCell>
-                                                            <TableCell><b>SIDBI Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Minimum Interest Rate </b></TableCell>
-                                                            <TableCell><b>Minimum interest rate as per TRMV guidance / date </b></TableCell>
-                                                            <TableCell><b>Final Rate</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Rating Grade"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Daily yield matrix as on"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Tenure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="FIMMDA yield for AAA rated NBFCs"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="FIMMDA Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="SIDBI Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum Interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum interest rate as per TRMV guidance / date"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Final Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-
-                                                {/* ____________T-bill_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>T-bill</b>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell><b>Rating Grade</b></TableCell>
-                                                            <TableCell><b>Benchmark as on</b></TableCell>
-                                                            <TableCell><b>Benchmark</b></TableCell>
-                                                            <TableCell><b>Benchmark Rate</b></TableCell>
-                                                            <TableCell><b>Rating Spread (%)</b></TableCell>
-                                                            <TableCell><b>SIDBI Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Minimum Interest Rate </b></TableCell>
-                                                            <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
-                                                            <TableCell><b>Final Rate</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Rating Grade"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark as on"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="(%)"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="SIDBI Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum Interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Final Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>Comments</b>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Comments"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Rate requested by the company___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel6X"}
-                                        onChange={onOpenChange("panel6X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel6X-content"
-                                            id="panel6X-header"
-                                        >
-                                            Rate Requested by the Company
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <TextField
-                                                label="Rate Requested by the Company"
-                                                id=""
-                                                size="small" className="fnt_sml"
-                                            />
-                                            <div className="wrap-inner-table mt-4">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell><b>Lender/Instrument </b></TableCell>
-                                                            <TableCell><b>Facility Type </b></TableCell>
-                                                            <TableCell><b>Date of Availment </b></TableCell>
-                                                            <TableCell><b>Sanctioned Amount (crore) </b></TableCell>
-                                                            <TableCell><b>Interest Rate </b></TableCell>
-                                                            <TableCell><b>Tenure  </b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Lender/Instrument"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                                                                    <InputLabel id="">Select</InputLabel>
-                                                                    <Select
-                                                                        labelId=""
-                                                                        id=""
-                                                                        value={borrower}
-                                                                        label="Borrower"
-                                                                        onChange={handleChangeBrw}
-                                                                    >
-                                                                        <MenuItem value={0}>One</MenuItem>
-                                                                        <MenuItem value={1}>Two</MenuItem>
-                                                                    </Select>
-                                                                </FormControl>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Date of Availment "
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Sanctioned Amount"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Interest Rate "
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Tenure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Recommendation___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel7X"}
-                                        onChange={onOpenChange("panel7X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel7X-content"
-                                            id="panel7X-header"
-                                        >
-                                            Recommendation
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <TextField
-                                                label="Recommendation"
-                                                id=""
-                                                size="small" className="fnt_sml"
-                                            />
-                                            <div className="wrap-inner-table mt-4">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={8}><b>Interest Rate</b></TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell><b>Scheme</b></TableCell>
-                                                            <TableCell><b>Amount(`crore)</b></TableCell>
-                                                            <TableCell><b>Tenure</b></TableCell>
-                                                            <TableCell><b>Applicable Rate </b></TableCell>
-                                                            <TableCell><b>Discretion (%)</b></TableCell>
-                                                            <TableCell><b>ROI Recommended </b></TableCell>
-                                                            <TableCell><b>Reset Clause</b></TableCell>
-                                                            <TableCell><b>Next Reset Date</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Scheme"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Amount"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Tenure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Applicable Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Discretion %"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="ROI Recommended"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                                                                    <InputLabel id="">Select</InputLabel>
-                                                                    <Select
-                                                                        labelId=""
-                                                                        id=""
-                                                                        value={borrower}
-                                                                        label="Borrower"
-                                                                        onChange={handleChangeBrw}
-                                                                    >
-                                                                        <MenuItem value={0}>One</MenuItem>
-                                                                        <MenuItem value={1}>Two</MenuItem>
-                                                                    </Select>
-                                                                </FormControl>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Next Reset Date"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Validity of Interest rate___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel8X"}
-                                        onChange={onOpenChange("panel8X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel8X-content"
-                                            id="panel8X-header"
-                                        >
-                                            Validity of Interest Rate
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Date"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________DoP___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel9X"}
-                                        onChange={onOpenChange("panel9X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel9X-content"
-                                            id="panel9X-header"
-                                        >
-                                            DoP
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                                                                    <InputLabel id="">Select</InputLabel>
-                                                                    <Select
-                                                                        labelId=""
-                                                                        id=""
-                                                                        value={borrower}
-                                                                        label="Borrower"
-                                                                        onChange={handleChangeBrw}
-                                                                    >
-                                                                        <MenuItem value={0}>One</MenuItem>
-                                                                        <MenuItem value={1}>Two</MenuItem>
-                                                                    </Select>
-                                                                </FormControl>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Comments"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-
-                                    {/* __________Discretionary Powers___________ */}
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panel10X"}
-                                        onChange={onOpenChange("panel10X")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel10X-content"
-                                            id="panel10X-header"
-                                        >
-                                            Discretionary Powers
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Discretionary Powers"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-                                </div>
-                            </Section>
-                        </div>
-                    </CustomTabPanel>
-                    <CustomTabPanel value={value} index={1}>
-                        <div className="wrap-appraisal-area">
-                            <Section>
-                                <div className="wrap-accordian custome-form text_count pt-3">
-                                    <Accordion
-                                        className="custome-accordian"
-                                        expanded={expanded === "panelX"}
-                                        onChange={onOpenChange("panelX")}
-                                    >
-                                        <AccordionSummary
-                                            expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panelX-content"
-                                            id="panelX-header"
-                                        >
-                                            Financial
-                                        </AccordionSummary>
-                                        <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <FinancialTable />
-                                            </div>
-                                        </AccordionDetails>
-                                    </Accordion>
-                                </div>
-                            </Section>
-                        </div>
-                    </CustomTabPanel>
-                    <CustomTabPanel value={value} index={2}>
-                        <Workflow formIdVal={applId} formTypeVal={"PREVISIT"} />
-                    </CustomTabPanel>
-                </Box>
-            </Section>
-        </div>
-    );
-};
-
-export default memo(InteresetRateFixation);
 
 import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableRow, FormControl, InputLabel, Select, MenuItem, TextField, Button } from "@mui/material";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { TextAreaField } from '../../../components/framework/TextAreaField';
 import { useGetExternalRatingPresentQuery } from '../../../features/monitoring/interestRateFixationApi';
 
 const ExternalRatingProposal = ({ applId }: { applId: string }) => {
@@ -1022,7 +148,7 @@ const ExternalRatingProposal = ({ applId }: { applId: string }) => {
 
   const [downgrade, setDowngrade] = useState('');
 
-  const handleDowngradeChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+  const handleDowngradeChange:any = (event: React.ChangeEvent<{ value: unknown }>) => {
     setDowngrade(event.target.value as string);
   };
 
@@ -1130,63 +256,148 @@ const ExternalRatingProposal = ({ applId }: { applId: string }) => {
 
 export default ExternalRatingProposal;
 
-import React, { useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button } from "@mui/material";
-import { Formik, Form } from 'formik';
+import React from 'react';
+import { useFormikContext, getIn, FormikValues } from 'formik';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormControl from '@mui/material/FormControl';
+import Typography from '@mui/material/Typography';
+import Grid from '@mui/material/Grid';
+import { FormLabel } from '@mui/material';
+ 
+interface RadioButtonOption {
+  label: string;
+  value: string;
+}
+ 
+interface RadioButtonFieldProps {
+  label: string;
+  name: string;
+  options: RadioButtonOption[];
+}
+ 
+const RadioButtonField: React.FC<RadioButtonFieldProps> = ({ label, name, options }) => {
+  const { values, touched, errors, setFieldValue } = useFormikContext<FormikValues>() || {};
+ 
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFieldValue(name, event.target.value);
+  };
+ 
+  return (
+    <Grid container spacing={2}>
+      {/* <Grid item xs={12}>
+        <Typography variant="caption" display="block" gutterBottom sx={{ color: '#A9A9A9', fontWeight: '500', marginBottom: '0px' }}>
+          {label}
+        </Typography>
+      </Grid> */}
+      <Grid item xs={12}>
+        <FormControl component="fieldset" error={getIn(touched, name) && Boolean(getIn(errors, name))}>
+        <FormLabel id={label}>{label}</FormLabel>
+          <RadioGroup
+            row
+            aria-label={label}
+            name={name}
+            value={getIn(values, name) || ''}
+            onChange={handleChange}
+          >
+            {options.map((option) => (
+              <FormControlLabel
+                key={option.value}
+                value={option.value}
+                control={<Radio size="small" />}
+                label={option.label}
+              />
+            ))}
+          </RadioGroup>
+        </FormControl>
+      </Grid>
+      {/* <Grid item xs={12}> */}
+        <Typography color="error" variant="subtitle2" gutterBottom component="span" className="mybooking_error">
+          {getIn(touched, name) && getIn(errors, name) && JSON.stringify(getIn(errors, name)).replaceAll('"', '')}
+        </Typography>
+      {/* </Grid> */}
+    </Grid>
+  );
+};
+ 
+export default RadioButtonField;
+
+import React from 'react';
+import {
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
+} from "@mui/material";
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { Formik, FieldArray, Form } from 'formik';
 import * as Yup from 'yup';
-import { useGetPresentProposalQuery, useSavePresentProposalMutation } from '../../../features/monitoring/interestRateFixationApi';
-import { TextAreaField } from '../../../components/framework/TextAreaField';
+import { useAppSelector } from '../../../app/hooks';
+import {
+  useGetExternalRatingSanctionQuery,
+  useGetExternalRatingPresentQuery,
+  useSaveExternalRatingMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import moment from 'moment';
 import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { useState } from 'react';
 import AutoSave from '../../../components/framework/AutoSave';
 
-const PresentProposal = ({ applId }: { applId: string }) => {
-  const { data: presentProposal, isLoading } = useGetPresentProposalQuery(applId, {
-    skip: !applId,
+const RfExternalRating = ({ irfId }: any) => {
+
+  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(irfId, {
+    skip: !irfId,
     refetchOnMountOrArgChange: true,
   });
 
-  const [savePresentProposal] = useSavePresentProposalMutation();
+  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
 
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
+  const [saveExternalRating] = useSaveExternalRatingMutation();
+
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
   const [severity, setSeverity] = useState<"success" | "error">("success");
 
-  const initialValues = presentProposal || {
-    disbProposed: '',
-    changeInFinancials: '',
-    changeInInternalScore: '',
-    lastAlmDisb: '',
-    periodicCompliance: '',
-    pendingIssue: '',
-    otherComments: '',
+  const initialValues = {
+    ratings: presentRatings || [],
   };
 
   const validationSchema = Yup.object().shape({
-    disbProposed: Yup.string().required('Required'),
-    changeInFinancials: Yup.string().required('Required'),
-    changeInInternalScore: Yup.string().required('Required'),
-    lastAlmDisb: Yup.string().required('Required'),
-    periodicCompliance: Yup.string().required('Required'),
-    pendingIssue: Yup.string().required('Required'),
-    otherComments: Yup.string().required('Required'),
+    ratings: Yup.array().of(
+      Yup.object().shape({
+        agencyName: Yup.string().required("Required"),
+        instrument: Yup.string().required("Required"),
+        amtCr: Yup.number().typeError("Must be a number").required("Required"),
+        ratingDesc: Yup.string().required("Required"),
+        outLook: Yup.string().required("Required"),
+        ratingDt: Yup.string().required("Required"),
+      })
+    ),
   });
 
   const handleSubmit = async (values: any) => {
     try {
-      const dataToSave = {
-        ...values,
-        applId,
+      const finalValue = values.ratings.map((rating: any, index: number) => ({
+        ...rating,
+        irfId,
+        id: index + 1,
         saveStatus: '01',
-      };
-      await savePresentProposal(dataToSave).unwrap();
+      }));
+      await saveExternalRating(finalValue).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
-      setSnackMsg("Present Proposal saved successfully");
+      setSnackMsg("Latest External Rating saved successfully");
     } catch (error) {
-      console.error("Error saving present proposal:", error);
+      console.error("Error saving latest external rating:", error);
       setOpenSnackbar(true);
       setSeverity("error");
-      setSnackMsg("Failed to save Present Proposal");
+      setSnackMsg("Failed to save Latest External Rating");
     }
   };
 
@@ -1194,87 +405,185 @@ const PresentProposal = ({ applId }: { applId: string }) => {
     setOpenSnackbar(false);
   };
 
-  if (isLoading) {
-    return <p>Loading...</p>;
-  }
-
   return (
     <div className="wrap-inner-table mt-0">
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize={true}
-      >
-        {({ values }) => (
-          <Form>
-            <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmit} />
-            <Table sx={{ minWidth: 650 }} aria-label="present proposal table">
-              <TableHead>
-                <TableRow>
-                  <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-                  <TableCell style={{ width: '30%' }}><b>Particulars</b></TableCell>
-                  <TableCell><b>Remarks</b></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell>1</TableCell>
-                  <TableCell>Disbursement proposed now</TableCell>
-                  <TableCell>
-                    <TextAreaField name="disbProposed" label="" maxLength={500} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>2</TableCell>
-                  <TableCell>Any change in financials from the time of last disbursement</TableCell>
-                  <TableCell>
-                    <TextAreaField name="changeInFinancials" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>3</TableCell>
-                  <TableCell>Any change in Internal score from that at the time of sanction</TableCell>
-                  <TableCell>
-                    <TextAreaField name="changeInInternalScore" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>4</TableCell>
-                  <TableCell>Latest ALM position (any changes from that of last disbursement) / <b>LCR</b></TableCell>
-                  <TableCell>
-                    <TextAreaField name="lastAlmDisb" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>5</TableCell>
-                  <TableCell>Status of periodic compliances</TableCell>
-                  <TableCell>
-                    <TextAreaField name="periodicCompliance" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>6</TableCell>
-                  <TableCell>Any other pending issue</TableCell>
-                  <TableCell>
-                    <TextAreaField name="pendingIssue" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>7</TableCell>
-                  <TableCell>Any other comments</TableCell>
-                  <TableCell>
-                    <TextAreaField name="otherComments" label="" maxLength={1000} disabled={false} />
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-            <Button type="submit" variant="contained" color="primary" className="mt-2">
-              Save
-            </Button>
-          </Form>
-        )}
-      </Formik>
+      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>External rating at the time of sanction</TableCell>
+            <TableCell>
+              {isLoadingSanction ? (
+                <p>Loading...</p>
+              ) : (
+                <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><b>Name of Rating Agency</b></TableCell>
+                      <TableCell><b>Instrument</b></TableCell>
+                      <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                      <TableCell><b>Rating</b></TableCell>
+                      <TableCell><b>Outlook</b></TableCell>
+                      <TableCell><b>Date of Rating</b></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sanctionRatings?.length > 0 ? (
+                      sanctionRatings.map((rating: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{rating.agencyName}</TableCell>
+                          <TableCell>{rating.instrument}</TableCell>
+                          <TableCell>{rating.amtCr}</TableCell>
+                          <TableCell>{rating.ratingDesc}</TableCell>
+                          <TableCell>{rating.outLook}</TableCell>
+                          <TableCell>{moment(rating.ratingDt).format("DD-MM-YYYY")}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6}>No data available</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </TableCell>
+          </TableRow>
+
+          <TableRow>
+            <TableCell>2</TableCell>
+            <TableCell>Latest External Rating</TableCell>
+            <TableCell>
+              {isLoadingPresent ? (
+                <p>Loading...</p>
+              ) : (
+                <Formik
+                  initialValues={initialValues}
+                  validationSchema={validationSchema}
+                  onSubmit={handleSubmit}
+                  enableReinitialize={true}
+                >
+                  {({ values, setFieldValue }) => (
+                    <Form>
+                      <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmit} />
+                      <FieldArray name="ratings">
+                        {({ push, remove }) => (
+                          <>
+                            <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
+                              variant="contained" color="primary" style={{ display: 'block' }}
+                              onClick={() => push({
+                                irfId,
+                                agencyName: "",
+                                instrument: "",
+                                amtCr: "",
+                                ratingDesc: "",
+                                outLook: "",
+                                ratingDt: null,
+                              })}
+                            >
+                              Add <AddCircleIcon />
+                            </Button>
+                            <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell><b>Name of Rating Agency</b></TableCell>
+                                  <TableCell><b>Instrument</b></TableCell>
+                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                                  <TableCell><b>Rating</b></TableCell>
+                                  <TableCell><b>Outlook</b></TableCell>
+                                  <TableCell><b>Date of Rating</b></TableCell>
+                                  <TableCell><b>Actions</b></TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {values.ratings.length > 0 ? (
+                                  values.ratings.map((rating: any, index: number) => (
+                                    <TableRow key={index}>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.agencyName`}
+                                          domain="mstr/getRatingAgency"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.instrument`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.amtCr`}
+                                          type="number"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.ratingDesc`}
+                                          domain="mstr/getRatingCode"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.outLook`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <AdvanceDatePickerField
+                                          label=""
+                                          name={`ratings.${index}.ratingDt`}
+                                          disableFuture={true}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <IconButton
+                                          aria-label="delete"
+                                          color="error"
+                                          onClick={() => remove(index)}
+                                          disabled={values.ratings.length === 1}
+                                        >
+                                          <DeleteIcon />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={7}>No data available</TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                            <Grid item xs={12} sx={{ mt: 2 }}>
+                              <Button
+                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                type='submit'
+                                variant="contained"> Save <CheckCircleOutlineIcon />
+                              </Button>
+                            </Grid>
+                          </>
+                        )}
+                      </FieldArray>
+                    </Form>
+                  )}
+                </Formik>
+              )}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+
       <NbfcSnackbar
         open={openSnackbar}
         msg={snackMsg}
@@ -1286,75 +595,11 @@ const PresentProposal = ({ applId }: { applId: string }) => {
   );
 };
 
-export default PresentProposal;
+export default RfExternalRating;
 
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { customBaseQuery } from "../../app/commonApi";
 
-export const interestRateFixationApi = createApi({
-    reducerPath: 'interestRateFixationApi',
-    baseQuery: customBaseQuery,
-    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating', 'PresentProposal'],
-    endpoints: (builder) => ({
-        getFixationInterestRate: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
-            providesTags: ['BriefBackground']
-        }),
-        saveInternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveinternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['InternalRating'],
-        }),
-        getInternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getInternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
-            providesTags: ['InternalRating']
-        }),
-        getExternalRatingSanction: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        getExternalRatingPresent: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
-            providesTags: ['ExternalRating']
-        }),
-        saveExternalRating: builder.mutation<any, any[]>({
-            query: (data) => ({
-                url: `interestratefixation/saveexternalrating`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['ExternalRating'],
-        }),
-        getPresentProposal: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getpresentproposal/${applId}`,
-            providesTags: ['PresentProposal']
-        }),
-        savePresentProposal: builder.mutation<any, any>({
-            query: (data) => ({
-                url: `interestratefixation/savepresentproposal`,
-                method: 'POST',
-                body: data,
-            }),
-            invalidatesTags: ['PresentProposal'],
-        }),
-    }),
-});
-
-export const {
-    useGetFixationInterestRateQuery,
-    useSaveInternalRatingMutation,
-    useGetInternalRatingPresentQuery,
-    useGetInternalRatingSanctionQuery,
-    useGetExternalRatingSanctionQuery,
-    useGetExternalRatingPresentQuery,
-    useSaveExternalRatingMutation,
-    useGetPresentProposalQuery,
-    useSavePresentProposalMutation,
-} = interestRateFixationApi;
+so there is two task 1. to make externalRatingPropsal dynamic and second one is to add new api in intersetRateFixation 
+in externalRatingPropsal now there is dropdown and remove point1 and point 2 no use 
+show radio button if yes then show . 1.Rating where SIDBI exposure is covered and 2. Present External Rating (from latest review)  both will dyanmic as i gave api also and shared one component for  reference make t
+like that so for point 1 .getsanctionrating this api will use for pont 2. savesidbiexposure as point 2 multiple user can save and delete and add 
+give me complete and proper code 
