@@ -1,75 +1,55 @@
-
-
-
 import React, { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
-} from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { Formik, FieldArray, Form } from 'formik';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button } from "@mui/material";
+import { Formik, Form } from 'formik';
 import * as Yup from 'yup';
-import moment from 'moment';
-import {
-  useGetInternalRatingSanctionQuery,
-  useGetInternalRatingPresentQuery,
-  useSaveInternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import { useGetApprovedStructureQuery, useSaveApprovedStructureMutation } from '../../../features/monitoring/interestRateFixationApi';
 import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
 import AutoSave from '../../../components/framework/AutoSave';
+import { TextAreaField } from '../../../components/framework/TextAreaAuto';
 
-const RfInternalRating = ({ applId }: any) => {
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetInternalRatingSanctionQuery(applId, {
-    skip: !applId,
+const ApprovedInterestRateStructure = ({ irfId }: { irfId: string }) => {
+  const { data: approvedStructure, isLoading } = useGetApprovedStructureQuery(irfId, {
+    skip: !irfId,
     refetchOnMountOrArgChange: true,
   });
 
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetInternalRatingPresentQuery(applId, {
-    skip: !applId,
-    refetchOnMountOrArgChange: true,
-  });
+  const [saveApprovedStructure] = useSaveApprovedStructureMutation();
 
-  const [saveInternalRating] = useSaveInternalRatingMutation();
-
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
   const [severity, setSeverity] = useState<"success" | "error">("success");
 
-  const initialValues = {
-    ratings: presentRatings || [],
+  // Initial values based on the curl command structure
+  const initialValues = approvedStructure || {
+    approvalBy: 'RiMV vide circular no. 49/ 2024-25 dated January 09, 2025', // Default value
+    approvedStructure: '',
+    discretionaryPower: '',
   };
 
   const validationSchema = Yup.object().shape({
-    ratings: Yup.array().of(
-      Yup.object().shape({
-        intRatingFy: Yup.string().required("Required"),
-        intRatingScore: Yup.string().required("Required"),
-        intRatingDate: Yup.string().required("Required"),
-      })
-    ),
+    approvalBy: Yup.string().required('Required'),
+    approvedStructure: Yup.string().required('Required'),
+    discretionaryPower: Yup.string().required('Required'),
   });
 
   const handleSubmit = async (values: any) => {
     try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        applId,
-        id: index + 1,
+      const dataToSave = {
+        irfId,
+        interestRate: "", // Placeholder, adjust as per actual requirement
+        approvedStructure: values.approvedStructure,
+        discretionaryPower: values.discretionaryPower,
         saveStatus: '01',
-        intRatingType: 'present',
-      }));
-      await saveInternalRating(finalValue).unwrap();
+      };
+      await saveApprovedStructure(dataToSave).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
-      setSnackMsg("Latest Internal Rating saved successfully");
+      setSnackMsg("Approved Structure saved successfully");
     } catch (error) {
-      console.error("Error saving latest internal rating:", error);
+      console.error("Error saving approved structure:", error);
       setOpenSnackbar(true);
       setSeverity("error");
-      setSnackMsg("Failed to save Latest Internal Rating");
+      setSnackMsg("Failed to save Approved Structure");
     }
   };
 
@@ -77,159 +57,59 @@ const RfInternalRating = ({ applId }: any) => {
     setOpenSnackbar(false);
   };
 
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
   return (
     <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Internal Score - At Sanction</TableCell>
-            <TableCell>
-              {isLoadingSanction ? (
-                <p>Loading...</p>
-              ) : (
-                <Table sx={{ minWidth: 650 }} aria-label="sanction internal ratings table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><b>FY</b></TableCell>
-                      <TableCell><b>Internal Score</b></TableCell>
-                      <TableCell><b>Date of Rating</b></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sanctionRatings?.length > 0 ? (
-                      sanctionRatings.map((rating: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell>{rating.intRatingFy}</TableCell>
-                          <TableCell>{rating.intRatingScore}</TableCell>
-                          <TableCell>{moment(rating.intRatingDate).format("DD-MM-YYYY")}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3}>No data available</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </TableCell>
-          </TableRow>
-
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Internal Score - at Last Review / Present</TableCell>
-            <TableCell>
-              {isLoadingPresent ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={initialValues}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmit}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmit} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size='small'
-                              className='text-capitalize mt-1 mb-3 saveBtn'
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                applId,
-                                intRatingFy: "",
-                                intRatingScore: "",
-                                intRatingDate: null,
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="latest internal ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>FY</b></TableCell>
-                                  <TableCell><b>Internal Score</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingFy`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingScore`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.intRatingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={4}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type='submit'
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize={true}
+      >
+        {({ values }) => (
+          <Form>
+            <AutoSave debounceMs={2000} values={values} handleSubmit={handleSubmit} />
+            <Table sx={{ minWidth: 650 }} aria-label="approved structure table">
+              <TableHead>
+                <TableRow>
+                  <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+                  <TableCell style={{ width: '30%' }}><b>Particulars</b></TableCell>
+                  <TableCell><b>Remarks</b></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell>a</TableCell>
+                  <TableCell>Interest rate / reset structure approval by</TableCell>
+                  <TableCell>
+                    <TextAreaField name="approvalBy" label="" maxLength={500} disabled={false} />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>b</TableCell>
+                  <TableCell>Approved Structure</TableCell>
+                  <TableCell>
+                    <TextAreaField name="approvedStructure" label="" maxLength={1000} disabled={false} />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>c</TableCell>
+                  <TableCell>Discretionary Power</TableCell>
+                  <TableCell>
+                    <TextAreaField name="discretionaryPower" label="" maxLength={1000} disabled={false} />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+            <Button type="submit" variant="contained" color="primary" className="mt-2">
+              Save
+            </Button>
+          </Form>
+        )}
+      </Formik>
       <NbfcSnackbar
         open={openSnackbar}
         msg={snackMsg}
@@ -241,8 +121,7 @@ const RfInternalRating = ({ applId }: any) => {
   );
 };
 
-export default RfInternalRating;
-
+export default ApprovedInterestRateStructure;
 
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { customBaseQuery } from "../../app/commonApi";
@@ -250,8 +129,19 @@ import { customBaseQuery } from "../../app/commonApi";
 export const interestRateFixationApi = createApi({
     reducerPath: 'interestRateFixationApi',
     baseQuery: customBaseQuery,
-    tagTypes: ['BriefBackground', 'InternalRating', 'ExternalRating'],
+    tagTypes: [
+        'BriefBackground', 
+        'InternalRating', 
+        'ExternalRating', 
+        'ROID', 
+        'ROIR', 
+        'PresentProposal', 
+        'SidbiExposure', 
+        'SanctionRating', 
+        'ApprovedStructure' // New tag for approved structure
+    ],
     endpoints: (builder) => ({
+        // Existing endpoints (unchanged)
         getFixationInterestRate: builder.query<any, string>({
             query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
             providesTags: ['BriefBackground']
@@ -288,6 +178,79 @@ export const interestRateFixationApi = createApi({
             }),
             invalidatesTags: ['ExternalRating'],
         }),
+        getResetlist: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getresetlist/${applId}`,
+            providesTags: ['ROIR']
+        }),
+        saveReset: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savereset`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getDisbursementList: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
+            providesTags: ['ROID']
+        }),
+        saveDisbursement: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savedisbursement`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getPresentProposal: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getpresentproposal/${irfId}`, // Updated to irfId for consistency
+            providesTags: ['PresentProposal']
+        }),
+        savePresentProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savepresentproposal`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['PresentProposal'],
+        }),
+        getSidbiExposure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsidbiexposure/${irfId}`,
+            providesTags: ['SidbiExposure']
+        }),
+        saveSidbiExposure: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savesidbiexposure`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SidbiExposure'],
+        }),
+        getSanctionRating: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsanctionrating/${irfId}`,
+            providesTags: ['SanctionRating']
+        }),
+        saveSanctionRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savesanctionrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SanctionRating'],
+        }),
+        // New endpoints for Approved Interest Rate Structure
+        getApprovedStructure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getapprovedintrate/${irfId}`,
+            providesTags: ['ApprovedStructure']
+        }),
+        saveApprovedStructure: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/saveapprovedintrate`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ApprovedStructure'],
+        }),
     }),
 });
 
@@ -299,30 +262,255 @@ export const {
     useGetExternalRatingSanctionQuery,
     useGetExternalRatingPresentQuery,
     useSaveExternalRatingMutation,
+    useGetDisbursementListQuery,
+    useGetResetlistQuery,
+    useSaveDisbursementMutation,
+    useSaveResetMutation,
+    useGetPresentProposalQuery,
+    useSavePresentProposalMutation,
+    useGetSidbiExposureQuery,
+    useSaveSidbiExposureMutation,
+    useGetSanctionRatingQuery,
+    useSaveSanctionRatingMutation,
+    // New hooks
+    useGetApprovedStructureQuery,
+    useSaveApprovedStructureMutation,
 } = interestRateFixationApi;
 
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
+import { Formik, Form, Field } from 'formik';
+import { TextField } from '@mui/material';
 
-curl -X 'GET' \
-  'http://localhost:8080/refapi/interestratefixation/getpresentproposal/121' \
-  -H 'accept: */*'
+const InterestRateApplicable = () => {
+  const initialValues = {
+    mclr: {
+      oneYMclr: '',
+      baseSpread: '',
+      internalScore: '',
+      internalScoreLinkedSpread: '',
+      totalSpread: '',
+      applicableRate: '',
+    },
+    fixed: {
+      ratingGrade: '',
+      dailyYieldMatrix: '',
+      tenure: '',
+      fimmdaYield: '',
+      fimmdaSpread: '',
+      sidbiSpread: '',
+      totalSpread: '',
+      minInterestRate: '',
+      minInterestRateTrmv: '',
+      finalRate: '',
+    },
+    tbill: {
+      ratingGrade: '',
+      benchmarkAsOn: '',
+      benchmark: '',
+      benchmarkRate: '',
+      ratingSpread: '',
+      sidbiSpread: '',
+      totalSpread: '',
+      minInterestRate: '',
+      minInterestRateTrmv: '',
+      finalRate: '',
+    },
+    comments: '',
+  };
 
-curl -X 'POST' \
-  'http://localhost:8080/refapi/interestratefixation/savepresentproposal' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "applId": "string",
-  "disbProposed": "string",
-  "lastDisb": "string",
-  "changeInternalScore": "string",
-  "downgradeExtRating": "string",
-  "lastAlmDisb": "string",
-  "periodicCompliance": "string",
-  "pendingIssue": "string",
-  "otherComments": "string",
-  "saveStatus": "string"
-}'
+  return (
+    <Formik
+      initialValues={initialValues}
+      onSubmit={() => {}} // No submission logic for now
+    >
+      {() => (
+        <Form>
+          {/* MCLR Table */}
+          <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <h6><b>Interest Rate applicable for present proposal</b></h6>
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={6}><b>MCLR</b></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
+                <TableCell><b>Base spread</b></TableCell>
+                <TableCell><b>Internal Score</b></TableCell>
+                <TableCell><b>Internal Score Linked Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Applicable Rate (%)</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>
+                  <Field as={TextField} label="%" name="mclr.oneYMclr" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Base spread" name="mclr.baseSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Internal Score" name="mclr.internalScore" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Internal Score Linked Spread" name="mclr.internalScoreLinkedSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Total Spread" name="mclr.totalSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Applicable Rate (%)" name="mclr.applicableRate" size="small" className="fnt_sml" />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
 
+          {/* Fixed Table */}
+          <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={10}><b>Fixed</b></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell><b>Rating Grade</b></TableCell>
+                <TableCell><b>Daily yield matrix as on</b></TableCell>
+                <TableCell><b>Tenure</b></TableCell>
+                <TableCell><b>FIMMDA yield for AAA rated NBFCs (Benchmark)</b></TableCell>
+                <TableCell><b>FIMMDA Spread</b></TableCell>
+                <TableCell><b>SIDBI Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Minimum Interest Rate</b></TableCell>
+                <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
+                <TableCell><b>Final Rate</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>
+                  <Field as={TextField} label="Rating Grade" name="fixed.ratingGrade" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Daily yield matrix as on" name="fixed.dailyYieldMatrix" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Tenure" name="fixed.tenure" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="FIMMDA yield for AAA rated NBFCs" name="fixed.fimmdaYield" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="FIMMDA Spread" name="fixed.fimmdaSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="SIDBI Spread" name="fixed.sidbiSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Total Spread" name="fixed.totalSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Minimum Interest Rate" name="fixed.minInterestRate" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Minimum interest rate as per TRMV guidance / date" name="fixed.minInterestRateTrmv" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Final Rate" name="fixed.finalRate" size="small" className="fnt_sml" />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          {/* T-bill Table */}
+          <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={10}><b>T-bill</b></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell><b>Rating Grade</b></TableCell>
+                <TableCell><b>Benchmark as on</b></TableCell>
+                <TableCell><b>Benchmark</b></TableCell>
+                <TableCell><b>Benchmark Rate</b></TableCell>
+                <TableCell><b>Rating Spread (%)</b></TableCell>
+                <TableCell><b>SIDBI Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Minimum Interest Rate</b></TableCell>
+                <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
+                <TableCell><b>Final Rate</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>
+                  <Field as={TextField} label="Rating Grade" name="tbill.ratingGrade" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Benchmark as on" name="tbill.benchmarkAsOn" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Benchmark" name="tbill.benchmark" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Benchmark Rate" name="tbill.benchmarkRate" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="(%)" name="tbill.ratingSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="SIDBI Spread" name="tbill.sidbiSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Total Spread" name="tbill.totalSpread" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Minimum Interest Rate" name="tbill.minInterestRate" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Minimum interest rate as per TRMV guidance / date" name="tbill.minInterestRateTrmv" size="small" className="fnt_sml" />
+                </TableCell>
+                <TableCell>
+                  <Field as={TextField} label="Final Rate" name="tbill.finalRate" size="small" className="fnt_sml" />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          {/* Comments Table */}
+          <Table sx={{ minWidth: 650 }} aria-label="comments table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={1}><b>Comments</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>
+                  <Field
+                    as={TextField}
+                    label="Comments"
+                    name="comments"
+                    size="small"
+                    className="fnt_sml"
+                    multiline
+                    rows={4}
+                    fullWidth
+                  />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Form>
+      )}
+    </Formik>
+  );
+};
+
+export default InterestRateApplicable;
 
 import {
     Accordion,
@@ -331,18 +519,18 @@ import {
     Tabs,
     Typography,
     TextField,
-    Table,
-    TableBody,
-    TableHead,
-    TableRow,
-    TableCell,
     FormControl,
     InputLabel,
     MenuItem,
     Select,
     SelectChangeEvent,
-    Button,
     Autocomplete,
+    Table,
+    TableBody,
+    TableHead,
+    TableRow,
+    TableCell,
+    Button
 } from "@mui/material";
 import React, { memo } from "react";
 import Tab from "@mui/material/Tab";
@@ -357,14 +545,15 @@ import MonitoringExternalRating from "../../monitoringPages/reviewModule/Monitor
 import ComplianceToPCAFramwork from "../../monitoringPages/reviewModule/complianceToPca/ComplianceToPCAFramwork";
 import CriticalEvents from "../../monitoringPages/reviewModule/CriticalEvents/CriticalEvents";
 import AnyOtherPendingComments from "../../monitoringPages/reviewModule/AnyOtherPendingComments/AnyOtherPendingComments";
-import AddCircleIcon from '@mui/icons-material/AddCircle';
 import FinancialTable from "../common-components/FinancialTable";
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
-import ExternalRatingTableForm from "../common-components/ExternalRatingTableForm";
 import { RfBriefBackground } from "./RfBriefBackground";
-import RfInternalRating  from "./RfInternalRating";
-import RfExternalRating  from "./RfExternalRating";
-import  RfRateOfInterest  from "./RfRateOfInterest";
+import RfInternalRating from "./RfInternalRating";
+import RfExternalRating from "./RfExternalRating";
+import RfRateOfInterest from "./RfRateOfInterest";
+import PresentProposal from "./PresentProposal";
+import ExternalRatingProposal from "./ExternalRatingProposal";
+import ApprovedInterestRateStructure from "./ApprovedInterestRateStructure"; // New import
+import InterestRateApplicable from "./InterestRateApplicable"; // New import
 
 interface TabPanelProps {
     children?: React.ReactNode;
@@ -399,7 +588,7 @@ const InteresetRateFixation = () => {
     const [value, setValue] = React.useState(0);
     const { id } = useParams();
     console.log("id", id);
-    const { applId, } = useAppSelector((state: { userStore: any; }) => state.userStore);
+    const { applId } = useAppSelector((state: { userStore: any; }) => state.userStore);
 
     const [expanded, setExpanded] = React.useState("");
     const onOpenChange =
@@ -441,6 +630,7 @@ const InteresetRateFixation = () => {
         { label: "Poor", value: "Poor" },
         { label: "Default", value: "Default" },
     ];
+
     const dummyLoanAccounts: any[] = [
         {
             id: 1, loanAccountNo: '000405007899', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
@@ -453,11 +643,11 @@ const InteresetRateFixation = () => {
             loanStatus: 'Approved'
         }
     ];
+
     return (
         <div className="wrap-appraisal-area ">
             <Section>
-                <div
-                    className="inner-top-heading">
+                <div className="inner-top-heading">
                     <Typography
                         className="wrap-bold"
                         noWrap
@@ -467,7 +657,6 @@ const InteresetRateFixation = () => {
                     >
                         <h6 className="title ps-1">Non REF Disb Time Fixing</h6>
                     </Typography>
-
                 </div>
 
                 <Box className="wrap-tabs" sx={{ width: "100%" }}>
@@ -481,7 +670,6 @@ const InteresetRateFixation = () => {
                             <Tab
                                 className="tab-ui"
                                 label="Fixing of Interest Rate"
-
                                 {...a11yProps(0)}
                             />
                             <Tab className="tab-ui" label="Financial" {...a11yProps(1)} />
@@ -541,15 +729,15 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel2X-content"
                                             id="panel2X-header"
                                         >
-                                           Brief Background
+                                            Brief Background
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <RfBriefBackground applId="121"/>
+                                            <RfBriefBackground irfId="121" />
                                         </AccordionDetails>
                                     </Accordion>
 
-                                     {/* __________Background___________ */}
-                                     <Accordion
+                                    {/* __________External Rating___________ */}
+                                    <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panel20X"}
                                         onChange={onOpenChange("panel20X")}
@@ -559,14 +747,15 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel20X-content"
                                             id="panel20X-header"
                                         >
-                                           External Rating
+                                            External Rating
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <RfExternalRating  applId="N000122"/>
+                                            <RfExternalRating irfId="N000122" />
                                         </AccordionDetails>
                                     </Accordion>
-                                     {/* __________Background___________ */}
-                                     <Accordion
+
+                                    {/* __________Internal Rating___________ */}
+                                    <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panel21X"}
                                         onChange={onOpenChange("panel21X")}
@@ -576,12 +765,14 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel21X-content"
                                             id="panel21X-header"
                                         >
-                                           Internal Rating 
+                                            Internal Rating
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <RfInternalRating applId="N000122"/>
+                                            <RfInternalRating applId="N000122" />
                                         </AccordionDetails>
-                                    </Accordion> {/* __________Background___________ */}
+                                    </Accordion>
+
+                                    {/* __________Rate of Interest___________ */}
                                     <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panel22X"}
@@ -592,14 +783,12 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel22X-content"
                                             id="panel22X-header"
                                         >
-                                          Rate of Interest
+                                            Rate of Interest
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <RfRateOfInterest  applId="N000122" />
+                                            <RfRateOfInterest irfId="N000122" />
                                         </AccordionDetails>
                                     </Accordion>
-
-
 
                                     {/* __________Present Proposal___________ */}
                                     <Accordion
@@ -615,268 +804,11 @@ const InteresetRateFixation = () => {
                                             Present Proposal
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-                                                            <TableCell style={{ width: '30%' }}><b>Particulars</b></TableCell>
-                                                            <TableCell><b>Remarks</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>1</TableCell>
-                                                            <TableCell>Disbursement proposed now</TableCell>
-
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                    <TextAreaField
-                                                                        name="decisionRemarks"
-                                                                        label=""
-                                                                        maxLength={500}
-                                                                        disabled={false}
-                                                                    />
-                                                                </FormControl>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>2</TableCell>
-                                                            <TableCell>Any change in financials from the time of last disbursement</TableCell>
-
-                                                            <TableCell>
-                                                                <FormControl sx={{ m: 1, minWidth: 160 }} size="small">
-                                                                    <TextAreaField
-                                                                        name="decisionRemarks"
-                                                                        label=""
-                                                                        maxLength={1000}
-                                                                        disabled={false}
-                                                                    />
-                                                                </FormControl>
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>3</TableCell>
-                                                            <TableCell>Any change in Internal score from that at the time of sanction</TableCell>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>4</TableCell>
-
-                                                            <TableCell colSpan={3}>
-                                                                <Table>
-                                                                    <TableRow>
-                                                                        <TableCell style={{ width: '31.7%' }}>Any downgrade in External Rating</TableCell>
-                                                                        <TableCell>
-                                                                            <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                                                                                <InputLabel id="">Select</InputLabel>
-                                                                                <Select
-                                                                                    labelId=""
-                                                                                    id=""
-                                                                                    value={borrower}
-                                                                                    label="Borrower"
-                                                                                    onChange={handleChangeBrw}
-                                                                                >
-                                                                                    <MenuItem value={0}>Yes</MenuItem>
-                                                                                    <MenuItem value={1}>No</MenuItem>
-                                                                                </Select>
-                                                                            </FormControl>
-
-                                                                            <Table className="rtnTbl">
-                                                                                <TableRow>
-                                                                                    <TableCell>Point - 1</TableCell>
-                                                                                </TableRow>
-                                                                                <TableRow>
-                                                                                    <TableCell>Point - 2</TableCell>
-                                                                                </TableRow>
-                                                                            </Table>
-
-
-                                                                        </TableCell>
-                                                                    </TableRow>
-
-                                                                    <TableRow>
-                                                                        <TableCell style={{ width: '31.7%' }}>
-                                                                            {/* <b>In case of any downgrade :</b><br /> */}
-                                                                            1. Rating where SIDBI exposure is covered</TableCell>
-                                                                        <TableCell>
-                                                                            <Table className="rtnTbl">
-                                                                                <TableHead>
-                                                                                    <TableRow>
-                                                                                        <TableCell><b>Rated Exposure (` crore)</b></TableCell>
-                                                                                        <TableCell><b>Rating Agency</b></TableCell>
-                                                                                        <TableCell><b>Date of Rating</b></TableCell>
-                                                                                    </TableRow>
-                                                                                </TableHead>
-                                                                                <TableBody>
-                                                                                    <TableRow>
-                                                                                        <TableCell>
-                                                                                            <TextField
-                                                                                                label="Rated Exposure"
-                                                                                                id=""
-                                                                                                size="small" className="fnt_sml"
-                                                                                            />
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
-                                                                                                <InputLabel id="">Select</InputLabel>
-                                                                                                <Select
-                                                                                                    labelId=""
-                                                                                                    id=""
-                                                                                                    value={borrower}
-                                                                                                    label="Borrower"
-                                                                                                    onChange={handleChangeBrw}
-                                                                                                >
-                                                                                                    <MenuItem value={0}>One</MenuItem>
-                                                                                                    <MenuItem value={1}>Two</MenuItem>
-                                                                                                </Select>
-                                                                                            </FormControl>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <TextField
-                                                                                                label="Date of Rating"
-                                                                                                id=""
-                                                                                                size="small" className="fnt_sml"
-                                                                                            />
-                                                                                        </TableCell>
-                                                                                    </TableRow>
-                                                                                </TableBody>
-                                                                            </Table>
-                                                                        </TableCell>
-                                                                    </TableRow>
-
-                                                                    <TableRow>
-                                                                        <TableCell style={{ width: '31.7%' }}>2. Rating considered for sanction of latest loan</TableCell>
-                                                                        <TableCell>
-
-                                                                            <Table className="rtnTbl">
-                                                                                <TableHead>
-                                                                                    <TableRow>
-                                                                                        <TableCell>
-                                                                                            <b>FY</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b> Internal Score</b>
-                                                                                        </TableCell>
-                                                                                        <TableCell>
-                                                                                            <b>Comments</b>
-                                                                                        </TableCell>
-                                                                                    </TableRow>
-                                                                                </TableHead>
-
-                                                                                <TableRow>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="FY"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        <TextField
-                                                                                            label="Internal Score"
-                                                                                            id=""
-                                                                                            size="small" className="fnt_sml"
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                    <TableCell>
-                                                                                        <TextAreaField
-                                                                                            name="decisionRemarks"
-                                                                                            label=""
-                                                                                            maxLength={1000}
-                                                                                            disabled={false}
-                                                                                        />
-                                                                                    </TableCell>
-                                                                                </TableRow>
-
-                                                                                <TableRow>
-                                                                                    <TableCell colSpan={3}>
-                                                                                        <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-0 saveBtn' variant="contained" color="primary">
-                                                                                            Add <AddCircleIcon />
-                                                                                        </Button>
-                                                                                    </TableCell>
-                                                                                </TableRow>
-                                                                            </Table>
-                                                                        </TableCell>
-                                                                    </TableRow>
-
-                                                                </Table>
-                                                            </TableCell>
-
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>5</TableCell>
-                                                            <TableCell>Latest ALM position (any changes from that of last disbursement) / <b>LCR</b></TableCell>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>6</TableCell>
-                                                            <TableCell>Status of periodic compliances</TableCell>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>7</TableCell>
-                                                            <TableCell>Any other pending issue</TableCell>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>8</TableCell>
-                                                            <TableCell>Any other comments</TableCell>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-
+                                            <PresentProposal irfId="N000122" />
                                         </AccordionDetails>
                                     </Accordion>
 
-                                    {/* __________Approved Interest rate structure of the Bank___________ */}
+                                    {/* __________External Rating Proposal___________ */}
                                     <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panel4X"}
@@ -887,386 +819,14 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel4X-content"
                                             id="panel4X-header"
                                         >
-                                            Approved Interest rate structure of the Bank
+                                            External Rating Proposal
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <div className="wrap-inner-table mt-0">
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-                                                            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-                                                            <TableCell><b>Remarks</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>a</TableCell>
-                                                            <TableCell>Interest rate / reset structure approval by</TableCell>
-
-                                                            <TableCell>
-                                                                <div className="alnSet">
-                                                                    RiMV vide circular no. 49/ 2024-25 dated January 09, 2025
-                                                                    <TextAreaField
-                                                                        name="decisionRemarks"
-                                                                        label=""
-                                                                        maxLength={1000}
-                                                                        disabled={false}
-                                                                    />
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell>b</TableCell>
-                                                            <TableCell>Approved Structure</TableCell>
-
-                                                            <TableCell>
-                                                                <p>For AAA/ Upper Layer NBFC - FIMMDA daily yield matrix for NBFC + SIDBI spread of 30 bps over and above FIMMDA benchmark and spread.</p>
-                                                                <p><b>Others -</b>  Internal score based & MCLR linked</p>
-                                                                <TextField
-                                                                    label="Approved Structure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-
-                                                        <TableRow>
-                                                            <TableCell>c</TableCell>
-                                                            <TableCell>Discretionary Power</TableCell>
-                                                            <TableCell>
-                                                                <p>Sub Committee of ALCO - 25 bps and ALCO for discretion beyond 25 bps.</p>
-                                                                <TextField
-                                                                    label="Discretionary Power"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />  </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-
-                                                {/* ____________Interest Rate applicable for present proposal_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={6}>
-                                                                <h6><b>Interest Rate applicable for present proposal</b></h6>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell colSpan={6}>
-                                                                <b>MCLR</b>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
-                                                            <TableCell><b>Base spread</b></TableCell>
-                                                            <TableCell><b>Internal Score</b></TableCell>
-                                                            <TableCell><b>Internal Score Linked Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Applicable Rate (%)</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="%"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Base spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Internal Score"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Internal Score Linked Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Applicable Rate (%)"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-
-                                                {/* ____________Fixed_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>Fixed</b>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell><b>Rating Grade</b></TableCell>
-                                                            <TableCell><b>Daily yield matrix as on </b></TableCell>
-                                                            <TableCell><b>Tenure</b></TableCell>
-                                                            <TableCell><b>FIMMDA yield for AAA rated NBFCs (Benchmark)</b></TableCell>
-                                                            <TableCell><b>FIMMDA Spread</b></TableCell>
-                                                            <TableCell><b>SIDBI Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Minimum Interest Rate </b></TableCell>
-                                                            <TableCell><b>Minimum interest rate as per TRMV guidance / date </b></TableCell>
-                                                            <TableCell><b>Final Rate</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Rating Grade"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Daily yield matrix as on"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Tenure"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="FIMMDA yield for AAA rated NBFCs"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="FIMMDA Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="SIDBI Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum Interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum interest rate as per TRMV guidance / date"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Final Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-
-
-                                                {/* ____________T-bill_____________________ */}
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>T-bill</b>
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell><b>Rating Grade</b></TableCell>
-                                                            <TableCell><b>Benchmark as on</b></TableCell>
-                                                            <TableCell><b>Benchmark</b></TableCell>
-                                                            <TableCell><b>Benchmark Rate</b></TableCell>
-                                                            <TableCell><b>Rating Spread (%)</b></TableCell>
-                                                            <TableCell><b>SIDBI Spread</b></TableCell>
-                                                            <TableCell><b>Total Spread</b></TableCell>
-                                                            <TableCell><b>Minimum Interest Rate </b></TableCell>
-                                                            <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
-                                                            <TableCell><b>Final Rate</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Rating Grade"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark as on"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Benchmark Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="(%)"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="SIDBI Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Total Spread"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Minimum Interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="interest Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextField
-                                                                    label="Final Rate"
-                                                                    id=""
-                                                                    size="small" className="fnt_sml"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-
-
-                                                <Table sx={{ minWidth: 650 }} aria-label="external ratings table" className="mt-4">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell colSpan={12}>
-                                                                <b>Comments</b>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-
-                                                    <TableBody>
-                                                        <TableRow>
-                                                            <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
-                                                                />
-                                                            </TableCell>
-
-                                                        </TableRow>
-
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-
+                                            <ExternalRatingProposal irfId="N000121" />
                                         </AccordionDetails>
                                     </Accordion>
 
-                                    {/* __________Rate requested by the company___________ */}
+                                    {/* __________Approved Interest rate structure of the Bank___________ */}
                                     <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panel5X"}
@@ -1277,14 +837,32 @@ const InteresetRateFixation = () => {
                                             aria-controls="panel5X-content"
                                             id="panel5X-header"
                                         >
+                                            Approved Interest rate structure of the Bank
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <ApprovedInterestRateStructure irfId="N000122" />
+                                            <InterestRateApplicable />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Rate requested by the company___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel6X"}
+                                        onChange={onOpenChange("panel6X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel6X-content"
+                                            id="panel6X-header"
+                                        >
                                             Rate Requested by the Company
                                         </AccordionSummary>
                                         <AccordionDetails>
-                                            <TextAreaField
-                                                name="decisionRemarks"
-                                                label=""
-                                                maxLength={2000}
-                                                disabled={false}
+                                            <TextField
+                                                label="Rate Requested by the Company"
+                                                id=""
+                                                size="small" className="fnt_sml"
                                             />
                                             <div className="wrap-inner-table mt-4">
                                                 <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
@@ -1298,7 +876,6 @@ const InteresetRateFixation = () => {
                                                             <TableCell><b>Tenure  </b></TableCell>
                                                         </TableRow>
                                                     </TableHead>
-
                                                     <TableBody>
                                                         <TableRow>
                                                             <TableCell>
@@ -1323,7 +900,6 @@ const InteresetRateFixation = () => {
                                                                     </Select>
                                                                 </FormControl>
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Date of Availment "
@@ -1331,7 +907,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Sanctioned Amount"
@@ -1339,7 +914,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Interest Rate "
@@ -1347,70 +921,45 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
+                                                                <TextField
+                                                                    label="Tenure"
+                                                                    id=""
+                                                                    size="small" className="fnt_sml"
                                                                 />
-                                                            </TableCell>
-                                                        </TableRow>
-
-                                                        <TableRow>
-                                                            <TableCell colSpan={8}>
-                                                                <Button type="button" size='small' className='psn_btn text-capitalize my-2 ms-1 saveBtn' variant="contained" color="primary">
-                                                                    Add <AddCircleIcon />
-                                                                </Button>
                                                             </TableCell>
                                                         </TableRow>
                                                     </TableBody>
                                                 </Table>
                                             </div>
-
-                                            <p className="p-2 mb-0">
-                                                <b>Vertical Comments:</b>
-                                            </p>
-
-                                            <TextAreaField
-                                                name="decisionRemarks"
-                                                label=""
-                                                maxLength={2000}
-                                                disabled={false}
-                                            />
                                         </AccordionDetails>
                                     </Accordion>
 
                                     {/* __________Recommendation___________ */}
                                     <Accordion
                                         className="custome-accordian"
-                                        expanded={expanded === "panel6X"}
-                                        onChange={onOpenChange("panel6X")}
+                                        expanded={expanded === "panel7X"}
+                                        onChange={onOpenChange("panel7X")}
                                     >
                                         <AccordionSummary
                                             expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel6X-content"
-                                            id="panel6X-header"
+                                            aria-controls="panel7X-content"
+                                            id="panel7X-header"
                                         >
                                             Recommendation
                                         </AccordionSummary>
                                         <AccordionDetails>
-
-                                            <TextAreaField
-                                                name="decisionRemarks"
-                                                label=""
-                                                maxLength={2000}
-                                                disabled={false}
+                                            <TextField
+                                                label="Recommendation"
+                                                id=""
+                                                size="small" className="fnt_sml"
                                             />
-
                                             <div className="wrap-inner-table mt-4">
                                                 <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
                                                     <TableHead>
                                                         <TableRow>
                                                             <TableCell colSpan={8}><b>Interest Rate</b></TableCell>
                                                         </TableRow>
-
                                                         <TableRow>
                                                             <TableCell><b>Scheme</b></TableCell>
                                                             <TableCell><b>Amount(`crore)</b></TableCell>
@@ -1422,7 +971,6 @@ const InteresetRateFixation = () => {
                                                             <TableCell><b>Next Reset Date</b></TableCell>
                                                         </TableRow>
                                                     </TableHead>
-
                                                     <TableBody>
                                                         <TableRow>
                                                             <TableCell>
@@ -1432,7 +980,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Amount"
@@ -1447,7 +994,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Applicable Rate"
@@ -1455,7 +1001,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Discretion %"
@@ -1463,7 +1008,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="ROI Recommended"
@@ -1471,7 +1015,6 @@ const InteresetRateFixation = () => {
                                                                     size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
                                                                     <InputLabel id="">Select</InputLabel>
@@ -1487,7 +1030,6 @@ const InteresetRateFixation = () => {
                                                                     </Select>
                                                                 </FormControl>
                                                             </TableCell>
-
                                                             <TableCell>
                                                                 <TextField
                                                                     label="Next Reset Date"
@@ -1499,27 +1041,23 @@ const InteresetRateFixation = () => {
                                                     </TableBody>
                                                 </Table>
                                             </div>
-
                                         </AccordionDetails>
                                     </Accordion>
-
-
 
                                     {/* __________Validity of Interest rate___________ */}
                                     <Accordion
                                         className="custome-accordian"
-                                        expanded={expanded === "panel7X"}
-                                        onChange={onOpenChange("panel7X")}
+                                        expanded={expanded === "panel8X"}
+                                        onChange={onOpenChange("panel8X")}
                                     >
                                         <AccordionSummary
                                             expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel7X-content"
-                                            id="panel7X-header"
+                                            aria-controls="panel8X-content"
+                                            id="panel8X-header"
                                         >
                                             Validity of Interest Rate
                                         </AccordionSummary>
                                         <AccordionDetails>
-
                                             <div className="wrap-inner-table mt-0">
                                                 <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
                                                     <TableBody>
@@ -1535,25 +1073,23 @@ const InteresetRateFixation = () => {
                                                     </TableBody>
                                                 </Table>
                                             </div>
-
                                         </AccordionDetails>
                                     </Accordion>
 
                                     {/* __________DoP___________ */}
                                     <Accordion
                                         className="custome-accordian"
-                                        expanded={expanded === "panel8X"}
-                                        onChange={onOpenChange("panel8X")}
+                                        expanded={expanded === "panel9X"}
+                                        onChange={onOpenChange("panel9X")}
                                     >
                                         <AccordionSummary
                                             expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel8X-content"
-                                            id="panel8X-header"
+                                            aria-controls="panel9X-content"
+                                            id="panel9X-header"
                                         >
                                             DoP
                                         </AccordionSummary>
                                         <AccordionDetails>
-
                                             <div className="wrap-inner-table mt-0">
                                                 <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
                                                     <TableBody>
@@ -1574,59 +1110,52 @@ const InteresetRateFixation = () => {
                                                                 </FormControl>
                                                             </TableCell>
                                                         </TableRow>
-
                                                         <TableRow>
                                                             <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
+                                                                <TextField
+                                                                    label="Comments"
+                                                                    id=""
+                                                                    size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
                                                         </TableRow>
                                                     </TableBody>
                                                 </Table>
                                             </div>
-
                                         </AccordionDetails>
                                     </Accordion>
 
                                     {/* __________Discretionary Powers___________ */}
                                     <Accordion
                                         className="custome-accordian"
-                                        expanded={expanded === "panel9X"}
-                                        onChange={onOpenChange("panel9X")}
+                                        expanded={expanded === "panel10X"}
+                                        onChange={onOpenChange("panel10X")}
                                     >
                                         <AccordionSummary
                                             expandIcon={<ExpandMoreIcon />}
-                                            aria-controls="panel9X-content"
-                                            id="panel9X-header"
+                                            aria-controls="panel10X-content"
+                                            id="panel10X-header"
                                         >
                                             Discretionary Powers
                                         </AccordionSummary>
                                         <AccordionDetails>
-
                                             <div className="wrap-inner-table mt-0">
                                                 <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
                                                     <TableBody>
                                                         <TableRow>
                                                             <TableCell>
-                                                                <TextAreaField
-                                                                    name="decisionRemarks"
-                                                                    label=""
-                                                                    maxLength={1000}
-                                                                    disabled={false}
+                                                                <TextField
+                                                                    label="Discretionary Powers"
+                                                                    id=""
+                                                                    size="small" className="fnt_sml"
                                                                 />
                                                             </TableCell>
                                                         </TableRow>
                                                     </TableBody>
                                                 </Table>
                                             </div>
-
                                         </AccordionDetails>
                                     </Accordion>
-
                                 </div>
                             </Section>
                         </div>
@@ -1635,7 +1164,6 @@ const InteresetRateFixation = () => {
                         <div className="wrap-appraisal-area">
                             <Section>
                                 <div className="wrap-accordian custome-form text_count pt-3">
-
                                     <Accordion
                                         className="custome-accordian"
                                         expanded={expanded === "panelX"}
@@ -1654,8 +1182,6 @@ const InteresetRateFixation = () => {
                                             </div>
                                         </AccordionDetails>
                                     </Accordion>
-
-
                                 </div>
                             </Section>
                         </div>
@@ -1665,100 +1191,8 @@ const InteresetRateFixation = () => {
                     </CustomTabPanel>
                 </Box>
             </Section>
-
         </div>
     );
 };
 
 export default memo(InteresetRateFixation);
-
-import Grid from "@mui/material/Grid";
-import { KeyValuePair } from "./KeyValuePair";
-import { getIn, useFormikContext } from "formik";
-import Typography from "@mui/material/Typography";
-import { TextField } from "@mui/material";
-import { removeRestrictedCharacters } from "../../utlis/input";
-import { memo, useEffect } from "react";
-
-interface TextAreaFieldProps {
-  id?: number;
-  label?: string;
-  name: string;
-  disabled?: boolean;
-  placeholder?: string;
-  restrictedCharacters?: string;
-  maxLength?: number;
-}
-
-export const  TextAreaField = (props: TextAreaFieldProps) => {
-  const formikData = useFormikContext<KeyValuePair>() || {};
-  if (!formikData) {
-    return null;
-  }
-  const { handleBlur, values, touched, errors, setFieldValue } = formikData;
-
-  const currentLength = (getIn(values, props.name) || '').length;
-  const maxLength = props.maxLength ?? 2000;
-
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const { name, value } = event.target;
-    let newValue = value;
-
-    newValue = removeRestrictedCharacters(value, "<>{}");
-    if (newValue.length <= maxLength) {
-      setFieldValue(name, newValue);
-    }
-  };
-
-  return (
-    <Grid item xs={12}>
-      <Grid item xs={12}>
-        <ResizableTextArea
-          label={props.label}
-          className={props.name}
-          onChange={handleInputChange}
-          onBlur={handleBlur}
-          value={getIn(values, props.name)}
-          name={props.name}
-          disabled={props?.disabled}
-          placeholder={props?.placeholder ?? props.label}
-          multiline
-          inputProps={{
-            style: { resize: "both", width: "100%" },
-            maxLength: maxLength
-          }}
-          style={{ width: '100%' }}
-        />
-        <Typography
-          variant="caption"
-          color={currentLength === maxLength ? "error" : "textSecondary"}
-          sx={{ mt: 1, display: 'block', textAlign: 'right' }}
-        >
-       {currentLength} / {maxLength} Characters
-        </Typography>
-      </Grid>
-      <Grid item xs={12}>
-        <Typography
-          color="error"
-          variant="subtitle2"
-          gutterBottom
-          component="span"
-          className="mybooking_error"
-        >
-          {getIn(touched, props.name) && getIn(errors, props.name) &&
-            JSON.stringify(getIn(errors, props.name)).replaceAll('"', "")}
-        </Typography>
-      </Grid>
-    </Grid>
-  );
-};
-
-const ResizableTextArea = memo((props: any) => (
-  <TextField {...props} />
-));
-
-export default memo(TextAreaField);
-
-
-
-
