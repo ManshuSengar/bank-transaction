@@ -933,5 +933,10 @@ const ApprovedInterestRateStructure = ({ irfId }: { irfId: string }) => {
 export default ApprovedInterestRateStructure;
 
 
+In this two task are there InterestRateApplicable 
+first make dynamic means add formik user can save/update and get data for reference i shared ApprovedInterestRateStructure 
+and shared api also and already mapped field to api 
+second in InterestRateApplicable add one dropdown proposalType in which fixed,mclr,tbill user will choose then show only that table not all three 
+
 
 
