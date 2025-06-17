@@ -1,3 +1,404 @@
+import React, { useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button } from "@mui/material";
+import { Formik, Form } from 'formik';
+import * as Yup from 'yup';
+import { useGetApplPrestProposalQuery, useSaveApplPrestProposalMutation } from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+
+const InterestRateApplicable = ({ irfId }) => {
+  const { data: proposalData, isLoading } = useGetApplPrestProposalQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
+
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState("success");
+
+  const initialValues = proposalData || {
+    proposalType: '',
+    mclr: '',
+    ratingSpread: '',
+    intScore: '',
+    intScoreLink: '',
+    totalSpread: '',
+    finalRate: '',
+    grade: '',
+    benchmarkAsOn: '',
+    tenure: '',
+    benchmark: '',
+    benchmarkRate: '',
+    sidbiSpread: '',
+    minIntRate: '',
+    minIntRateTrmv: '',
+    comments: '',
+  };
+
+  const validationSchema = Yup.object().shape({
+    proposalType: Yup.string().required('Required'),
+    comments: Yup.string(),
+    mclr: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    ratingSpread: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    intScore: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    intScoreLink: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    totalSpread: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    finalRate: Yup.string().when('proposalType', {
+      is: 'MCLR',
+      then: Yup.string().required('Required'),
+    }),
+    grade: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    benchmarkAsOn: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    tenure: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    benchmarkRate: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    ratingSpread: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    sidbiSpread: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    totalSpread: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    minIntRate: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    minIntRateTrmv: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    finalRate: Yup.string().when('proposalType', {
+      is: 'Fixed',
+      then: Yup.string().required('Required'),
+    }),
+    grade: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    benchmarkAsOn: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    benchmark: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    benchmarkRate: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    ratingSpread: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    sidbiSpread: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    totalSpread: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    minIntRate: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    minIntRateTrmv: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+    finalRate: Yup.string().when('proposalType', {
+      is: 'T-bill',
+      then: Yup.string().required('Required'),
+    }),
+  });
+
+  const handleSubmit = async (values) => {
+    try {
+      const dataToSave = {
+        ...values,
+        irfId,
+        saveStatus: '01',
+      };
+      await saveApplPrestProposal(dataToSave).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Proposal saved successfully");
+    } catch (error) {
+      console.error("Error saving proposal:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save proposal");
+    }
+  };
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize={true}
+      >
+        {({ values }) => (
+          <Form>
+            <EnhancedDropDown
+              label="Proposal Type"
+              name="proposalType"
+              customOptions={[
+                { key: 'MCLR', value: 'MCLR', label: 'MCLR' },
+                { key: 'Fixed', value: 'Fixed', label: 'Fixed' },
+                { key: 'T-bill', value: 'T-bill', label: 'T-bill' },
+              ]}
+            />
+
+            {values.proposalType === 'MCLR' && (
+              <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <h6><b>Interest Rate applicable for present proposal - MCLR</b></h6>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
+                    <TableCell><b>Base spread</b></TableCell>
+                    <TableCell><b>Internal Score</b></TableCell>
+                    <TableCell><b>Internal Score Linked Spread</b></TableCell>
+                    <TableCell><b>Total Spread</b></TableCell>
+                    <TableCell><b>Applicable Rate (%)</b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <AdvanceTextBoxField label="%" name="mclr" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Base spread" name="ratingSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Internal Score" name="intScore" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Total Spread" name="totalSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            )}
+
+            {values.proposalType === 'Fixed' && (
+              <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}>
+                      <h6><b>Interest Rate applicable for present proposal - Fixed</b></h6>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Rating Grade</b></TableCell>
+                    <TableCell><b>Daily yield matrix as on</b></TableCell>
+                    <TableCell><b>Tenure</b></TableCell>
+                    <TableCell><b>FIMMDA yield for AAA rated NBFCs (Benchmark)</b></TableCell>
+                    <TableCell><b>FIMMDA Spread</b></TableCell>
+                    <TableCell><b>SIDBI Spread</b></TableCell>
+                    <TableCell><b>Total Spread</b></TableCell>
+                    <TableCell><b>Minimum Interest Rate</b></TableCell>
+                    <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
+                    <TableCell><b>Final Rate</b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Rating Grade" name="grade" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceDatePickerField label="Daily yield matrix as on" name="benchmarkAsOn" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Tenure" name="tenure" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="FIMMDA yield for AAA rated NBFCs" name="benchmarkRate" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="FIMMDA Spread" name="ratingSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Total Spread" name="totalSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Minimum interest rate as per TRMV guidance / date" name="minIntRateTrmv" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Final Rate" name="finalRate" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            )}
+
+            {values.proposalType === 'T-bill' && (
+              <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={10}>
+                      <h6><b>Interest Rate applicable for present proposal - T-bill</b></h6>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell><b>Rating Grade</b></TableCell>
+                    <TableCell><b>Benchmark as on</b></TableCell>
+                    <TableCell><b>Benchmark</b></TableCell>
+                    <TableCell><b>Benchmark Rate</b></TableCell>
+                    <TableCell><b>Rating Spread (%)</b></TableCell>
+                    <TableCell><b>SIDBI Spread</b></TableCell>
+                    <TableCell><b>Total Spread</b></TableCell>
+                    <TableCell><b>Minimum Interest Rate</b></TableCell>
+                    <TableCell><b>Minimum interest rate as per TRMV guidance / date</b></TableCell>
+                    <TableCell><b>Final Rate</b></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Rating Grade" name="grade" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" />
+                    </TableCell>
+                    <TableCell>
+                      <EnhancedDropDown label="Benchmark" name="benchmark" domain="mstr/getBenchMark" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Total Spread" name="totalSpread" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Minimum interest rate as per TRMV guidance / date" name="minIntRateTrmv" />
+                    </TableCell>
+                    <TableCell>
+                      <AdvanceTextBoxField label="Final Rate" name="finalRate" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            )}
+
+            <Table sx={{ minWidth: 650 }} aria-label="comments table" className="mt-4">
+              <TableHead>
+                <TableRow>
+                  <TableCell colSpan={1}>
+                    <b>Comments</b>
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell>
+                    <AdvanceTextBoxField label="Comments" name="comments" multiline rows={4} />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+
+            <Button type="submit" variant="contained" color="primary" className="mt-2">
+              Save
+            </Button>
+          </Form>
+        )}
+      </Formik>
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default InterestRateApplicable;
+
+
+
+
+
+
+
+
+
+
+
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { customBaseQuery } from "../../app/commonApi";
 
