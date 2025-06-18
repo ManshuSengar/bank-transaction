@@ -1,3 +1,443 @@
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
+
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
+    baseQuery: customBaseQuery,
+    tagTypes: [
+        'BriefBackground', 
+        'InternalRating', 
+        'ExternalRating', 
+        'ROID', 
+        'ROIR', 
+        'PresentProposal', 
+        'SidbiExposure', 
+        'SanctionRating', 
+        'ApprovedStructure',
+        'ApprovedStructurePresent',
+        'CompanyRateRequest'
+    ],
+    endpoints: (builder) => ({
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground']
+        }),
+        saveInternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveinternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['InternalRating'],
+        }),
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating']
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveexternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ExternalRating'],
+        }),
+        getResetlist: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getresetlist/${applId}`,
+            providesTags: ['ROIR']
+        }),
+        saveReset: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savereset`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getDisbursementList: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
+            providesTags: ['ROID']
+        }),
+        saveDisbursement: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savedisbursement`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getPresentProposal: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getpresentproposal/${irfId}`,
+            providesTags: ['PresentProposal']
+        }),
+        savePresentProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savepresentproposal`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['PresentProposal'],
+        }),
+        getSidbiExposure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsidbiexposure/${irfId}`,
+            providesTags: ['SidbiExposure']
+        }),
+        saveSidbiExposure: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savesidbiexposure`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SidbiExposure'],
+        }),
+        getSanctionRating: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsanctionrating/${irfId}`,
+            providesTags: ['SanctionRating']
+        }),
+        saveSanctionRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savesanctionrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SanctionRating'],
+        }),
+        getApprovedStructure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getapprovedintrate/${irfId}`,
+            providesTags: ['ApprovedStructure']
+        }),
+        saveApprovedStructure: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/saveapprovedintrate`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ApprovedStructure'],
+        }),
+        getapplprestproposal: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getapplprestproposal/${irfId}`,
+            providesTags: ['ApprovedStructurePresent']
+        }),
+        saveApplPrestProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/saveapplprestproposal`,
+                method: 'POST',
+                body: [data],
+            }),
+            invalidatesTags: ['ApprovedStructurePresent'],
+        }),
+        getCompanyRateRequest: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getcomprequestrate/${irfId}`,
+            providesTags: ['CompanyRateRequest']
+        }),
+        saveCompanyRateRequest: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savecomprequestrate`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['CompanyRateRequest'],
+        }),
+    }),
+});
+
+export const {
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+    useGetDisbursementListQuery,
+    useGetResetlistQuery,
+    useSaveDisbursementMutation,
+    useSaveResetMutation,
+    useGetPresentProposalQuery,
+    useSavePresentProposalMutation,
+    useGetSidbiExposureQuery,
+    useSaveSidbiExposureMutation,
+    useGetSanctionRatingQuery,
+    useSaveSanctionRatingMutation,
+    useGetApprovedStructureQuery,
+    useSaveApprovedStructureMutation,
+    useSaveApplPrestProposalMutation,
+    useGetapplprestproposalQuery,
+    useGetCompanyRateRequestQuery,
+    useSaveCompanyRateRequestMutation
+} = interestRateFixationApi;
+
+import React, { useState } from 'react';
+import {
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid, TextField
+} from "@mui/material";
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import { useAppSelector } from '../../../app/hooks';
+import {
+  useGetCompanyRateRequestQuery,
+  useSaveCompanyRateRequestMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import moment from 'moment';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import AutoSave from '../../../components/framework/AutoSave';
+
+const RateRequestCompany = ({ irfId }: any) => {
+  const { applId } = useAppSelector((state: { userStore: any; }) => state.userStore);
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+
+  const { data: rateRequests, isLoading: isLoadingRates } = useGetCompanyRateRequestQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const [saveCompanyRateRequest] = useSaveCompanyRateRequestMutation();
+
+  const initialValues = {
+    rateRequested: '',
+    ratings: rateRequests || [],
+  };
+
+  const validationSchema = Yup.object().shape({
+    rateRequested: Yup.number()
+      .typeError("Must be a number")
+      .required("Required")
+      .positive("Must be positive"),
+    ratings: Yup.array().of(
+      Yup.object().shape({
+        lenderInst: Yup.string().required("Required"),
+        facilityType: Yup.string().required("Required"),
+        dateOfAvailment: Yup.string().required("Required"),
+        sancAmt: Yup.number()
+          .typeError("Must be a number")
+          .required("Required")
+          .positive("Must be positive"),
+        interestRate: Yup.number()
+          .typeError("Must be a number")
+          .required("Required")
+          .positive("Must be positive"),
+        tenure: Yup.number()
+          .typeError("Must be a number")
+          .required("Required")
+          .positive("Must be positive"),
+      })
+    ),
+  });
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const finalValue = values.ratings.map((rating: any, index: number) => ({
+        ...rating,
+        irfId,
+        slNo: index + 1,
+        saveStatus: '01',
+      }));
+      await saveCompanyRateRequest({
+        rateRequested: values.rateRequested,
+        ratings: finalValue
+      }).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Company Rate Request saved successfully");
+    } catch (error) {
+      console.error("Error saving company rate request:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Company Rate Request");
+    }
+  };
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  return (
+    <div className="wrap-inner-table mt-4">
+      {isLoadingRates ? (
+        <p>Loading...</p>
+      ) : (
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          enableReinitialize={true}
+        >
+          {({ values }) => (
+            <Form>
+              <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+              <TextBoxField
+                label="Rate Requested by the Company"
+                name="rateRequested"
+                type="number"
+                size="small"
+                className="fnt_sml mb-4"
+              />
+              <FieldArray name="ratings">
+                {({ push, remove }) => (
+                  <>
+                    <Button
+                      type="button"
+                      size='small'
+                      className='text-capitalize mt-1 mb-3 saveBtn'
+                      variant="contained"
+                      color="primary"
+                      style={{ display: 'block' }}
+                      onClick={() => push({
+                        irfId,
+                        lenderInst: "",
+                        facilityType: "",
+                        dateOfAvailment: null,
+                        sancAmt: "",
+                        interestRate: "",
+                        tenure: "",
+                        saveStatus: '01',
+                      })}
+                    >
+                      Add <AddCircleIcon />
+                    </Button>
+                    <Table sx={{ minWidth: 650 }} aria-label="company rate request table">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell><b>Sr. No.</b></TableCell>
+                          <TableCell><b>Lender/Instrument</b></TableCell>
+                          <TableCell><b>Facility Type</b></TableCell>
+                          <TableCell><b>Date of Availment</b></TableCell>
+                          <TableCell><b>Sanctioned Amount (crore)</b></TableCell>
+                          <TableCell><b>Interest Rate</b></TableCell>
+                          <TableCell><b>Tenure</b></TableCell>
+                          <TableCell><b>Actions</b></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {values.ratings.length > 0 ? (
+                          values.ratings.map((rating: any, index: number) => (
+                            <TableRow key={index}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.lenderInst`}
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.facilityType`}
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <AdvanceDatePickerField
+                                  label=""
+                                  name={`ratings.${index}.dateOfAvailment`}
+                                  disableFuture={true}
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.sancAmt`}
+                                  type="number"
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.interestRate`}
+                                  type="number"
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField
+                                  label=""
+                                  name={`ratings.${index}.tenure`}
+                                  type="number"
+                                  size="small"
+                                  className="fnt_sml"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <IconButton
+                                  aria-label="delete"
+                                  color="error"
+                                  onClick={() => remove(index)}
+                                  disabled={values.ratings.length === 1}
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={8}>No data available</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                    <Grid item xs={12} sx={{ mt: 2 }}>
+                      <Button
+                        className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                        type='submit'
+                        variant="contained"
+                      >
+                        Save <CheckCircleOutlineIcon />
+                      </Button>
+                    </Grid>
+                  </>
+                )}
+              </FieldArray>
+            </Form>
+          )}
+        </Formik>
+      )}
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default RateRequestCompany;
+
+
+
+
+
+
+
 [
   {
     "irfId": "string",
