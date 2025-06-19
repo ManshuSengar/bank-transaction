@@ -1,5 +1,358 @@
 import React, { useState } from 'react';
 import {
+    Table, TableBody, TableCell, TableHead, TableRow, Button, Grid, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent
+} from "@mui/material";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { Formik, Form } from 'formik';
+import * as Yup from 'yup';
+import {
+    useGetRecommendationsQuery,
+    useSaveRecommendationsMutation,
+    useGetMemorandumTxtQuery,
+    useSaveMemorandumTxtMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import AutoSave from '../../../components/framework/AutoSave';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+
+const Recommendation = ({ irfId }: any) => {
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<string>("");
+    const [severity, setSeverity] = useState<"success" | "error">("success");
+    const [borrower, setBorrower] = useState('');
+
+    // Fetch recommendations for Interest Rate table
+    const { data: recommendations, isLoading: isLoadingRecommendations } = useGetRecommendationsQuery(irfId, {
+        skip: !irfId,
+        refetchOnMountOrArgChange: true,
+    });
+
+    // Fetch memorandum text for Validity, DoP, and Discretionary Powers
+    const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
+        skip: !irfId,
+        refetchOnMountOrArgChange: true,
+    });
+
+    const [saveRecommendations] = useSaveRecommendationsMutation();
+    const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
+
+    // Validation schema for Interest Rate table
+    const validationSchemaRecommendations = Yup.object().shape({
+        recommendation: Yup.object().shape({
+            scheme: Yup.string().required("Required"),
+            amount: Yup.number().typeError("Must be a number").required("Required").positive("Must be positive"),
+            tenure: Yup.number().typeError("Must be a number").required("Required").positive("Must be a number"),
+            applicableIntRate: Yup.number().typeError("Must be a number").required("Required").positive("Must be positive"),
+            discretion: Yup.number().typeError("Must be a number").required("Required"),
+            roiRecommended: Yup.string().required("Required"),
+            resetClause: Yup.string().required("Required"),
+            nextResetDt: Yup.string().required("Required"),
+        }),
+    });
+
+    // Validation schema for Validity, DoP, and Discretionary Powers
+    const validationSchemaMemorandum = Yup.object().shape({
+        irValidity: Yup.string().required("Required"),
+        dop: Yup.string().required("Required"),
+        dopComments: Yup.string().required("Required"),
+        discPowers: Yup.string().required("Required"),
+    });
+
+    // Handle submit for Interest Rate table
+    const handleSubmitRecommendations = async (values: any) => {
+        try {
+            const finalValue = [{
+                ...values.recommendation,
+                irfId,
+                slNo: 1,
+                saveStatus: '01',
+            }];
+            await saveRecommendations(finalValue).unwrap();
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Recommendation saved successfully");
+        } catch (error) {
+            console.error("Error saving recommendation:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save Recommendation");
+        }
+    };
+
+    // Handle submit for Validity, DoP, and Discretionary Powers
+    const handleSubmitMemorandum = async (values: any) => {
+        try {
+            const finalValue = {
+                ...values,
+                irfId,
+                saveStatus: '01',
+                verticalComments: values.verticalComments || "",
+                recommendation: values.recommendation || "",
+                preprosalComment: values.preprosalComment || "",
+                rateReqComment: values.rateReqComment || ""
+            };
+            await saveMemorandumTxt(finalValue).unwrap();
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Memorandum saved successfully");
+        } catch (error) {
+            console.error("Error saving memorandum:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save Memorandum");
+        }
+    };
+
+    const handleSnackClose = () => {
+        setOpenSnackbar(false);
+    };
+
+    const handleChangeBrw = (event: SelectChangeEvent) => {
+        setBorrower(event.target.value);
+    };
+
+    return (
+        <div className="wrap-inner-table mt-4">
+            {(isLoadingRecommendations || isLoadingMemorandum) ? (
+                <p>Loading...</p>
+            ) : (
+                <>
+                    {/* Form for Interest Rate Table */}
+                    <Formik
+                        initialValues={{
+                            recommendation: recommendations?.[0] || {
+                                irfId,
+                                slNo: 1,
+                                scheme: "",
+                                amount: "",
+                                tenure: "",
+                                applicableIntRate: "",
+                                discretion: "",
+                                roiRecommended: "",
+                                resetClause: "",
+                                nextResetDt: null,
+                                saveStatus: '01',
+                            },
+                        }}
+                        validationSchema={validationSchemaRecommendations}
+                        onSubmit={handleSubmitRecommendations}
+                        enableReinitialize={true}
+                    >
+                        {({ values }) => (
+                            <Form>
+                                <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitRecommendations} />
+                                <Table sx={{ minWidth: 650 }} aria-label="recommendation table">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell colSpan={8}><b>Interest Rate</b></TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell><b>Scheme</b></TableCell>
+                                            <TableCell><b>Amount (₹crore)</b></TableCell>
+                                            <TableCell><b>Tenure</b></TableCell>
+                                            <TableCell><b>Applicable Rate</b></TableCell>
+                                            <TableCell><b>Discretion (%)</b></TableCell>
+                                            <TableCell><b>ROI Recommended</b></TableCell>
+                                            <TableCell><b>Reset Clause</b></TableCell>
+                                            <TableCell><b>Next Reset Date</b></TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        <TableRow>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.scheme"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.amount"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.tenure"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.applicableIntRate"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.discretion"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.roiRecommended"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <EnhancedDropDown
+                                                    label=""
+                                                    name="recommendation.resetClause"
+                                                    domain="mstr/getBenchMark"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <AdvanceDatePickerField
+                                                    label=""
+                                                    name="recommendation.nextResetDt"
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                                <Grid item xs={12} sx={{ mt: 2 }}>
+                                    <Button
+                                        className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                        type='submit'
+                                        variant="contained"
+                                    >
+                                        Save <CheckCircleOutlineIcon />
+                                    </Button>
+                                </Grid>
+                            </Form>
+                        )}
+                    </Formik>
+
+                    {/* Form for Validity, DoP, and Discretionary Powers */}
+                    <Formik
+                        initialValues={{
+                            irValidity: memorandumData?.irValidity || null,
+                            dop: memorandumData?.dop || "",
+                            dopComments: memorandumData?.dopComments || "",
+                            discPowers: memorandumData?.discPowers || "",
+                            verticalComments: memorandumData?.verticalComments || "",
+                            recommendation: memorandumData?.recommendation || "",
+                            preprosalComment: memorandumData?.preprosalComment || "",
+                            rateReqComment: memorandumData?.rateReqComment || "",
+                        }}
+                        validationSchema={validationSchemaMemorandum}
+                        onSubmit={handleSubmitMemorandum}
+                        enableReinitialize={true}
+                        validateOnChange={false}
+                        validateOnBlur={true}
+                    >
+                        {({ values }) => (
+                            <Form>
+                                <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
+                                <Grid container spacing={2} padding={4} className='form-grid p-0'>
+                                    <Grid item xs={12}>
+                                        <h6>Validity of Interest Rate</h6>
+                                        <Table sx={{ minWidth: 650 }} aria-label="validity table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <AdvanceDatePickerField
+                                                            label="Date"
+                                                            name="irValidity"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12}>
+                                        <h6>DoP</h6>
+                                        <Table sx={{ minWidth: 650 }} aria-label="dop table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
+                                                            <InputLabel id="dop-label">Select</InputLabel>
+                                                            <Select
+                                                                labelId="dop-label"
+                                                                id="dop"
+                                                                value={borrower}
+                                                                label="DoP"
+                                                                onChange={handleChangeBrw}
+                                                                name="dop"
+                                                            >
+                                                                <MenuItem value="0">One</MenuItem>
+                                                                <MenuItem value="1">Two</MenuItem>
+                                                            </Select>
+                                                        </FormControl>
+                                                    </TableCell>
+                                                </TableRow>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <TextBoxField
+                                                            label="Comments"
+                                                            name="dopComments"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12}>
+                                        <h6>Discretionary Powers</h6>
+                                        <Table sx={{ minWidth: 650 }} aria-label="discretionary powers table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <TextBoxField
+                                                            label="Discretionary Powers"
+                                                            name="discPowers"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12} sx={{ mt: 2 }}>
+                                        <Button
+                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                            type='submit'
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Form>
+                        )}
+                    </Formik>
+                </>
+            )}
+
+            <NbfcSnackbar
+                open={openSnackbar}
+                msg={snackMsg}
+                severity={severity}
+                handleSnackClose={handleSnackClose}
+                submitCall={false}
+            />
+        </div>
+    );
+};
+
+export default Recommendation;
+
+
+
+
+
+import React, { useState } from 'react';
+import {
     Table, TableBody, TableCell, TableHead, TableRow, Button, Grid, TextField, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent
 } from "@mui/material";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
