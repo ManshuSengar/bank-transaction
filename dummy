@@ -1,4 +1,513 @@
 import { Form, Formik } from 'formik';
+import React, { useMemo } from 'react';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { Button, FormControl, Grid, Skeleton } from '@mui/material';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import * as Yup from 'yup';
+import { useSaveInterestRateFixationMutation, useGetInterestRateFixationByIdQuery } from '../features/interestRateFixation/api';
+import { setIrfId } from '../features/valueSlice';
+import { useAppDispatch, useAppSelector } from '../app/hooks';
+
+export const BasicInteresetFixation = ({ applId }: { applId: string }) => {
+  const dispatch = useAppDispatch();
+  const { irfId } = useAppSelector((state) => state.value);
+
+  // Fetch existing data if irfId is present
+  const { data: interestRateData, isLoading } = useGetInterestRateFixationByIdQuery(irfId, { skip: !irfId });
+  const [saveInterestRateFixation] = useSaveInterestRateFixationMutation();
+
+  // Define initial values based on fetched data or defaults
+  const initialValues = useMemo(() => {
+    if (interestRateData) {
+      return {
+        nameOfBorrower: interestRateData.nameOfBorrower || '',
+        cifId: interestRateData.cifId || '',
+        memorandum: interestRateData.memorandum || '',
+        lastAuditedFyt: interestRateData.lastAuditedFYT || '',
+        lastQtraftert: interestRateData.lastQtrAfterT || '',
+        saveStatus: interestRateData.saveStatus || '',
+      };
+    }
+    return {
+      nameOfBorrower: '',
+      cifId: '',
+      memorandum: '',
+      lastAuditedFyt: '',
+      lastQtraftert: '',
+      saveStatus: '',
+    };
+  }, [interestRateData]);
+
+  // Validation schema for required fields
+  const validationSchema = Yup.object().shape({
+    nameOfBorrower: Yup.string().required('Name of the Borrower is required'),
+    memorandum: Yup.string().required('Memorandum is required'),
+    lastAuditedFyt: Yup.string().required('Last Audited Financial Year is required'),
+    lastQtraftert: Yup.string().required('Last Unaudited Financial Quarter is required'),
+  });
+
+  // Handle form submission
+  const handleSubmit = async (values: any, { setSubmitting }: any) => {
+    try {
+      const payload = {
+        applId: applId, // From props
+        irfId: irfId || '', // Empty string for new record
+        nameOfBorrower: values.nameOfBorrower,
+        cifId: values.cifId,
+        memorandum: values.memorandum,
+        lastAuditedFYT: values.lastAuditedFyt,
+        lastQtrAfterT: values.lastQtraftert,
+      };
+      const response = await saveInterestRateFixation(payload).unwrap();
+      const newIrfId = response.irfId; // Assuming API returns irfId
+      dispatch(setIrfId(newIrfId)); // Store irfId globally
+    } catch (error) {
+      console.error('Failed to save interest rate fixation:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div>
+      {isLoading ? <Skeleton height={200} /> : (
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          validateOnChange={true}
+          validateOnBlur={true}
+          enableReinitialize={true}
+        >
+          {({ values, errors, touched, setFieldValue, handleBlur, isSubmitting }) => (
+            <Form className='custome-accordian'>
+              <Grid container padding={0} className='mt-2 mb-3 fldsSizeCstm'>
+                <Grid item xs={12} sm={6} md={4} lg={3} sx={{ paddingRight: '10px' }} className='mb-2'>
+                  <FormControl fullWidth>
+                    <EnhancedDropDown
+                      label="Name of The Borrower"
+                      name="nameOfBorrower"
+                      domain="mstr/getNbfcMaster"
+                    />
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} lg={3}>
+                  <TextBoxField label="Cif Id" name="cifId" disabled={true} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4} lg={3} sx={{ paddingRight: '10px' }} className='mb-2'>
+                  <FormControl fullWidth>
+                    <EnhancedDropDown
+                      label="Select Memorandum"
+                      name="memorandum"
+                      domain="committee/getAllCommitteeMasters"
+                    />
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4} lg={3} sx={{ paddingRight: '10px' }} className='mb-2'>
+                  <EnhancedDropDown
+                    label="Last Audited Financial Year *"
+                    name="lastAuditedFyt"
+                    domain="mstr/getAuditedYears"
+                    onValueChange={() => setFieldValue("lastQtraftert", "")}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4} lg={3} sx={{ paddingRight: '10px' }} className='mb-2'>
+                  <EnhancedDropDown
+                    label="Last Unaudited Financial Quarter *"
+                    name="lastQtraftert"
+                    domain="mstr/getUnauditedQuarter"
+                    dependsOn={"lastAuditedFyt"}
+                    query='lastFyT'
+                    disabled={!values.lastAuditedFyt || values.saveStatus === "02"}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12} md={8} lg={8}>
+                  <div className='mt-0 pt-0 float-right'>
+                    <Button
+                      className="sbmtBtn mt-0 mb-0 ms-0"
+                      type='submit'
+                      variant="contained"
+                      disabled={isSubmitting}
+                    >
+                      Save <CheckCircleOutlineIcon />
+                    </Button>
+                  </div>
+                </Grid>
+              </Grid>
+            </Form>
+          )}
+        </Formik>
+      )}
+    </div>
+  );
+};
+
+
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Tabs,
+  Typography,
+  Box,
+} from "@mui/material";
+import React, { memo } from "react";
+import Tab from "@mui/material/Tab";
+import Section from "../../nbfc/Section";
+import { useParams } from "react-router-dom";
+import Workflow from "../../workflow/Workflow";
+import { useAppSelector } from "../../../app/hooks";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { BasicInteresetFixation } from "./BasicInteresetFixation";
+import { RfBriefBackground } from "./RfBriefBackground";
+import RfInternalRating from "./RfInternalRating";
+import RfExternalRating from "./RfExternalRating";
+import RfRateOfInterest from "./RfRateOfInterest";
+import PresentProposal from "./PresentProposal";
+import ExternalRatingProposal from "./ExternalRatingProposal";
+import ApprovedInterestRateStructure from "./ApprovedInterestRateStructure";
+import InterestRateApplicable from "./InterestRateApplicable";
+import IssueUnderConsideration from "./IssueUnderConsideration";
+import RateRequestCompany from "./RateRequestCompany";
+import Recommendation from "./Recommendation";
+import FinancialAnnexure from "./FinancialAnnexure";
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function CustomTabPanel(props: Readonly<TabPanelProps>) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
+function a11yProps(index: number) {
+  return {
+    id: `simple-tab-${index}`,
+    "aria-controls": `simple-tabpanel-${index}`,
+  };
+}
+
+const InteresetRateFixation = () => {
+  const [value, setValue] = React.useState(0);
+  const { id } = useParams();
+  const { applId } = useAppSelector((state) => state.userStore);
+  const { irfId } = useAppSelector((state) => state.value);
+
+  const [expanded, setExpanded] = React.useState("panelX"); // Default to Basic accordion open
+  const onOpenChange = (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
+    setExpanded(isExpanded ? panel : false);
+  };
+
+  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    setValue(newValue);
+  };
+
+  return (
+    <div className="wrap-appraisal-area">
+      <Section>
+        <div className="inner-top-heading">
+          <Typography className="wrap-bold" noWrap variant="subtitle1" component="div" width={'50%'}>
+            <h6 className="title ps-1">Non REF Disb Time Fixing</h6>
+          </Typography>
+        </div>
+
+        <Box className="wrap-tabs" sx={{ width: "100%" }}>
+          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+            <Tabs className="tabs-header" value={value} onChange={handleChange} aria-label="basic tabs example">
+              <Tab className="tab-ui" label="Fixing of Interest Rate" {...a11yProps(0)} />
+              <Tab className="tab-ui" label="Financial" {...a11yProps(1)} />
+              <Tab className="tab-ui" label="Work Flow" {...a11yProps(2)} />
+            </Tabs>
+          </Box>
+          <CustomTabPanel value={value} index={0}>
+            <div className="wrap-appraisal-area">
+              <Section>
+                <div className="wrap-accordian custome-form text_count pt-3">
+                  {/* Basic Accordion - Always enabled */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panelX"}
+                    onChange={onOpenChange("panelX")}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panelX-content" id="panelX-header">
+                      Basic
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <BasicInteresetFixation applId={applId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Issue Under Consideration - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel1X"}
+                    onChange={onOpenChange("panel1X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel1X-content" id="panel1X-header">
+                      Issue Under Consideration
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <IssueUnderConsideration irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Brief Background - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel2X"}
+                    onChange={onOpenChange("panel2X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel2X-content" id="panel2X-header">
+                      Brief Background
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <RfBriefBackground irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* External Rating - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel20X"}
+                    onChange={onOpenChange("panel20X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel20X-content" id="panel20X-header">
+                      External Rating
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <RfExternalRating irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Internal Rating - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel21X"}
+                    onChange={onOpenChange("panel21X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel21X-content" id="panel21X-header">
+                      Internal Rating
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <RfInternalRating irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Rate of Interest - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel22X"}
+                    onChange={onOpenChange("panel22X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel22X-content" id="panel22X-header">
+                      Rate of Interest
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <RfRateOfInterest irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Present Proposal - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel3X"}
+                    onChange={onOpenChange("panel3X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel3X-content" id="panel3X-header">
+                      Present Proposal
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <PresentProposal irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* External Rating Proposal - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel4X"}
+                    onChange={onOpenChange("panel4X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel4X-content" id="panel4X-header">
+                      External Rating Proposal
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <ExternalRatingProposal irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Approved Interest Rate Structure - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel5X"}
+                    onChange={onOpenChange("panel5X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel5X-content" id="panel5X-header">
+                      Approved Interest Rate Structure of the Bank
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <ApprovedInterestRateStructure irfId={irfId} />
+                      <h6>Interest Rate applicable for present proposal: </h6>
+                      <InterestRateApplicable irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Rate Requested by the Company - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel6X"}
+                    onChange={onOpenChange("panel6X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel6X-content" id="panel6X-header">
+                      Rate Requested by the Company
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <RateRequestCompany irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Recommendation - Disabled until irfId is set */}
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panel7X"}
+                    onChange={onOpenChange("panel7X")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panel7X-content" id="panel7X-header">
+                      Recommendation
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Recommendation irfId={irfId} />
+                    </AccordionDetails>
+                  </Accordion>
+                </div>
+              </Section>
+            </div>
+          </CustomTabPanel>
+          <CustomTabPanel value={value} index={1}>
+            <div className="wrap-appraisal-area">
+              <Section>
+                <div className="wrap-accordian custome-form text_count pt-3">
+                  <Accordion
+                    className="custome-accordian"
+                    expanded={expanded === "panelX"}
+                    onChange={onOpenChange("panelX")}
+                    disabled={!irfId}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="panelX-content" id="panelX-header">
+                      Financial
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <div className="wrap-inner-table mt-0">
+                        <FinancialAnnexure irfId={irfId} />
+                      </div>
+                    </AccordionDetails>
+                  </Accordion>
+                </div>
+              </Section>
+            </div>
+          </CustomTabPanel>
+          <CustomTabPanel value={value} index={2}>
+            <Workflow formIdVal={applId} formTypeVal={"IRF"} />
+          </CustomTabPanel>
+        </Box>
+      </Section>
+    </div>
+  );
+};
+
+export default memo(InteresetRateFixation);
+
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { customBaseQuery } from '../../app/commonApi';
+
+export const interestRateFixationApi = createApi({
+  reducerPath: 'interestRateFixationApi',
+  baseQuery: customBaseQuery('refapi'),
+  tagTypes: [
+    'BriefBackground',
+    'InternalRating',
+    'ExternalRating',
+    'ROID',
+    'ROIR',
+    'PresentProposal',
+    'SidbiExposure',
+    'SanctionRating',
+    'ApprovedStructure',
+    'ApprovedStructurePresent',
+    'CompanyRateRequest',
+    'interesetComment',
+    'Recommendations',
+    'FinancialsBrief',
+    'BasicInterestFixation',
+  ],
+  endpoints: (builder) => ({
+    getFixationInterestRate: builder.query<any, string>({
+      query: (applId) => `interestratefixation/getIntFixRate/${applId}`,
+      providesTags: ['BriefBackground'],
+    }),
+    getInterestRateFixationById: builder.query<any, string>({
+      query: (irfId) => `interestratefixation/getIntFixRateById/${irfId}`, // Assuming this endpoint exists
+      providesTags: ['BasicInterestFixation'],
+    }),
+    saveInterestRateFixation: builder.mutation<any, any>({
+      query: (data) => ({
+        url: `interestratefixation/saveIntFixRate`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['BasicInterestFixation'],
+    }),
+    // ... other endpoints remain unchanged
+  }),
+});
+
+export const {
+  useGetFixationInterestRateQuery,
+  useGetInterestRateFixationByIdQuery,
+  useSaveInterestRateFixationMutation,
+  // ... export other hooks
+} = interestRateFixationApi;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import { Form, Formik } from 'formik';
 import React from 'react'
 import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
 import { Button, FormControl, Grid } from '@mui/material';
