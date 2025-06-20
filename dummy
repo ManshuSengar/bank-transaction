@@ -1,564 +1,549 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Button, Paper, IconButton, Grid, FormControl, InputLabel, MenuItem, Select, Autocomplete } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { Formik, FieldArray, Form } from 'formik';
-import { Backdrop, CircularProgress, Typography } from '@mui/material';
-
-import * as Yup from 'yup';
-import AddIcon from '@mui/icons-material/Add';
-import { useAppSelector } from '../../../app/hooks';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { Form, Formik } from 'formik';
+import React from 'react'
 import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import moment from 'moment';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { Button, FormControl, Grid } from '@mui/material';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+
+export const BasicInteresetFixation = ({irfId}:any) => {
+  return (
+    <div>
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        validateOnChange={true}
+        validateOnBlur={true}
+        enableReinitialize={true}
+      >
+        {({ values, errors, touched, setFieldValue, handleBlur, isSubmitting, }) => (
+          <Form className='custome-accordian'>
+            <Grid container padding={0} className='mt-2 mb-3 fldsSizeCstm'>
+              <Grid item xs={12} sm={6} md={4} lg={3}
+                sx={{ paddingRight: '10px' }}
+                className='mb-2'
+              >
+                <FormControl fullWidth>
+                  <EnhancedDropDown
+                    label="Name of The Borrower"
+                    name="nameOfBorrower"
+                    domain="mstr/getNbfcMaster"
+                  />
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} lg={3}>
+                <TextBoxField label="Cif Id" name="cifId"
+                  disabled={true} />
+              </Grid>
+              <Grid item
+                xs={12} sm={6} md={4} lg={3}
+                sx={{ paddingRight: '10px' }}
+                className='mb-2'
+              >
+                <FormControl fullWidth>
+                  <EnhancedDropDown
+                    label="Select Memorandum"
+                    name="memorandum"
+                    domain="committee/getAllCommitteeMasters"
+                  />
+                </FormControl>
+              </Grid>
 
 
-const FinancialTable = () => {
-    const { interestResetID } = useAppSelector((state: { userStore: any; }) => state.userStore);
-    const { applId, appDataNew } = useAppSelector((state: any) => state.userStore);
-    const { data: financialsBriefData, isLoading, isError, refetch } = useGetFinancialsBriefByIrIDQuery(interestResetID, { skip: !interestResetID, refetchOnMountOrArgChange: true });
+              <Grid item
+                xs={12} sm={6} md={4} lg={3}
+                sx={{ paddingRight: '10px' }}
+                className='mb-2'
+              >
+                <EnhancedDropDown
+                  label="Last Audited Financial Year *"
+                  name="lastAuditedFyt"
+                  domain="mstr/getAuditedYears"
+                  onValueChange={() => {
+                    setFieldValue("lastQtrAfterT", "");
+                  }}
+                />
+              </Grid>
+              <Grid item
+                xs={12} sm={6} md={4} lg={3}
+                sx={{ paddingRight: '10px' }}
+                className='mb-2'>
+                <EnhancedDropDown
+                  label="Last Unaudited Financial Quarter *"
+                  name="lastQtraftert"
+                  domain="mstr/getUnauditedQuarter"
+                  dependsOn={"lastAuditedFyt"}
+                  query='lastFyT'
+                  disabled={!values.lastAuditedFyt || values.saveStatus === "02"}
+                />
+              </Grid>
+              <Grid item
+                xs={12} sm={6} md={4} lg={3}
+                sx={{ paddingRight: '10px' }}
+                className='mb-2'>
 
-    console.log('financialsBriefData', financialsBriefData);
+              </Grid>
 
-    //alert('financialsBriefData'+financialsBriefData);
-    const [updatFinancialsBrie] = useSaveFinancialsBriefMutation();
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<any>("");
-    const [severity, setSeverity] = useState<string | any>("success");
-    const [actionVal, setActionVal] = useState<any>("");
-    const [index, setIndex] = useState(0);
-    const [open, setOpen] = useState(false);
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<any>("");
-    const [allFieldsDisabled, setAllFieldsDisabled] = useState<boolean>(false);
-
-    const [initialValues, setInitialValues] = useState<any>({
-        financialList: [
-            {
-                slNo: 0,
-                irId: interestResetID,
-                saveStatus: "01",
-                particulars: "",
-                unaudited: 0,
-                tval: 0,
-                tminus2Val: 0,
-                tminus1Val: 0
-            },
-
-        ]
-    });
-
-    console.log('financialsBriefData', financialsBriefData);
-
-    const validationSchema =
-        Yup.object().shape({
-            financialList: Yup.array().of(
-                Yup.object().shape({
-                    lenderInst: Yup.string().required("Required"),
-                    facilityType: Yup.string().required("Required"),
-                    dateOfAvailment: Yup.string().required("Required"),
-                    sancAmt: Yup.number().typeError("Must be a number").required("Required"),
-                    interestRate: Yup.string().required("Required"),
-                    tenure: Yup.string().required("Required"),
-                })
-            ),
-        });
-
-    const handleSubmit = async (values: any) => {
-        try {
-            const finalValue = values?.financialList?.map((borrowing: any, index: number) => {
-                return {
-                    ...borrowing, irId: interestResetID, slNo: index + 1, saveStatus: '01'
-                }
-            })
-            if (await updatFinancialsBrie(finalValue).unwrap()) {
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg("Record saved successfully");
-                refetch()
-                setActionVal(null);
-            }
-        }
-        catch (err: any) {
-            console.error("Error saving data:", err);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("failed to save : " + err?.message);
-        }
-    };
-    const handleSnackClose = () => {
-        setOpenSnackbar(false);
-    };
-    useEffect(() => {
-        if (financialsBriefData) {
-            setInitialValues(financialsBriefData);
-        }
-    }, [financialsBriefData]);
-    const ValueOfTnfo = sessionStorage.getItem("ValueOfT");
-    const T = ValueOfTnfo ? ValueOfTnfo.replace(/^"|"$/g, "") : "0";
-    const year: number = parseInt(T, 10);
-    const tMinusOne: number = year - 1;
-    const tMinusTwo: number = year - 2;
-    const tPlusOne: number = year + 1;
-    const tPlusTwo: number = year + 2;
-
-    const QuarterOfTnfo = sessionStorage.getItem("QuarterOfT");
-    const Q = QuarterOfTnfo ? QuarterOfTnfo.replace(/^"|"$/g, "") : "0";
-
-
-    const headers = [
-        { label: "Parameters", rowSpan: 2 },
-        { label: `FY2022`, colspan: 1 },
-        { label: `FY2023`, colspan: 1 },
-        { label: `FY2024`, colspan: 1 },
-        { label: `9MFY2025`, colspan: 1 },
-    ];
-
-    const subHeaders = [
-        { label: "(All amount is In ₹ crore)", colspan: 1 },
-        { label: "Audited", colspan: 1 },
-        { label: "Audited", colspan: 1 },
-        { label: "Audited", colspan: 1 },
-        { label: "Unaudited", colspan: 1 },
-    ];
-    return (
-        <>
-            <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={isLoading}>
-                <div style={{ textAlign: 'center' }}>
-                    <CircularProgress color="inherit" />
-                    <Typography variant="h6" sx={{ mt: 2 }}>
-                        Loading, please wait...
-                    </Typography>
+              <Grid item xs={12} sm={12} md={8} lg={8}>
+                <div className='mt-0 pt-0 float-right'>
+                  <Button
+                    className="sbmtBtn mt-0 mb-0 ms-0"
+                    type='submit'
+                    variant="contained"> Save <CheckCircleOutlineIcon />
+                  </Button>
                 </div>
-            </Backdrop>
-
-
-            {isError && <div className='text-danger'>Error loading data</div>}
-            {financialsBriefData && <div className='component-wrapper'>
-                <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleSnackClose} submitCall={false} />
-                <Formik
-                    initialValues={initialValues}
-                    validationSchema={validationSchema}
-                    onSubmit={handleSubmit}
-                    enableReinitialize={true}
-                    validateOnChange={true}
-                    validateOnBlur={true}
-                >
-
-                    {({ values, setFieldValue, errors, touched, handleChange }) => (
-                        <Form>
-                            <FieldArray name="financialList">
-                                {({ push, remove }) => (
-                                    <>
-                                        <div className="wrap-inner-table mt-0 mb-0 table-responsive">
-                                            <Grid container spacing={2} className='mt-0'>
-                                                <Grid item xs={12} md={12}>
-                                                    <Table className="table mb-0" sx={{ minWidth: '100%' }} aria-label="external financialList table">
-                                                        <TableHead>
-                                                            <TableRow>
-                                                                {headers &&
-                                                                    headers.map((header: any, index: any) => (
-                                                                        <TableCell key={index}>
-                                                                            <b>{header.label}</b>
-                                                                        </TableCell>
-                                                                    ))}
-                                                            </TableRow>
-
-                                                            <TableRow>
-                                                                {subHeaders &&
-                                                                    subHeaders.map((subHeader: any, index: any) => (
-                                                                        <TableCell key={index}>
-                                                                            <b>{subHeader.label}</b>
-                                                                        </TableCell>
-                                                                    ))}
-                                                            </TableRow>
-                                                        </TableHead>
-
-                                                        <TableBody>
-                                                            {values?.financialList?.map((fin: any, index: number) => (
-                                                                <TableRow key={index + 1}>
-                                                                    <TableCell width={'100px'}>
-                                                                        {fin?.particulars}
-                                                                    </TableCell>
-                                                                    <TableCell width={'150px'}>
-                                                                        <TextBoxField label=""
-                                                                            name={`financialList.${index}.unaudited`} />
-                                                                    </TableCell>
-
-                                                                    <TableCell width={'150px'}>
-                                                                        <TextBoxField label=""
-                                                                            name={`financialList.${index}.tminus2Val`} />
-                                                                    </TableCell>
-                                                                    <TableCell width={'150px'}>
-                                                                        <TextBoxField label=""
-                                                                            name={`financialList.${index}.tminus1Val`} />
-                                                                    </TableCell>
-                                                                    <TableCell width={'150px'}>
-                                                                        <TextBoxField label=""
-                                                                            name={`financialList.${index}.tval`} />
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </Grid>
-                                                <Grid item xs={12} md={12}>
-                                                    <div className='mt-3'>
-                                                        <Button
-                                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                                            type='submit'
-                                                            variant="contained"> Save <CheckCircleOutlineIcon />
-                                                        </Button>
-                                                    </div>
-                                                </Grid>
-                                            </Grid>
-                                        </div>
-                                    </>
-                                )}
-                            </FieldArray>
-                        </Form>
-                    )}
-                </Formik>
-            </div>}
-        </>
-    )
+              </Grid>
+            </Grid>
+          </Form>
+        )}
+      </Formik></div>
+  )
 }
 
-export default FinancialTable;
-
-curl -X 'POST' \
-  'http://localhost:8080/refapi/interestratefixation/savefinancialsbrief' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '[
-  {
-    "slNo": 0,
-    "irfId": "string",
-    "particulars": "string",
-    "valAsonTMinus2": 0,
-    "valAsonTMinus1": 0,
-    "valAsonT": 0,
-    "qtrVal": 0,
-    "saveStatus": "string"
-  }
-]'
-
-curl -X 'GET' \
-  'http://localhost:8080/refapi/interestratefixation/getfinancialsbrieflist/IFR0001' \
-  -H 'accept: */*'
-
-curl -X 'GET' \
-  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/getTranxYr?irfId=IRF00001' \
-  -H 'accept: */
-
-import React, { useState } from 'react';
 import {
-    Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid, TextField
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
+    Tabs,
+    Typography,
+    TextField,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    SelectChangeEvent,
+    Autocomplete,
+    Table,
+    TableBody,
+    TableHead,
+    TableRow,
+    TableCell,
+    Button
 } from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { Formik, FieldArray, Form } from 'formik';
-import * as Yup from 'yup';
-import { useAppSelector } from '../../../app/hooks';
-import {
-    useGetCompanyRateRequestQuery,
-    useSaveCompanyRateRequestMutation,
-    useGetMemorandumTxtQuery,
-    useSaveMemorandumTxtMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import moment from 'moment';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import AutoSave from '../../../components/framework/AutoSave';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import { RichTextField } from '../../../components/framework/RichTextField';
+import React, { memo } from "react";
+import Tab from "@mui/material/Tab";
+import Box from "@mui/material/Box";
+import Section from "../../nbfc/Section";
+import { useParams } from "react-router-dom";
+import Workflow from "../../workflow/Workflow";
+import { useAppSelector } from "../../../app/hooks";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ReviewOfNBFC from "../../monitoringPages/reviewModule/ReviewOfNBFC/ReviewOfNBFC";
+import MonitoringExternalRating from "../../monitoringPages/reviewModule/MonitoringExternalRating/MonitoringExternalRating";
+import ComplianceToPCAFramwork from "../../monitoringPages/reviewModule/complianceToPca/ComplianceToPCAFramwork";
+import CriticalEvents from "../../monitoringPages/reviewModule/CriticalEvents/CriticalEvents";
+import AnyOtherPendingComments from "../../monitoringPages/reviewModule/AnyOtherPendingComments/AnyOtherPendingComments";
+import FinancialTable from "../common-components/FinancialTable";
+import { RfBriefBackground } from "./RfBriefBackground";
+import RfInternalRating from "./RfInternalRating";
+import RfExternalRating from "./RfExternalRating";
+import RfRateOfInterest from "./RfRateOfInterest";
+import PresentProposal from "./PresentProposal";
+import ExternalRatingProposal from "./ExternalRatingProposal";
+import ApprovedInterestRateStructure from "./ApprovedInterestRateStructure";
+import InterestRateApplicable from "./InterestRateApplicable";
+import IssueUnderConsideration from "./IssueUnderConsideration";
+import RateRequestCompany from "./RateRequestCompany";
+import Recommendation from "./Recommendation";
+import FinancialAnnexure from "./FinancialAnnexure";
+import { BasicInteresetFixation } from "./BasicInteresetFixation";
 
-const RateRequestCompany = ({ irfId }: any) => {
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<string>("");
-    const [severity, setSeverity] = useState<"success" | "error">("success");
+interface TabPanelProps {
+    children?: React.ReactNode;
+    index: number;
+    value: number;
+}
 
-    const { data: rateRequests, isLoading: isLoadingRates } = useGetCompanyRateRequestQuery(irfId, {
-        skip: !irfId,
-        refetchOnMountOrArgChange: true,
-    });
-
-    const { data: commentData, isLoading: isCommentLoading } = useGetMemorandumTxtQuery(irfId, {
-        skip: !irfId,
-        refetchOnMountOrArgChange: true,
-    });
-
-
-
-    const [saveCompanyRateRequest] = useSaveCompanyRateRequestMutation();
-
-    const [saveCommentMemorandum] = useSaveMemorandumTxtMutation();
-
-    const initialValues = {
-        ratings: rateRequests || [],
-    };
-
-    const initialValuesComments = { ...commentData };
-
-    const validationSchema = Yup.object().shape({
-        ratings: Yup.array().of(
-            Yup.object().shape({
-                lenderInst: Yup.string().required("Required"),
-                facilityType: Yup.string().required("Required"),
-                dateOfAvailment: Yup.string().required("Required"),
-                sancAmt: Yup.number()
-                    .typeError("Must be a number")
-                    .required("Required")
-                    .positive("Must be positive"),
-                interestRate: Yup.number()
-                    .typeError("Must be a number")
-                    .required("Required")
-                    .positive("Must be positive"),
-                tenure: Yup.number()
-                    .typeError("Must be a number")
-                    .required("Required")
-                    .positive("Must be positive"),
-            })
-        ),
-    });
-
-    const handleSubmit = async (values: any) => {
-        try {
-            const finalValue = values.ratings.map((rating: any, index: number) => ({
-                ...rating,
-                irfId,
-                slNo: index + 1,
-                saveStatus: '01',
-            }));
-            await saveCompanyRateRequest(finalValue).unwrap();
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Company Rate Request saved successfully");
-        } catch (error) {
-            console.error("Error saving company rate request:", error);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("Failed to save Company Rate Request");
-        }
-    };
-
-    const handleSubmitComments = async (values: any) => {
-        try {
-            const finalValue = { ...values, irfId };
-            await saveCommentMemorandum(finalValue).unwrap();
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Company Rate Request saved successfully");
-        } catch (error) {
-            console.error("Error saving company rate request:", error);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("Failed to save Company Rate Request");
-        }
-    };
-
-
-    const handleSnackClose = () => {
-        setOpenSnackbar(false);
-    };
+function CustomTabPanel(props: Readonly<TabPanelProps>) {
+    const { children, value, index, ...other } = props;
 
     return (
-        <div className="wrap-inner-table mt-4">
-            {isLoadingRates ? (
-                <p>Loading...</p>
-            ) : (
-                <Formik
-                    initialValues={initialValues}
-                    validationSchema={validationSchema}
-                    onSubmit={handleSubmit}
-                    enableReinitialize={true}
-                >
-                    {({ values }) => (
-                        <Form>
-                            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`simple-tabpanel-${index}`}
+            aria-labelledby={`simple-tab-${index}`}
+            {...other}
+        >
+            {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+        </div>
+    );
+}
 
-                            <FieldArray name="ratings">
-                                {({ push, remove }) => (
-                                    <>
-                                        <Button
-                                            type="button"
-                                            size='small'
-                                            className='text-capitalize mt-1 mb-3 saveBtn'
-                                            variant="contained"
-                                            color="primary"
-                                            style={{ display: 'block' }}
-                                            onClick={() => push({
-                                                irfId,
-                                                lenderInst: "",
-                                                facilityType: "",
-                                                dateOfAvailment: null,
-                                                sancAmt: "",
-                                                interestRate: "",
-                                                tenure: "",
-                                                saveStatus: '01',
-                                            })}
-                                        >
-                                            Add <AddCircleIcon />
-                                        </Button>
-                                        <Table sx={{ minWidth: 650 }} aria-label="company rate request table">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell><b>Sr. No.</b></TableCell>
-                                                    <TableCell><b>Lender/Instrument</b></TableCell>
-                                                    <TableCell><b>Facility Type</b></TableCell>
-                                                    <TableCell><b>Date of Availment</b></TableCell>
-                                                    <TableCell><b>Sanctioned Amount (crore)</b></TableCell>
-                                                    <TableCell><b>Interest Rate</b></TableCell>
-                                                    <TableCell><b>Tenure</b></TableCell>
-                                                    <TableCell><b>Actions</b></TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {values.ratings.length > 0 ? (
-                                                    values.ratings.map((rating: any, index: number) => (
-                                                        <TableRow key={index}>
-                                                            <TableCell>{index + 1}</TableCell>
-                                                            <TableCell>
-                                                                <TextBoxField
-                                                                    label=""
-                                                                    name={`ratings.${index}.lenderInst`}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <EnhancedDropDown
-                                                                    label=""
-                                                                    domain="mstr/getFacilityTypeMstr"
-                                                                    basePath='mon'
-                                                                    name={`ratings.${index}.facilityType`}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <AdvanceDatePickerField
-                                                                    label=""
-                                                                    name={`ratings.${index}.dateOfAvailment`}
-                                                                    disableFuture={true}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextBoxField
-                                                                    label=""
-                                                                    name={`ratings.${index}.sancAmt`}
-                                                                    type="number"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextBoxField
-                                                                    label=""
-                                                                    name={`ratings.${index}.interestRate`}
-                                                                    type="number"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <TextBoxField
-                                                                    label=""
-                                                                    name={`ratings.${index}.tenure`}
-                                                                    type="number"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <IconButton
-                                                                    aria-label="delete"
-                                                                    color="error"
-                                                                    onClick={() => remove(index)}
-                                                                    disabled={values.ratings.length === 1}
-                                                                >
-                                                                    <DeleteIcon />
-                                                                </IconButton>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))
-                                                ) : (
-                                                    <TableRow>
-                                                        <TableCell colSpan={8}>No data available</TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                        <Grid item xs={12} sx={{ mt: 2 }}>
-                                            <Button
-                                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                                type='submit'
-                                                variant="contained"
-                                            >
-                                                Save <CheckCircleOutlineIcon />
-                                            </Button>
-                                        </Grid>
+function a11yProps(index: number) {
+    return {
+        id: `simple-tab-${index}`,
+        "aria-controls": `simple-tabpanel-${index}`,
+    };
+}
 
+const InteresetRateFixation = () => {
+    const [value, setValue] = React.useState(0);
+    const { id } = useParams();
+    const { applId } = useAppSelector((state: { userStore: any; }) => state.userStore);
 
-                                    </>
-                                )}
-                            </FieldArray>
-                        </Form>
-                    )}
-                </Formik>
-            )}
+    const [expanded, setExpanded] = React.useState("");
+    const onOpenChange =
+        (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
+            setExpanded(isExpanded ? panel : false);
+        };
 
-            <Formik
-                initialValues={initialValuesComments}
-                onSubmit={handleSubmitComments}
-                enableReinitialize
-                validateOnChange={false}
-                validateOnBlur={true}
-            >
-                {({ values }) => (
-                    <Form>
-                        <Grid
-                            spacing={2}
-                            padding={4}
-                            container
-                            className='form-grid p-0'
+    const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+        setValue(newValue);
+    };
+
+    const [borrower, setBorrower] = React.useState('');
+
+    const handleChangeBrw = (event: SelectChangeEvent) => {
+        setBorrower(event.target.value);
+    };
+
+    const topBorrowers = [
+        { label: 'Borrower 1', nbfcId: 1 },
+        { label: 'Borrower 2', nbfcId: 2 },
+        { label: 'Borrower 3', nbfcId: 3 },
+        { label: 'Borrower 4', nbfcId: 4 },
+    ];
+
+    const topSchemes = [
+        { label: 'Scheme of refinance to nbfcs', schCd: 'a' },
+        { label: 'Scheme 2', schCd: 'b' },
+        { label: 'Scheme 3', schCd: 'c' },
+        { label: 'Scheme 4', schCd: 'd' },
+        { label: 'Scheme 5', schCd: 'e' },
+        { label: "Scheme 6", schCd: 'f' }
+    ];
+
+    const options = [
+        { label: "Excellent", value: "Excellent" },
+        { label: "Good", value: "Good" },
+        { label: "Satisfactory", value: "Satisfactory" },
+        { label: "Moderate", value: "Moderate" },
+        { label: "Poor", value: "Poor" },
+        { label: "Default", value: "Default" },
+    ];
+
+    const dummyLoanAccounts: any[] = [
+        {
+            id: 1, loanAccountNo: '000405007899', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
+            currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
+            loanStatus: 'Approved'
+        },
+        {
+            id: 2, loanAccountNo: '000405007877', DisbDate: '30/04/2025', DisbAmt: 250, osAmount: 250,
+            currentROI: '4.75', benchmark: "Benchmark will be here", fixedORFloating: 4, resetClause: 'Reset Clause here',
+            loanStatus: 'Approved'
+        }
+    ];
+
+    return (
+        <div className="wrap-appraisal-area ">
+            <Section>
+                <div className="inner-top-heading">
+                    <Typography
+                        className="wrap-bold"
+                        noWrap
+                        variant="subtitle1"
+                        component="div"
+                        width={'50%'}
+                    >
+                        <h6 className="title ps-1">Non REF Disb Time Fixing</h6>
+                    </Typography>
+                </div>
+
+                <Box className="wrap-tabs" sx={{ width: "100%" }}>
+                    <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+                        <Tabs
+                            className="tabs-header"
+                            value={value}
+                            onChange={handleChange}
+                            aria-label="basic tabs example"
                         >
-                            <Grid item xs={12} sm={12} md={12} lg={12}>
-                                <RichTextField
-                                    label=""
-                                    name="rateReqComment"
-                                />
-                            </Grid>
-                            <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
-                                <div className="wrap-richtext">
+                            <Tab
+                                className="tab-ui"
+                                label="Fixing of Interest Rate"
+                                {...a11yProps(0)}
+                            />
+                            <Tab className="tab-ui" label="Financial" {...a11yProps(1)} />
+                            <Tab className="tab-ui" label="Work Flow " {...a11yProps(2)} />
+                        </Tabs>
+                    </Box>
+                    <CustomTabPanel value={value} index={0}>
+                        <div className="wrap-appraisal-area">
+                            <Section>
+                                <div className="wrap-accordian custome-form text_count pt-3">
+                                    {/* __________Basic___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panelX"}
+                                        onChange={onOpenChange("panelX")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panelX-content"
+                                            id="panelX-header"
+                                        >
+                                           Basic
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <BasicInteresetFixation irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+                                    {/* __________Issue under consideration___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panelX"}
+                                        onChange={onOpenChange("panelX")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panelX-content"
+                                            id="panelX-header"
+                                        >
+                                            Issue Under Consideration
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <IssueUnderConsideration irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
 
-                                    <RichTextField label="Vertical Comment" name="verticalComments" />
+                                    {/* __________Background___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel2X"}
+                                        onChange={onOpenChange("panel2X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel2X-content"
+                                            id="panel2X-header"
+                                        >
+                                            Brief Background
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfBriefBackground irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________External Rating___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel20X"}
+                                        onChange={onOpenChange("panel20X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel20X-content"
+                                            id="panel20X-header"
+                                        >
+                                            External Rating
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfExternalRating irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Internal Rating___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel21X"}
+                                        onChange={onOpenChange("panel21X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel21X-content"
+                                            id="panel21X-header"
+                                        >
+                                            Internal Rating
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfInternalRating irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Rate of Interest___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel22X"}
+                                        onChange={onOpenChange("panel22X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel22X-content"
+                                            id="panel22X-header"
+                                        >
+                                            Rate of Interest
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RfRateOfInterest irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Present Proposal___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel3X"}
+                                        onChange={onOpenChange("panel3X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel3X-content"
+                                            id="panel3X-header"
+                                        >
+                                            Present Proposal
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <PresentProposal irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________External Rating Proposal___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel4X"}
+                                        onChange={onOpenChange("panel4X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel4X-content"
+                                            id="panel4X-header"
+                                        >
+                                            External Rating Proposal
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <ExternalRatingProposal irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Approved Interest rate structure of the Bank___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel5X"}
+                                        onChange={onOpenChange("panel5X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel5X-content"
+                                            id="panel5X-header"
+                                        >
+                                            Approved Interest rate structure of the Bank
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <ApprovedInterestRateStructure irfId="IRF00001" />
+                                            <h6>Interest Rate applicable for present proposal: </h6>
+                                            <InterestRateApplicable irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Rate requested by the company___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel6X"}
+                                        onChange={onOpenChange("panel6X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel6X-content"
+                                            id="panel6X-header"
+                                        >
+                                            Rate Requested by the Company
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <RateRequestCompany irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
+
+                                    {/* __________Recommendation___________ */}
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panel7X"}
+                                        onChange={onOpenChange("panel7X")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panel7X-content"
+                                            id="panel7X-header"
+                                        >
+                                            Recommendation
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <Recommendation irfId="IRF00001" />
+                                        </AccordionDetails>
+                                    </Accordion>
                                 </div>
-                            </Grid>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                                <Button
-                                    className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                    type='submit'
-                                    variant="contained"
-                                >
-                                    Save <CheckCircleOutlineIcon />
-                                </Button>
-                            </Grid>
-                        </Grid>
-                    </Form>
-                )}
-            </Formik>
-
-            <NbfcSnackbar
-                open={openSnackbar}
-                msg={snackMsg}
-                severity={severity}
-                handleSnackClose={handleSnackClose}
-                submitCall={false}
-            />
+                            </Section>
+                        </div>
+                    </CustomTabPanel>
+                    <CustomTabPanel value={value} index={1}>
+                        <div className="wrap-appraisal-area">
+                            <Section>
+                                <div className="wrap-accordian custome-form text_count pt-3">
+                                    <Accordion
+                                        className="custome-accordian"
+                                        expanded={expanded === "panelX"}
+                                        onChange={onOpenChange("panelX")}
+                                    >
+                                        <AccordionSummary
+                                            expandIcon={<ExpandMoreIcon />}
+                                            aria-controls="panelX-content"
+                                            id="panelX-header"
+                                        >
+                                            Financial
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <div className="wrap-inner-table mt-0">
+                                                <FinancialAnnexure irfId="IRF00001" />
+                                            </div>
+                                        </AccordionDetails>
+                                    </Accordion>
+                                </div>
+                            </Section>
+                        </div>
+                    </CustomTabPanel>
+                    <CustomTabPanel value={value} index={2}>
+                        <Workflow formIdVal={applId} formTypeVal={"IRF"} />
+                    </CustomTabPanel>
+                </Box>
+            </Section>
         </div>
     );
 };
 
-export default RateRequestCompany;
+export default memo(InteresetRateFixation);
 
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { customBaseQuery } from "../../app/commonApi";
+{
+  "applId": "string",
+  "irfId": "string",
+  "cifId": "string",
+  "memorandum": "string",
+  "disbRate": 0,
+  "proposedDisb": "string",
+  "sanctionAmt": 0,
+  "nameOfBorrower": "string",
+  "schCd": "string",
+  "sancLimit": 0,
+  "sancBy": "string",
+  "meetingNo": 0,
+  "meetingDate": "2025-06-20",
+  "sancValidity": "2025-06-20",
+  "roiSancTerms": "string",
+  "presentOs": 0,
+  "presentTotalOs": 0,
+  "saveStatus": "string",
+  "productType": "string",
+  "lastAuditedFYT": "string",
+  "lastQtrAfterT": "string"
+}
+
+
+curl -X 'POST' \
+  'https://dev-nbfc.sidbi.in/refapi/interestratefixation/saveIntFixRate' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json' \
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { customBaseQuery } from '../../app/commonApi';
 
 export const interestRateFixationApi = createApi({
     reducerPath: 'interestRateFixationApi',
@@ -576,12 +561,13 @@ export const interestRateFixationApi = createApi({
         'ApprovedStructurePresent',
         'CompanyRateRequest',
         'interesetComment',
-        'Recommendations'
+        'Recommendations',
+        'FinancialsBrief',
     ],
     endpoints: (builder) => ({
         getFixationInterestRate: builder.query<any, string>({
-            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
-            providesTags: ['BriefBackground']
+            query: (applId) => `interestratefixation/getIntFixRate/${applId}`,
+            providesTags: ['BriefBackground'],
         }),
         saveInternalRating: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -593,19 +579,19 @@ export const interestRateFixationApi = createApi({
         }),
         getInternalRatingPresent: builder.query<any, string>({
             query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
-            providesTags: ['InternalRating']
+            providesTags: ['InternalRating'],
         }),
         getInternalRatingSanction: builder.query<any, string>({
             query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
-            providesTags: ['InternalRating']
+            providesTags: ['InternalRating'],
         }),
         getExternalRatingSanction: builder.query<any, string>({
             query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
-            providesTags: ['ExternalRating']
+            providesTags: ['ExternalRating'],
         }),
         getExternalRatingPresent: builder.query<any, string>({
             query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
-            providesTags: ['ExternalRating']
+            providesTags: ['ExternalRating'],
         }),
         saveExternalRating: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -617,7 +603,7 @@ export const interestRateFixationApi = createApi({
         }),
         getResetlist: builder.query<any, string>({
             query: (applId) => `interestratefixation/getresetlist/${applId}`,
-            providesTags: ['ROIR']
+            providesTags: ['ROIR'],
         }),
         saveReset: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -629,7 +615,7 @@ export const interestRateFixationApi = createApi({
         }),
         getDisbursementList: builder.query<any, string>({
             query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
-            providesTags: ['ROID']
+            providesTags: ['ROID'],
         }),
         saveDisbursement: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -641,7 +627,7 @@ export const interestRateFixationApi = createApi({
         }),
         getPresentProposal: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getpresentproposal/${irfId}`,
-            providesTags: ['PresentProposal']
+            providesTags: ['PresentProposal'],
         }),
         savePresentProposal: builder.mutation<any, any>({
             query: (data) => ({
@@ -653,7 +639,7 @@ export const interestRateFixationApi = createApi({
         }),
         getSidbiExposure: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getsidbiexposure/${irfId}`,
-            providesTags: ['SidbiExposure']
+            providesTags: ['SidbiExposure'],
         }),
         saveSidbiExposure: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -665,7 +651,7 @@ export const interestRateFixationApi = createApi({
         }),
         getSanctionRating: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getsanctionrating/${irfId}`,
-            providesTags: ['SanctionRating']
+            providesTags: ['SanctionRating'],
         }),
         saveSanctionRating: builder.mutation<any, any>({
             query: (data) => ({
@@ -677,7 +663,7 @@ export const interestRateFixationApi = createApi({
         }),
         getApprovedStructure: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getapprovedintrate/${irfId}`,
-            providesTags: ['ApprovedStructure']
+            providesTags: ['ApprovedStructure'],
         }),
         saveApprovedStructure: builder.mutation<any, any>({
             query: (data) => ({
@@ -689,7 +675,7 @@ export const interestRateFixationApi = createApi({
         }),
         getapplprestproposal: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getapplprestproposal/${irfId}`,
-            providesTags: ['ApprovedStructurePresent']
+            providesTags: ['ApprovedStructurePresent'],
         }),
         saveApplPrestProposal: builder.mutation<any, any>({
             query: (data) => ({
@@ -701,7 +687,7 @@ export const interestRateFixationApi = createApi({
         }),
         getCompanyRateRequest: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getcomprequestrate/${irfId}`,
-            providesTags: ['CompanyRateRequest']
+            providesTags: ['CompanyRateRequest'],
         }),
         saveCompanyRateRequest: builder.mutation<any, any>({
             query: (data) => ({
@@ -713,7 +699,7 @@ export const interestRateFixationApi = createApi({
         }),
         getMemorandumTxt: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getmemorandumtxt/${irfId}`,
-            providesTags: ['interesetComment']
+            providesTags: ['interesetComment'],
         }),
         saveMemorandumTxt: builder.mutation<any, any>({
             query: (data) => ({
@@ -725,7 +711,7 @@ export const interestRateFixationApi = createApi({
         }),
         getRecommendations: builder.query<any, string>({
             query: (irfId) => `interestratefixation/getrecommendations/${irfId}`,
-            providesTags: ['Recommendations']
+            providesTags: ['Recommendations'],
         }),
         saveRecommendations: builder.mutation<any, any[]>({
             query: (data) => ({
@@ -734,6 +720,18 @@ export const interestRateFixationApi = createApi({
                 body: data,
             }),
             invalidatesTags: ['Recommendations'],
+        }),
+        getFinancialsBriefByIrID: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getfinancialsbrieflist/${irfId}`,
+            providesTags: ['FinancialsBrief'],
+        }),
+        saveFinancialsBrief: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savefinancialsbrief`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['FinancialsBrief'],
         }),
     }),
 });
@@ -765,10 +763,457 @@ export const {
     useGetMemorandumTxtQuery,
     useSaveMemorandumTxtMutation,
     useGetRecommendationsQuery,
-    useSaveRecommendationsMutation
+    useSaveRecommendationsMutation,
+    useGetFinancialsBriefByIrIDQuery,
+    useSaveFinancialsBriefMutation,
 } = interestRateFixationApi;
 
 
 
+import { KeyValuePair } from "./KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import Select from "@mui/material/Select";
+import { useGetMaterQuery, useLazyGetMasterByIdQuery } from "../../features/master/api";
+import { modify } from "../../utlis/helpers";
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import { useEffect, useState } from "react";
+import SelectLoader from "../../loader/SelectLoader";
 
-as i want to save my financial table by using new apis get and save and body check and change validation also according to that etc  just take reference from RateRequestCompany just and one more thing add news apis to interestRateFixationApi 
+interface EnhancedDropDownProps {
+    label?: string;
+    name: string;
+    domain: string;
+    disabled?: boolean;
+    dependsOn?: any;
+    onChange?: (value: any) => void;
+    onValueChange?: (value: any) => void;
+    customOptions?: Array<{ key: string, value: string, label: string }>;
+    valueKey?: string;
+    labelKey?: string;
+    query?: string;
+    basePath?: string
+}
+
+export const EnhancedDropDown =
+    ({
+        basePath = "refapi",
+        ...props
+    }: EnhancedDropDownProps) => {
+        const formik = useFormikContext<KeyValuePair>();
+        const {
+            handleBlur,
+            values,
+            touched,
+            errors,
+            setFieldValue,
+            setFieldTouched
+        } = formik || {};
+
+        const [dependMasterdata, setDependMasterData] = useState<any>();
+        const {
+            data: masterData,
+            isLoading
+        } = useGetMaterQuery(`${basePath}/${props.domain}`, {
+            skip: Boolean(props.dependsOn),
+            refetchOnMountOrArgChange: true
+        });
+
+        const [dependsOnData] = useLazyGetMasterByIdQuery();
+
+        const handleChange = async (event: any) => {
+            const value = event.target.value;
+            await setFieldValue(props.name, value);
+            await setFieldTouched(props.name, true, false);
+
+            if (props.onChange) {
+                props.onChange(value);
+            }
+            if (props.onValueChange) {
+                props.onValueChange(value);
+            }
+        };
+
+        const dependentValue: any = getIn(values, props.dependsOn);
+
+        const dependData = async () => {
+            let options: any = [];
+            if (props.dependsOn) {
+                if (getIn(values, props.dependsOn)) {
+                    try {
+                        const dependMasterData = await dependsOnData(
+                            `${basePath}/${props.domain}?${props?.query}=${dependentValue}`
+                        ).unwrap();
+                        options = modify(`${props.domain}`, dependMasterData);
+                        return options;
+                    } catch (error) {
+                        return [];
+                    }
+                }
+                return options;
+            }
+            return [];
+        };
+
+        const getOptions = () => {
+            if (props.customOptions) {
+                return props.customOptions;
+            }
+            return modify(props.domain, masterData);
+        };
+
+        useEffect(() => {
+            dependData()
+                .then((options: any) => {
+                    setDependMasterData(options);
+                })
+                .catch(() => {
+                    setDependMasterData([]);
+                });
+        }, [props?.dependsOn, dependentValue]);
+
+        if (isLoading) return <SelectLoader />;
+
+        return (
+            <>
+                <FormControl fullWidth>
+                    <InputLabel
+                        className="select-label"
+                        id={`label-id-${props.name}`}
+                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                    >
+                        {props.label}
+                    </InputLabel>
+                    <Select
+                        labelId={`label-id-${props.name}`}
+                        id={`id-${props.name}`}
+                        value={getIn(values, props.name) || ''}
+                        disabled={props.disabled}
+                        name={props.name}
+                        label={props.label}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                        size="small"
+                    >
+                        {(!props?.dependsOn ? getOptions() : dependMasterdata)?.map((item: any) => (
+                            <MenuItem
+                                value={item.value}
+                                key={item.key}
+                            >
+                                {item.label}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <div className="mt-0">
+                    <Typography
+                        color="error"
+                        variant="subtitle2"
+                        gutterBottom
+                        component="span"
+                        className="mybooking_error"
+                    >
+                        {getIn(touched, props.name) && getIn(errors, props.name) &&
+                            JSON.stringify(getIn(errors, props.name)).replaceAll('"', '')}
+                    </Typography>
+                </div>
+            </>
+        );
+    };
+	
+	import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+
+const reviewId: any = localStorage.getItem('reviewId') ?? null;
+const irfId: any = localStorage.getItem('irfId') ?? null;
+
+interface MyState {
+  myValue?: string | null;
+  irfId?:string | null
+}
+
+const initialState: MyState = {
+  myValue: reviewId || null,
+  irfId:irfId|| null
+};
+
+
+const mySlice = createSlice({
+  name: 'mySlice',
+  initialState,
+  reducers: {
+    setValue: (state, action: PayloadAction<string>) => {
+      localStorage.setItem("reviewId", String(action.payload));
+      state.myValue = action.payload;
+    },
+
+    setIrfId: (state, action: PayloadAction<string>) => {
+      localStorage.setItem("irfId", String(action.payload));
+      state.irfId = action.payload;
+    },
+    
+  },
+});
+export const { setValue,setIrfId } = mySlice.actions;
+export default mySlice.reducer;
+
+
+
+import { memo,useMemo, useEffect, useState } from "react";
+import { useAppDispatch } from '../../../app/hooks';
+import { setDrawerState } from '../../../features/lead/leadSlice';
+import { Grid, Box, Button, Card, Typography, Skeleton, TextField } from '@mui/material'
+import { DataGrid } from '@mui/x-data-grid';
+import { Link, useNavigate } from "react-router-dom";
+import { AiOutlineArrowLeft } from "react-icons/ai";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { useLocation } from 'react-router-dom';
+import { SearchIcon } from "lucide-react";
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import AddIcon from '@mui/icons-material/Add';
+import { useGetreviewDashboardQuery } from "../../../features/review/reviewApi";
+import { setIrfId } from "../../../features/review/valueSlice";
+
+
+const InteresetRateFixationDashboard: React.FC<{}> = () => {
+    const dispatch = useAppDispatch();
+    let location = useLocation();
+    const [searchText, setSearchText] = useState<string>("");
+    const [startDate, setStartDate] = useState<any>(null);
+    const [endDate, setEndDate] = useState<any>(null);
+    const [isStatus, setIsStatus] = useState<string>('00');
+    const navigate = useNavigate();
+
+    const parseDateString = (dateString: string) => {
+        const [datePart, timePart] = dateString.split(' ');
+        const [day, month, year] = datePart.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    };
+
+    const isDateInRange = (dateString: string) => {
+        if (!startDate && !endDate) return true;
+
+        const date = parseDateString(dateString);
+
+        if (startDate && endDate) {
+            return date >= startDate.startOf('day') && date <= endDate.endOf('day');
+        }
+
+        if (startDate) {
+            return date >= startDate.startOf('day');
+        }
+
+        if (endDate) {
+            return date <= endDate.endOf('day');
+        }
+
+        return true;
+    };
+
+    const navigateReview = (irfId: any) => {
+        dispatch(setIrfId(""));
+        navigate("/refinance/los-monitoring-review");
+        dispatch(setIrfId(irfId));
+    }
+    const { data: statusData, isLoading, isError } = useGetreviewDashboardQuery("")
+
+    const [data, setData] = useState(statusData);
+
+    useEffect(() => {
+        setData(statusData || null);
+    }, [statusData, isStatus]);
+
+    const gridColumns = [
+        {
+            field: 'irfId', headerName: 'Irf Id', width: 200,
+            renderCell: (params: any) => {
+                return <Link className='in-clickable' to="" onClick={(e: any) => { navigateReview(params?.row); e.preventDefault() }}>
+                    {params?.row?.irfId}
+                </Link>;
+            }
+        },
+        {
+            field: 'Name of Borrower', nameOfNBFC: 'Name of Borrower', width: 250,
+            renderCell: (params: any) => {
+                return <Link className='in-clickable' to="" onClick={(e: any) => { navigateReview(params?.row); e.preventDefault() }}>
+                    {params?.row?.nameOfBorrower}
+                </Link>;
+            }
+        },
+        {
+            field: 'cifId', headerName: 'Cif Id', width: 250,
+            renderCell: (params: any) => {
+                return <Link className='in-clickable' to="" onClick={(e: any) => { navigateReview(params?.row); e.preventDefault() }}>
+                    {params?.row?.cifId}
+                </Link>;
+            }
+        },
+        {
+            field: 'meetingDate', headerName: 'Meeting Date', width: 250,
+            renderCell: (params: any) => {
+                return <Link className='in-clickable' to="" onClick={(e: any) => { navigateReview(params?.row); e.preventDefault() }}>
+                    {params?.row?.meetingDate}
+                </Link>;
+            }
+        },
+
+    ];
+
+    useEffect(() => {
+        if (location.pathname.split("/")[2] === 'intereset-rate-fixation-dashboard') {
+            dispatch(setDrawerState(false));
+        }
+    }, [location])
+
+    const resetData = () => {
+        setSearchText('');
+        setStartDate(null);
+        setEndDate(null);
+    }
+
+    const filteredData = useMemo(() => {
+        return data?.filter((item: any) => {
+            const searchTextMatch =
+                typeof item.nameOfBorrower === "string"
+                    ? item.nameOfBorrower.toLowerCase().includes(searchText?.toLowerCase())
+                    : false;
+
+            const dateMatch = isDateInRange(item?.cifId);
+
+            return searchTextMatch && dateMatch;
+        }) ?? [];
+    }, [data, searchText, isDateInRange]);
+
+
+    const [id, setId] = useState<any>("");
+    const [show, setShow] = useState(true);
+
+    const handleShow = () => {
+        setShow((preValue: boolean) => !preValue)
+    }
+    return (
+        <Grid container className="los_mainwra">
+            <Grid item xs={12} className="los_rgtdata">
+
+                <div className="inner-top-heading pe-0 ps-0" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Typography className='wrap-bold' noWrap variant="subtitle1" component="div" style={{ width: '40%' }}>
+                        <h6 className="title pt-1"> Interest Rate Fixation Dashboard</h6>
+                    </Typography>
+
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                        }}
+                        gap={1}>
+                        <Link to={`/refinance/los-intereset-rate-fixation`}>
+                            <Button
+                                color="inherit"
+                                className="text-capitalize"
+                                variant="outlined"
+                                size="small"
+                                onClick={navigateReview}
+                            >
+                                <AddIcon className="me-2" /> New
+                            </Button>
+                        </Link>
+                        <Link className="in-clickable text-capitalize" to="/refinance/los-dashboard">
+                            <Button
+                                color="inherit"
+                                className="text-capitalize"
+                                variant="outlined"
+                                size="small"
+                            >
+                                <AiOutlineArrowLeft className="me-2" /> Back
+                            </Button>
+                        </Link>
+                    </Box>
+
+                </div>
+
+                {
+                    isLoading ? <Skeleton animation="wave" variant="rectangular" height={300} /> :
+                        <div className='mt-3 filter-table'>
+                            <div className="wrap-filter-area">
+                                <Grid className="custome-form p-3" container spacing={2}>
+                                    <Grid item xs={12} sm={12} md={6} lg={3}>
+                                        <TextField type="search" value={searchText}
+                                            size="small"
+                                            label="Search here."
+                                            onChange={(e) => setSearchText(e.target.value)}
+                                            placeholder="Search here..."
+                                            fullWidth
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} sm={12} md={6} lg={3}>
+                                        <DatePicker
+                                            label="Start Date"
+                                            value={startDate}
+                                            onChange={(event: any) => setStartDate(event)}
+                                            slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} sm={12} md={6} lg={3}>
+
+                                        <DatePicker
+                                            label="End Date"
+                                            value={endDate}
+                                            onChange={(newValue: any) => setEndDate(newValue)}
+                                            slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                                            sx={{ marginRight: "10px" }}
+                                        />
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={12} md={6} lg={3}>
+                                        <Button
+                                            variant="contained"
+                                            size="small"
+                                            className="text-capitalize me-2 shadow-none search-color"
+                                            startIcon={<SearchIcon />}
+                                        >  Search
+                                        </Button>
+                                        <Button variant="contained"
+                                            onClick={resetData}
+                                            size="small"
+                                            color="error"
+                                            className="text-capitalize shadow-none"
+                                            startIcon={<RestartAltIcon />}
+                                        >
+                                            Reset
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </div>
+                            <Grid item xs={12} sm={6} md={12}>
+                                <Card className="custom-card-table">
+                                    <DataGrid
+                                        className='custom-grid-table not-show-header-option on-row-selection'
+                                        rows={filteredData ?? []}
+                                        columns={gridColumns}
+                                        getRowId={(row: any) => row?.irfId + row?.nameOfBorrower}
+                                        initialState={{
+                                            pagination: {
+                                                paginationModel: { page: 0, pageSize: 5 },
+                                            },
+                                        }}
+                                        pageSizeOptions={[5, 10]}
+                                    />
+
+                                </Card>
+                            </Grid>
+                        </div>
+                }
+            </Grid>
+        </Grid >
+    )
+}
+
+export default memo(InteresetRateFixationDashboard)
+
+
+
+
+ so i want to save BasicInteresetFixation with proper validation i shared api also only these field will be there to save and one more thing if irfid is not there means before BasicInteresetFixation is not saved and irfId see after save if user come from add new so there will be no irfid in that case new irfId will be create in BasicInteresetFixation after save get irfId and we have to save globally also in add new before saving BasicInteresetFixation all othere accordion will be disabled give me complete and proper code   
+
