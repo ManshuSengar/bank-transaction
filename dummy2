@@ -1,3 +1,445 @@
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { customBaseQuery } from '../../app/commonApi';
+
+export const interestRateFixationApi = createApi({
+    reducerPath: 'interestRateFixationApi',
+    baseQuery: customBaseQuery('refapi'),
+    tagTypes: [
+        'BriefBackground',
+        'InternalRating',
+        'ExternalRating',
+        'ROID',
+        'ROIR',
+        'PresentProposal',
+        'SidbiExposure',
+        'SanctionRating',
+        'ApprovedStructure',
+        'ApprovedStructurePresent',
+        'CompanyRateRequest',
+        'interesetComment',
+        'Recommendations',
+        'FinancialsBrief',
+    ],
+    endpoints: (builder) => ({
+        getFixationInterestRate: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getfixationinterestrate/${applId}`,
+            providesTags: ['BriefBackground'],
+        }),
+        saveInternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveinternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['InternalRating'],
+        }),
+        getInternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingpresent/${applId}`,
+            providesTags: ['InternalRating'],
+        }),
+        getInternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getinternalratingsanction/${applId}`,
+            providesTags: ['InternalRating'],
+        }),
+        getExternalRatingSanction: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingsanction/${applId}`,
+            providesTags: ['ExternalRating'],
+        }),
+        getExternalRatingPresent: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getexternalratingpresent/${applId}`,
+            providesTags: ['ExternalRating'],
+        }),
+        saveExternalRating: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saveexternalrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ExternalRating'],
+        }),
+        getResetlist: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getresetlist/${applId}`,
+            providesTags: ['ROIR'],
+        }),
+        saveReset: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savereset`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getDisbursementList: builder.query<any, string>({
+            query: (applId) => `interestratefixation/getDisbursementlist/${applId}`,
+            providesTags: ['ROID'],
+        }),
+        saveDisbursement: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savedisbursement`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ROID'],
+        }),
+        getPresentProposal: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getpresentproposal/${irfId}`,
+            providesTags: ['PresentProposal'],
+        }),
+        savePresentProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savepresentproposal`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['PresentProposal'],
+        }),
+        getSidbiExposure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsidbiexposure/${irfId}`,
+            providesTags: ['SidbiExposure'],
+        }),
+        saveSidbiExposure: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savesidbiexposure`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SidbiExposure'],
+        }),
+        getSanctionRating: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getsanctionrating/${irfId}`,
+            providesTags: ['SanctionRating'],
+        }),
+        saveSanctionRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savesanctionrating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['SanctionRating'],
+        }),
+        getApprovedStructure: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getapprovedintrate/${irfId}`,
+            providesTags: ['ApprovedStructure'],
+        }),
+        saveApprovedStructure: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/saveapprovedintrate`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['ApprovedStructure'],
+        }),
+        getapplprestproposal: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getapplprestproposal/${irfId}`,
+            providesTags: ['ApprovedStructurePresent'],
+        }),
+        saveApplPrestProposal: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/saveapplprestproposal`,
+                method: 'POST',
+                body: [data],
+            }),
+            invalidatesTags: ['ApprovedStructurePresent'],
+        }),
+        getCompanyRateRequest: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getcomprequestrate/${irfId}`,
+            providesTags: ['CompanyRateRequest'],
+        }),
+        saveCompanyRateRequest: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savecomprequestrate`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['CompanyRateRequest'],
+        }),
+        getMemorandumTxt: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getmemorandumtxt/${irfId}`,
+            providesTags: ['interesetComment'],
+        }),
+        saveMemorandumTxt: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `interestratefixation/savememorandumtxt`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['interesetComment'],
+        }),
+        getRecommendations: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getrecommendations/${irfId}`,
+            providesTags: ['Recommendations'],
+        }),
+        saveRecommendations: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/saverecommendations`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Recommendations'],
+        }),
+        getFinancialsBriefByIrID: builder.query<any, string>({
+            query: (irfId) => `interestratefixation/getfinancialsbrieflist/${irfId}`,
+            providesTags: ['FinancialsBrief'],
+        }),
+        saveFinancialsBrief: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `interestratefixation/savefinancialsbrief`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['FinancialsBrief'],
+        }),
+    }),
+});
+
+export const {
+    useGetFixationInterestRateQuery,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingPresentQuery,
+    useGetInternalRatingSanctionQuery,
+    useGetExternalRatingSanctionQuery,
+    useGetExternalRatingPresentQuery,
+    useSaveExternalRatingMutation,
+    useGetDisbursementListQuery,
+    useGetResetlistQuery,
+    useSaveDisbursementMutation,
+    useSaveResetMutation,
+    useGetPresentProposalQuery,
+    useSavePresentProposalMutation,
+    useGetSidbiExposureQuery,
+    useSaveSidbiExposureMutation,
+    useGetSanctionRatingQuery,
+    useSaveSanctionRatingMutation,
+    useGetApprovedStructureQuery,
+    useSaveApprovedStructureMutation,
+    useSaveApplPrestProposalMutation,
+    useGetapplprestproposalQuery,
+    useGetCompanyRateRequestQuery,
+    useSaveCompanyRateRequestMutation,
+    useGetMemorandumTxtQuery,
+    useSaveMemorandumTxtMutation,
+    useGetRecommendationsQuery,
+    useSaveRecommendationsMutation,
+    useGetFinancialsBriefByIrIDQuery,
+    useSaveFinancialsBriefMutation,
+} = interestRateFixationApi;
+
+
+import React, { useState, useEffect } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from '@mui/material';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import { useAppSelector } from '../../../app/hooks';
+import { useGetFinancialsBriefByIrIDQuery, useSaveFinancialsBriefMutation } from '../../../features/monitoring/interestRateFixationApi';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { Backdrop, CircularProgress, Typography } from '@mui/material';
+
+const FinancialTable = () => {
+    const { interestResetID } = useAppSelector((state: { userStore: any }) => state.userStore);
+    const { data: financialsBriefData, isLoading, isError, refetch } = useGetFinancialsBriefByIrIDQuery(interestResetID, {
+        skip: !interestResetID,
+        refetchOnMountOrArgChange: true,
+    });
+    const [updateFinancialsBrief] = useSaveFinancialsBriefMutation();
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<string>('');
+    const [severity, setSeverity] = useState<'success' | 'error'>('success');
+
+    const [initialValues, setInitialValues] = useState<any>({
+        financialList: [],
+    });
+
+    useEffect(() => {
+        if (financialsBriefData) {
+            setInitialValues({ financialList: financialsBriefData });
+        }
+    }, [financialsBriefData]);
+
+    const validationSchema = Yup.object().shape({
+        financialList: Yup.array().of(
+            Yup.object().shape({
+                qtrVal: Yup.number().typeError('Must be a number').required('Required'),
+                valAsonTMinus2: Yup.number().typeError('Must be a number').required('Required'),
+                valAsonTMinus1: Yup.number().typeError('Must be a number').required('Required'),
+                valAsonT: Yup.number().typeError('Must be a number').required('Required'),
+            })
+        ),
+    });
+
+    const handleSubmit = async (values: any) => {
+        try {
+            const finalValue = values.financialList.map((fin: any) => ({
+                ...fin,
+                irfId: interestResetID,
+                saveStatus: '01',
+            }));
+            await updateFinancialsBrief(finalValue).unwrap();
+            setOpenSnackbar(true);
+            setSeverity('success');
+            setSnackMsg('Record saved successfully');
+            refetch();
+        } catch (err: any) {
+            console.error('Error saving data:', err);
+            setOpenSnackbar(true);
+            setSeverity('error');
+            setSnackMsg('Failed to save: ' + err?.message);
+        }
+    };
+
+    const handleSnackClose = () => {
+        setOpenSnackbar(false);
+    };
+
+    const ValueOfTnfo = sessionStorage.getItem('ValueOfT');
+    const T = ValueOfTnfo ? ValueOfTnfo.replace(/^"|"$/g, '') : '0';
+    const year: number = parseInt(T, 10);
+    const tMinusOne: number = year - 1;
+    const tMinusTwo: number = year - 2;
+    const QuarterOfTnfo = sessionStorage.getItem('QuarterOfT');
+    const Q = QuarterOfTnfo ? QuarterOfTnfo.replace(/^"|"$/g, '') : '0';
+
+    const headers = [
+        { label: 'Parameters', rowSpan: 2 },
+        { label: `FY${tMinusTwo}`, colspan: 1 },
+        { label: `FY${tMinusOne}`, colspan: 1 },
+        { label: `FY${year}`, colspan: 1 },
+        { label: `${Q}FY${year}`, colspan: 1 },
+    ];
+
+    const subHeaders = [
+        { label: '(All amount is In ₹ crore)', colspan: 1 },
+        { label: 'Audited', colspan: 1 },
+        { label: 'Audited', colspan: 1 },
+        { label: 'Audited', colspan: 1 },
+        { label: 'Unaudited', colspan: 1 },
+    ];
+
+    return (
+        <>
+            <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={isLoading}>
+                <div style={{ textAlign: 'center' }}>
+                    <CircularProgress color="inherit" />
+                    <Typography variant="h6" sx={{ mt: 2 }}>
+                        Loading, please wait...
+                    </Typography>
+                </div>
+            </Backdrop>
+
+            {isError && <div className="text-danger">Error loading data</div>}
+            {financialsBriefData && (
+                <div className="component-wrapper">
+                    <NbfcSnackbar
+                        open={openSnackbar}
+                        msg={snackMsg}
+                        severity={severity}
+                        handleSnackClose={handleSnackClose}
+                        submitCall={false}
+                    />
+                    <Formik
+                        initialValues={initialValues}
+                        validationSchema={validationSchema}
+                        onSubmit={handleSubmit}
+                        enableReinitialize={true}
+                    >
+                        {({ values }) => (
+                            <Form>
+                                <FieldArray name="financialList">
+                                    {() => (
+                                        <div className="wrap-inner-table mt-0 mb-0 table-responsive">
+                                            <Grid container spacing={2} className="mt-0">
+                                                <Grid item xs={12} md={12}>
+                                                    <Table className="table mb-0" sx={{ minWidth: '100%' }} aria-label="financial table">
+                                                        <TableHead>
+                                                            <TableRow>
+                                                                {headers.map((header, index) => (
+                                                                    <TableCell key={index}>
+                                                                        <b>{header.label}</b>
+                                                                    </TableCell>
+                                                                ))}
+                                                            </TableRow>
+                                                            <TableRow>
+                                                                {subHeaders.map((subHeader, index) => (
+                                                                    <TableCell key={index}>
+                                                                        <b>{subHeader.label}</b>
+                                                                    </TableCell>
+                                                                ))}
+                                                            </TableRow>
+                                                        </TableHead>
+                                                        <TableBody>
+                                                            {values.financialList.map((fin: any, index: number) => (
+                                                                <TableRow key={index}>
+                                                                    <TableCell width="100px">{fin.particulars}</TableCell>
+                                                                    <TableCell width="150px">
+                                                                        <TextBoxField
+                                                                            label=""
+                                                                            name={`financialList.${index}.qtrVal`}
+                                                                            type="number"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell width="150px">
+                                                                        <TextBoxField
+                                                                            label=""
+                                                                            name={`financialList.${index}.valAsonTMinus2`}
+                                                                            type="number"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell width="150px">
+                                                                        <TextBoxField
+                                                                            label=""
+                                                                            name={`financialList.${index}.valAsonTMinus1`}
+                                                                            type="number"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell width="150px">
+                                                                        <TextBoxField
+                                                                            label=""
+                                                                            name={`financialList.${index}.valAsonT`}
+                                                                            type="number"
+                                                                        />
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </Grid>
+                                                <Grid item xs={12} md={12}>
+                                                    <div className="mt-3">
+                                                        <Button
+                                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                                            type="submit"
+                                                            variant="contained"
+                                                        >
+                                                            Save <CheckCircleOutlineIcon />
+                                                        </Button>
+                                                    </div>
+                                                </Grid>
+                                            </Grid>
+                                        </div>
+                                    )}
+                                </FieldArray>
+                            </Form>
+                        )}
+                    </Formik>
+                </div>
+            )}
+        </>
+    );
+};
+
+export default FinancialTable;
+
+
+
+
+
+
+
+
+
+
+
 import React, { useState } from 'react';
 import {
     Table, TableBody, TableCell, TableHead, TableRow, Button, Grid, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent
