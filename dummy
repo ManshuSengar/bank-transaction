@@ -1,1927 +1,539 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
-import { Formik, Form, useFormikContext } from 'formik';
-import * as Yup from 'yup';
-import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AutoSave from '../../../components/framework/AutoSave';
-import { RichTextField } from '../../../components/framework/RichTextField';
+import React, { useState } from 'react';
+import {
+    Table, TableBody, TableCell, TableHead, TableRow, Button, Grid, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent
+} from "@mui/material";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
+import { Formik, Form } from 'formik';
+import * as Yup from 'yup';
+import {
+    useGetRecommendationsQuery,
+    useSaveRecommendationsMutation,
+    useGetMemorandumTxtQuery,
+    useSaveMemorandumTxtMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import AutoSave from '../../../components/framework/AutoSave';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { RichTextField } from '../../../components/framework/RichTextField';
 
-const InterestRateApplicable = ({ irfId }: any) => {
-  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
+const Recommendation = ({ irfId }: any) => {
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<string>("");
+    const [severity, setSeverity] = useState<"success" | "error">("success");
+    const [borrower, setBorrower] = useState('');
 
-  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
+    const { data: recommendations, isLoading: isLoadingRecommendations } = useGetRecommendationsQuery(irfId, {
+        skip: !irfId,
+        refetchOnMountOrArgChange: true,
+    });
 
-  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
+    const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
+        skip: !irfId,
+        refetchOnMountOrArgChange: true,
+    });
 
-  const [options, setOptions] = useState<any[]>([]);
+    const [saveRecommendations] = useSaveRecommendationsMutation();
+    const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
 
-  useEffect(() => {
-    if (benchmarkData) {
-      const transformed = benchmarkData.map((item: any) => ({
-        key: item.BRM_RATE_ID,
-        value: item.BRM_RATE_ID,
-        label: item.BRM_RATE_NAME
-      }));
-      setOptions(transformed);
-    }
-  }, [benchmarkData]);
+    const validationSchemaRecommendations = Yup.object().shape({
+        recommendation: Yup.object().shape({
+            scheme: Yup.string().required("Required"),
+            amount: Yup.number().typeError("Must be a number").required("Required").positive("Must be positive"),
+            tenure: Yup.number().typeError("Must be a number").required("Required").positive("Must be a number"),
+            applicableIntRate: Yup.number().typeError("Must be a number").required("Required").positive("Must be positive"),
+            discretion: Yup.number().typeError("Must be a number").required("Required"),
+            roiRecommended: Yup.string().required("Required"),
+            resetClause: Yup.string().required("Required"),
+            nextResetDt: Yup.string().required("Required"),
+        }),
+    });
 
-  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
+    // Validation schema for Validity, DoP, and Discretionary Powers
+    const validationSchemaMemorandum = Yup.object().shape({
+        irValidity: Yup.string().required("Required"),
+        dop: Yup.string().required("Required"),
+        dopComments: Yup.string().required("Required"),
+        discPowers: Yup.string().required("Required"),
+    });
 
-  const handleSubmitMemorandum = async (values: any) => {
-    try {
-      const finalValue = {
-        ...values,
-        irfId,
-        saveStatus: '01',
-        preprosalComment: values?.preprosalComment,
-      };
-      await saveMemorandumTxt(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Memorandum saved successfully");
-    } catch (error) {
-      console.error("Error saving memorandum:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Memorandum");
-    }
-  };
+    // Handle submit for Interest Rate table
+    const handleSubmitRecommendations = async (values: any) => {
+        try {
+            const finalValue = [{
+                ...values.recommendation,
+                irfId,
+                slNo: 1,
+                saveStatus: '01',
+            }];
+            await saveRecommendations(finalValue).unwrap();
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Recommendation saved successfully");
+        } catch (error) {
+            console.error("Error saving recommendation:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save Recommendation");
+        }
+    };
 
-  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState("success");
+    // Handle submit for Validity, DoP, and Discretionary Powers
+    const handleSubmitMemorandum = async (values: any) => {
+        try {
+            const finalValue = {
+                ...values,
+                irfId,
+                saveStatus: '01',
+                verticalComments: values.verticalComments || "",
+                recommendation: values.recommendation || "",
+                preprosalComment: values.preprosalComment || "",
+                rateReqComment: values.rateReqComment || ""
+            };
+            await saveMemorandumTxt(finalValue).unwrap();
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Memorandum saved successfully");
+        } catch (error) {
+            console.error("Error saving memorandum:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save Memorandum");
+        }
+    };
 
-  const initialValues = proposalData?.[0] || {
-    interestType: '',
-    proposalType: '',
-    mclr: '',
-    ratingSpread: '',
-    intScore: '',
-    intScoreLink: '',
-    totalSpread: '',
-    finalRate: '',
-    grade: '',
-    benchmarkAsOn: '',
-    tenure: '',
-    benchmark: '',
-    benchmarkRate: '',
-    sidbiSpread: '',
-    minIntRate: '',
-    minIntRateTrmv: '',
-  };
+    const handleSnackClose = () => {
+        setOpenSnackbar(false);
+    };
 
-  const validationSchema = Yup.object().shape({
-    interestType: Yup.string().required('Interest Type is required'),
-    proposalType: Yup.string().when('interestType', {
-      is: 'floating',
-      then: Yup.string().required('Proposal Type is required'),
-      otherwise: Yup.string().nullable()
-    }),
-  });
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const dataToSave = { ...values, irfId, saveStatus: '01' };
-      await saveApplPrestProposal(dataToSave).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Proposal saved successfully");
-    } catch (error) {
-      console.error("Error saving proposal:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save proposal");
-    }
-  };
-
-  const handleSnackClose = () => setOpenSnackbar(false);
-
-  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
-
-  const InnerForm = () => {
-    const { values, setFieldValue, setValues }: any = useFormikContext();
-    const prevInterestTypeRef = useRef(values.interestType);
-    const prevProposalTypeRef = useRef(values.proposalType);
-
-    const selectedLabel = options.find((opt) => opt.value === values.proposalType)?.label || '';
-
-    useEffect(() => {
-      if (values.interestType !== prevInterestTypeRef.current) {
-        setValues({
-          interestType: values.interestType,
-          proposalType: values.interestType === 'floating' ? '' : null,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-        prevInterestTypeRef.current = values.interestType;
-      } else if (values.interestType === 'floating' && values.proposalType !== prevProposalTypeRef.current) {
-        setValues({
-          interestType: values.interestType,
-          proposalType: values.proposalType,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-        prevProposalTypeRef.current = values.proposalType;
-      }
-    }, [values.interestType, values.proposalType, setValues]);
+    const handleChangeBrw = (event: SelectChangeEvent) => {
+        setBorrower(event.target.value);
+    };
 
     return (
-      <Form>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={4} md={4} lg={4}>
-            <EnhancedDropDown
-              label="Interest Type"
-              name="interestType"
-              customOptions={[
-                { key: 'fixed', value: 'fixed', label: 'Fixed' },
-                { key: 'floating', value: 'floating', label: 'Floating' },
-              ]}
-              domain=""
+        <div className="wrap-inner-table mt-4">
+            {(isLoadingRecommendations || isLoadingMemorandum) ? (
+                <p>Loading...</p>
+            ) : (
+                <>
+                    {/* Form for Interest Rate Table */}
+                    <Formik
+                        initialValues={{
+                            recommendation: recommendations?.[0] || {
+                                irfId,
+                                slNo: 1,
+                                scheme: "",
+                                amount: "",
+                                tenure: "",
+                                applicableIntRate: "",
+                                discretion: "",
+                                roiRecommended: "",
+                                resetClause: "",
+                                nextResetDt: null,
+                                saveStatus: '01',
+                            },
+                        }}
+                        validationSchema={validationSchemaRecommendations}
+                        onSubmit={handleSubmitRecommendations}
+                        enableReinitialize={true}
+                    >
+                        {({ values }) => (
+                            <Form>
+                                <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitRecommendations} />
+                                <Table sx={{ minWidth: 650 }} aria-label="recommendation table">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell colSpan={8}><b>Interest Rate</b></TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell><b>Scheme</b></TableCell>
+                                            <TableCell><b>Amount (₹crore)</b></TableCell>
+                                            <TableCell><b>Tenure</b></TableCell>
+                                            <TableCell><b>Applicable Rate</b></TableCell>
+                                            <TableCell><b>Discretion (%)</b></TableCell>
+                                            <TableCell><b>ROI Recommended</b></TableCell>
+                                            <TableCell><b>Reset Clause</b></TableCell>
+                                            <TableCell><b>Next Reset Date</b></TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        <TableRow>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.scheme"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.amount"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.tenure"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.applicableIntRate"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.discretion"
+                                                    type="number"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TextBoxField
+                                                    label=""
+                                                    name="recommendation.roiRecommended"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <EnhancedDropDown
+                                                    label=""
+                                                    name="recommendation.resetClause"
+                                                    domain="mstr/getResetClauseMstr"
+                                                    basePath="mon"
+                                                />
+                                                 <EnhancedDropDown
+                                                    label=""
+                                                    basePath="mon"
+                                                    name="recommendation.resetClause"
+                                                    domain="mstr/getResetClauseMstr"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <AdvanceDatePickerField
+                                                    label=""
+                                                    name="recommendation.nextResetDt"
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                                <Grid item xs={12} sx={{ mt: 2 }}>
+                                    <Button
+                                        className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                        type='submit'
+                                        variant="contained"
+                                    >
+                                        Save <CheckCircleOutlineIcon />
+                                    </Button>
+                                </Grid>
+                            </Form>
+                        )}
+                    </Formik>
+
+                    <Formik
+                        initialValues={{
+                            irValidity: memorandumData?.irValidity || null,
+                            dop: memorandumData?.dop || "",
+                            dopComments: memorandumData?.dopComments || "",
+                            discPowers: memorandumData?.discPowers || "",
+                            verticalComments: memorandumData?.verticalComments || "",
+                            recommendation: memorandumData?.recommendation || "",
+                            preprosalComment: memorandumData?.preprosalComment || "",
+                            rateReqComment: memorandumData?.rateReqComment || "",
+                            committeName: memorandumData?.committeName || ""
+                        }}
+                        // validationSchema={validationSchemaMemorandum}
+                        onSubmit={handleSubmitMemorandum}
+                        enableReinitialize={true}
+                        validateOnChange={false}
+                        validateOnBlur={true}
+                    >
+                        {({ values }) => (
+                            <Form>
+                                <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
+                                <Grid container spacing={2} padding={4} className='form-grid p-0'>
+                                    <Grid item xs={12}>
+                                        <h6>Validity of Interest Rate</h6>
+                                        <Table sx={{ minWidth: 650 }} aria-label="validity table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <AdvanceDatePickerField
+                                                            label="Date"
+                                                            name="irValidity"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12}>
+                                        <h6>DoP</h6>
+                                        <Table sx={{ minWidth: 650 }} aria-label="dop table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <EnhancedDropDown
+                                                            label="Committees"
+                                                            name="committeName"
+                                                            domain="committee/getAllCommitteeMasters"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <RichTextField
+                                                            label="Comments"
+                                                            name="dop"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12}>
+                                        {/* <h6>Discretionary Powers</h6> */}
+                                        <Table sx={{ minWidth: 650 }} aria-label="discretionary powers table">
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell>
+                                                        <RichTextField
+                                                            label="Discretionary Powers"
+                                                            name="discPowers"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Grid>
+
+                                    <Grid item xs={12} sx={{ mt: 2 }}>
+                                        <Button
+                                            className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                            type='submit'
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Form>
+                        )}
+                    </Formik>
+                </>
+            )}
+
+            <NbfcSnackbar
+                open={openSnackbar}
+                msg={snackMsg}
+                severity={severity}
+                handleSnackClose={handleSnackClose}
+                submitCall={false}
             />
-          </Grid>
-
-          {values?.interestType === "floating" && (
-            <Grid item xs={12} sm={4} md={4} lg={4}>
-              <EnhancedDropDown
-                label="Proposal Type"
-                name="proposalType"
-                customOptions={options}
-                onChange={(value: any) => setFieldValue('proposalType', value)}
-                domain=""
-              />
-            </Grid>
-          )}
-
-          {values?.interestType === "fixed" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <AdvanceTextBoxField name="finalRate" label="Final Rate" />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          {values?.interestType === "floating" && selectedLabel === "MCLR" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>MCLR</TableCell>
-                    <TableCell>Rating Spread</TableCell>
-                    <TableCell>Int Score</TableCell>
-                    <TableCell>Int Score Link</TableCell>
-                    <TableCell>Total Spread</TableCell>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell><AdvanceTextBoxField name="mclr" label="MCLR" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="intScore" label="Int Score" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="intScoreLink" label="Int Score Link" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          {values?.interestType === "floating" && selectedLabel === "T-Bill" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Grade</TableCell>
-                    <TableCell>Benchmark As On</TableCell>
-                    <TableCell>Tenure</TableCell>
-                    <TableCell>Benchmark</TableCell>
-                    <TableCell>Benchmark Rate</TableCell>
-                    <TableCell>Rating Spread</TableCell>
-                    <TableCell>SIDBI Spread</TableCell>
-                    <TableCell>Total Spread</TableCell>
-                    <TableCell>Min Int Rate</TableCell>
-                    <TableCell>Min Int Rate TRMV</TableCell>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell><AdvanceTextBoxField name="grade" label="Grade" /></TableCell>
-                    <TableCell><AdvanceDatePickerField name="benchmarkAsOn" label="Benchmark As On" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="tenure" label="Tenure" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="benchmark" label="Benchmark" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="benchmarkRate" label="Benchmark Rate" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="sidbiSpread" label="SIDBI Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="minIntRate" label="Min Int Rate" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="minIntRateTrmv" label="Min Int Rate TRMV" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          <Grid item xs={12}>
-            <RichTextField name="preprosalComment" label="Pre-proposal Comment" />
-          </Grid>
-
-          <Grid item xs={12}>
-            <Button type="submit" variant="contained" color="primary">
-              Save Proposal
-            </Button>
-            <Button onClick={() => handleSubmitMemorandum(values)} variant="contained" color="secondary" style={{ marginLeft: '10px' }}>
-              Save Memorandum
-            </Button>
-          </Grid>
-
-          <AutoSave debounceMs={1000} />
-        </Grid>
-      </Form>
+        </div>
     );
-  };
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize={true}
-      >
-        <InnerForm />
-      </Formik>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        onClose={handleSnackClose}
-        message={snackMsg}
-        severity={severity as any}
-      />
-    </div>
-  );
 };
 
-export default InterestRateApplicable;
+export default Recommendation;
+
+import React from 'react';
+import Grid from "@mui/material/Grid";
+import { KeyValuePair } from "./KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import { removeRestrictedCharacters } from '../../utlis/input';
+import { InputAdornment, Tooltip, IconButton } from '@mui/material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RedditTextField from './RedditTextField';
 
 
-
-
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
-import { Formik, Form, useFormikContext } from 'formik';
-import * as Yup from 'yup';
-import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AutoSave from '../../../components/framework/AutoSave';
-import { RichTextField } from '../../../components/framework/RichTextField';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
-
-const InterestRateApplicable = ({ irfId }: any) => {
-  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
-
-  const [options, setOptions] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (benchmarkData) {
-      const transformed = benchmarkData.map((item: any) => ({
-        key: item.BRM_RATE_ID,
-        value: item.BRM_RATE_ID,
-        label: item.BRM_RATE_NAME
-      }));
-      setOptions(transformed);
-    }
-  }, [benchmarkData]);
-
-  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
-
-  const handleSubmitMemorandum = async (values: any) => {
-    try {
-      const finalValue = {
-        ...values,
-        irfId,
-        saveStatus: '01',
-        preprosalComment: values?.preprosalComment,
-      };
-      await saveMemorandumTxt(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Memorandum saved successfully");
-    } catch (error) {
-      console.error("Error saving memorandum:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Memorandum");
-    }
+interface AdvanceTextBoxFieldProps {
+  id?: number;
+  label?: string;
+  name: string;
+  disabled?: boolean;
+  type?: string;
+  value?: string;
+  readonly?: boolean;
+  restrictedCharacters?: string;
+  placeholder?: string;
+  tooltip?: string;
+  required?: boolean;
+  maxLength?: number;
+  minLength?: number;
+  startAdornment?: React.ReactNode;
+  endAdornment?: React.ReactNode;
+  multiline?: boolean;
+  rows?: number;
+  maxRows?: number;
+  validation?: {
+    pattern?: RegExp;
+    customValidation?: (value: string) => string | undefined;
   };
+  transformValue?: (value: string) => string;
+  onCustomChange?: any;
+  fullWidth?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  InputProps?: any;
+  allowNegative?: boolean;
+  allowDecimal?: boolean;
+  decimalPlaces?: number;
+}
 
-  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState("success");
+export const AdvanceTextBoxField: React.FC<AdvanceTextBoxFieldProps> = ({
+  label = "",
+  name,
+  disabled = false,
+  type = 'text',
+  readonly = false,
+  restrictedCharacters = "<>{}",
+  placeholder,
+  tooltip,
+  required = false,
+  maxLength,
+  minLength,
+  startAdornment,
+  endAdornment,
+  multiline = false,
+  rows,
+  maxRows,
+  validation,
+  transformValue,
+  onCustomChange,
+  fullWidth = true,
+  className,
+  style,
+  allowNegative = false,
+  allowDecimal = true,
+  decimalPlaces = 2,
+  ...props
+}) => {
+  const { handleChange, handleBlur, values, touched, errors, setFieldValue } =
+    useFormikContext<KeyValuePair>() || {};
 
-  const initialValues = proposalData?.[0] || {
-    interestType: '',
-    proposalType: '',
-    mclr: '',
-    ratingSpread: '',
-    intScore: '',
-    intScoreLink: '',
-    totalSpread: '',
-    finalRate: '',
-    grade: '',
-    benchmarkAsOn: '',
-    tenure: '',
-    benchmark: '',
-    benchmarkRate: '',
-    sidbiSpread: '',
-    minIntRate: '',
-    minIntRateTrmv: '',
-  };
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    let { value } = event.target;
 
-  const validationSchema = Yup.object().shape({
-    interestType: Yup.string().required('Interest Type is required'),
-    proposalType: Yup.string().when('interestType', {
-      is: 'floating',
-      then: Yup.string().required('Proposal Type is required'),
-      otherwise: Yup.string().nullable()
-    }),
-  });
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const dataToSave = { ...values, irfId, saveStatus: '01' };
-      await saveApplPrestProposal(dataToSave).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Proposal saved successfully");
-    } catch (error) {
-      console.error("Error saving proposal:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save proposal");
+    if (restrictedCharacters) {
+      value = removeRestrictedCharacters(value, restrictedCharacters);
     }
-  };
 
-  const handleSnackClose = () => setOpenSnackbar(false);
+    if (transformValue) {
+      value = transformValue(value);
+    }
 
-  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
-
-  const InnerForm = () => {
-    const { values, setFieldValue, setValues }: any = useFormikContext();
-    const prevInterestTypeRef = useRef(values.interestType);
-    const prevProposalTypeRef = useRef(values.proposalType);
-
-    const selectedLabel = options.find((opt) => opt.value === values.proposalType)?.label || '';
-
-    useEffect(() => {
-      if (values.interestType !== prevInterestTypeRef.current) {
-        setValues({
-          interestType: values.interestType,
-          proposalType: values.interestType === 'floating' ? '' : null,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-        prevInterestTypeRef.current = values.interestType;
-      } else if (values.interestType === 'floating' && values.proposalType !== prevProposalTypeRef.current) {
-        setValues({
-          interestType: values.interestType,
-          proposalType: values.proposalType,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-        prevProposalTypeRef.current = values.proposalType;
+    if (type === 'number') {
+      let regex = allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/;
+      if (!allowDecimal) {
+        regex = /^\d*$/;
       }
-    }, [values.interestType, values.proposalType, setValues]);
-
-    return (
-      <Form>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={4} md={4} lg={4}>
-            <EnhancedDropDown
-              label="Interest Type"
-              name="interestType"
-              customOptions={[
-                { key: 'fixed', value: 'fixed', label: 'Fixed' },
-                { key: 'floating', value: 'floating', label: 'Floating' },
-              ]}
-              domain=""
-            />
-          </Grid>
-
-          {values?.interestType === "floating" && (
-            <Grid item xs={12} sm={4} md={4} lg={4}>
-              <EnhancedDropDown
-                label="Proposal Type"
-                name="proposalType"
-                customOptions={options}
-                onChange={(value: any) => setFieldValue('proposalType', value)}
-                domain=""
-              />
-            </Grid>
-          )}
-
-          {values?.interestType === "fixed" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <AdvanceTextBoxField name="finalRate" label="Final Rate" />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          {values?.interestType === "floating" && selectedLabel === "MCLR" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>MCLR</TableCell>
-                    <TableCell>Rating Spread</TableCell>
-                    <TableCell>Int Score</TableCell>
-                    <TableCell>Int Score Link</TableCell>
-                    <TableCell>Total Spread</TableCell>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell><AdvanceTextBoxField name="mclr" label="MCLR" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="intScore" label="Int Score" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="intScoreLink" label="Int Score Link" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          {values?.interestType === "floating" && selectedLabel === "T-Bill" && (
-            <Grid item xs={12}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Grade</TableCell>
-                    <TableCell>Benchmark As On</TableCell>
-                    <TableCell>Tenure</TableCell>
-                    <TableCell>Benchmark</TableCell>
-                    <TableCell>Benchmark Rate</TableCell>
-                    <TableCell>Rating Spread</TableCell>
-                    <TableCell>SIDBI Spread</TableCell>
-                    <TableCell>Total Spread</TableCell>
-                    <TableCell>Min Int Rate</TableCell>
-                    <TableCell>Min Int Rate TRMV</TableCell>
-                    <TableCell>Final Rate</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell><AdvanceTextBoxField name="grade" label="Grade" /></TableCell>
-                    <TableCell><AdvanceDatePickerField name="benchmarkAsOn" label="Benchmark As On" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="tenure" label="Tenure" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="benchmark" label="Benchmark" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="benchmarkRate" label="Benchmark Rate" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="sidbiSpread" label="SIDBI Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="minIntRate" label="Min Int Rate" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="minIntRateTrmv" label="Min Int Rate TRMV" /></TableCell>
-                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Grid>
-          )}
-
-          <Grid item xs={12
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
-import { Formik, Form, useFormikContext } from 'formik';
-import * as Yup from 'yup';
-import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AutoSave from '../../../components/framework/AutoSave';
-import { RichTextField } from '../../../components/framework/RichTextField';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
-
-const InterestRateApplicable = ({ irfId }: any) => {
-  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
-
-  const [options, setOptions] = useState<any[]>([]);
-  const [selectedValue, setSelectedValue] = useState<any>("");
-  const [selectedLabel, setSelectedLabel] = useState<any>("");
-
-  useEffect(() => {
-    if (benchmarkData) {
-      const transformed = benchmarkData.map((item: any) => ({
-        key: item.BRM_RATE_ID,
-        value: item.BRM_RATE_ID,
-        label: item.BRM_RATE_NAME
-      }));
-      setOptions(transformed);
-      if (proposalData?.[0]?.proposalType) {
-        const selectedOption = transformed.find((opt: any) => opt.value === proposalData[0].proposalType);
-        if (selectedOption) {
-          setSelectedValue(selectedOption.value);
-          setSelectedLabel(selectedOption.label);
+      if (allowNegative && !allowDecimal) {
+        regex = /^-?\d*$/;
+      }
+      if (!regex.test(value) && value !== '') {
+        return;
+      }
+      if (value !== '' && value !== '-' && allowDecimal && value.includes('.')) {
+        const parts = value.split('.');
+        if (parts[1] && parts[1].length > decimalPlaces) {
+          const rounded = Number(parseFloat(value).toFixed(decimalPlaces));
+          value = rounded.toString();
         }
       }
     }
-  }, [benchmarkData, proposalData]);
 
-  const handleChange = (value: any, setFieldValue: any) => {
-    setSelectedValue(value);
-    const selected = options.find((opt: any) => opt.value === value);
-    if (selected) {
-      setSelectedLabel(selected.label);
-      setFieldValue('proposalType', value);
+    if (validation?.pattern && !validation.pattern.test(value)) {
+      return;
+    }
+    setFieldValue(name, value);
+    if (onCustomChange) {
+      onCustomChange(value);
     }
   };
+  const labelStyles = {
+    '& .MuiInputLabel-shrink': {
+      background: '#fff',
+      padding: '0 8px',
+    },
+  };
 
-  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
-
-  const handleSubmitMemorandum = async (values: any) => {
-    try {
-      const finalValue = {
-        ...values,
-        irfId,
-        saveStatus: '01',
-        preprosalComment: values?.preprosalComment,
-      };
-      await saveMemorandumTxt(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Memorandum saved successfully");
-    } catch (error) {
-      console.error("Error saving memorandum:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Memorandum");
+  const getErrorMessage = () => {
+    if (getIn(touched, name) && getIn(errors, name)) {
+      return JSON.stringify(getIn(errors, name)).replaceAll('"', "");
     }
-  };
-
-  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState("success");
-
-  const initialValues = proposalData?.[0] || {
-    proposalType: '',
-    mclr: '',
-    ratingSpread: '',
-    intScore: '',
-    intScoreLink: '',
-    totalSpread: '',
-    finalRate: '',
-    grade: '',
-    benchmarkAsOn: '',
-    tenure: '',
-    benchmark: '',
-    benchmarkRate: '',
-    sidbiSpread: '',
-    minIntRate: '',
-    minIntRateTrmv: '',
-    interestType: ''
-  };
-
-  const validationSchema = Yup.object().shape({
-    interestType: Yup.string().required('Interest Type is required'),
-    proposalType: Yup.string().when('interestType', {
-      is: 'floating',
-      then: Yup.string().required('Proposal Type is required'),
-      otherwise: Yup.string().nullable()
-    }),
-  });
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const dataToSave = { ...values, irfId, saveStatus: '01' };
-      await saveApplPrestProposal(dataToSave).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Proposal saved successfully");
-    } catch (error) {
-      console.error("Error saving proposal:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save proposal");
-    }
-  };
-
-  const handleSnackClose = () => setOpenSnackbar(false);
-
-  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
-
-  const InnerForm = () => {
-    const { values, setFieldValue, setValues }: any = useFormikContext();
-    const prevInterestTypeRef = useRef<any>(values?.interestType);
-    const prevProposalTypeRef = useRef<any>(values?.proposalType);
-
-    useEffect(() => {
-      if (prevInterestTypeRef.current !== values?.interestType) {
-        setValues({
-          ...initialValues,
-          interestType: values?.interestType,
-          proposalType: values?.interestType === 'floating' ? '' : null,
-        });
-        if (values?.interestType === 'floating') {
-          setSelectedValue('');
-          setSelectedLabel('');
-        }
-        prevInterestTypeRef.current = values?.interestType;
-      } else if (values?.interestType === 'floating' && prevProposalTypeRef.current !== values?.proposalType) {
-        setValues({
-          ...initialValues,
-          interestType: values?.interestType,
-          proposalType: values?.proposalType,
-        });
-        prevProposalTypeRef.current = values?.proposalType;
-      }
-    }, [values?.interestType, values?.proposalType, setValues]);
-
-    useEffect(() => {
-      if (selectedLabel === "MCLR (1 year)") {
-        const baseSpread = parseFloat(values.ratingSpread) || 0;
-        const intScoreLink = parseFloat(values.intScoreLink) || 0;
-        const totalSpread = baseSpread + intScoreLink;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const mclr = parseFloat(values.mclr) || 0;
-        const finalRate = mclr + totalSpread;
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.intScoreLink, values.mclr, selectedLabel, setFieldValue]);
-
-    useEffect(() => {
-      if (values?.interestType === 'fixed') {
-        const fimmdaSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = fimmdaSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, values.interestType, setFieldValue]);
-
-    useEffect(() => {
-      if (selectedLabel === '3 Month T-Bill') {
-        const ratingSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = ratingSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, selectedLabel, setFieldValue]);
-
-    return (
-      <Form>
-        <Grid item xs={12} sm={4} md={4} lg={4}>
-          <EnhancedDropDown
-            label="Interest Type"
-            name="interestType"
-            customOptions={[
-              { key: 'fixed', value: 'fixed', label: 'Fixed' },
-              { key: 'floating', value: 'floating', label: 'Floating' },
-            ]}
-            domain=""
-          />
-        </Grid>
-
-        {values?.interestType === "floating" && (
-          <Grid item xs={12} sm={4} md={4} lg={4}>
-            <EnhancedDropDown
-              label="Proposal Type"
-              name="proposalType"
-              customOptions={options}
-              onChange={(value: any) => handleChange(value, setFieldValue)}
-              value={selectedValue}
-              domain=""
-            />
-          </Grid>
-        )}
-
-        {values?.interestType === 'fixed' && (
-          <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - Fixed</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell><b>Rating Grade</b></TableCell>
-                <TableCell><b>Daily yield matrix as on</b></TableCell>
-                <TableCell><b>Tenure</b></TableCell>
-                <TableCell><b>FIMMDA yield (Benchmark)</b></TableCell>
-                <TableCell><b>FIMMDA Spread</b></TableCell>
-                <TableCell><b>SIDBI Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Minimum Interest Rate</b></TableCell>
-                <TableCell><b>TRMV Interest Rate</b></TableCell>
-                <TableCell><b>Final Rate</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="" name="grade" type="text" /></TableCell>
-                <TableCell><AdvanceDatePickerField label="" name="benchmarkAsOn" type="date" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="tenure" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="benchmarkRate" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="sidbiSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRate" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRateTrmv" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        {(selectedLabel === "MCLR (1 year)" || selectedLabel === "REPO RATE") && (
-          <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={6}><h6><b>Interest Rate applicable for present proposal - MCLR</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
-                <TableCell><b>Base Spread</b></TableCell>
-                <TableCell><b>Internal Score</b></TableCell>
-                <TableCell><b>Internal Score Linked Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Applicable Rate (%)</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="%" name="mclr" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Base Spread" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Internal Score" name="intScore" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        {selectedLabel === "3 Month T-Bill" && (
-          <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - T-bill</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell><b>Rating Grade</b></TableCell>
-                <TableCell><b>Benchmark as on</b></TableCell>
-                <TableCell><b>Benchmark</b></TableCell>
-                <TableCell><b>Benchmark Rate</b></TableCell>
-                <TableCell><b>Rating Spread (%)</b></TableCell>
-                <TableCell><b>SIDBI Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Minimum Interest Rate</b></TableCell>
-                <TableCell><b>TRMV Interest Rate</b></TableCell>
-                <TableCell><b>Final Rate</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="Rating Grade" name="grade" type="text" /></TableCell>
-                <TableCell><AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" type="date" /></TableCell>
-                <TableCell><AdvanceTextBoxField disabled transformValue={() => selectedLabel} label="Benchmark" name="benchmark" type="text" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="TRMV Interest Rate" name="minIntRateTrmv" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Final Rate" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        <Button type="submit" variant="contained" color="primary" className="mt-2">Save</Button>
-      </Form>
-    );
+    return "";
   };
 
   return (
-    <div className="wrap-inner-table mt-0">
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize={true}
-      >
-        <InnerForm />
-      </Formik>
-
-      <Formik
-        initialValues={{
-          irValidity: memorandumData?.irValidity || null,
-          dop: memorandumData?.dop || "",
-          dopComments: memorandumData?.dopComments || "",
-          discPowers: memorandumData?.discPowers || "",
-          verticalComments: memorandumData?.verticalComments || "",
-          recommendation: memorandumData?.recommendation || "",
-          preprosalComment: memorandumData?.preprosalComment || "",
-          rateReqComment: memorandumData?.rateReqComment || "",
-          committeName: memorandumData?.committeName || ""
-        }}
-        onSubmit={handleSubmitMemorandum}
-        enableReinitialize={true}
-        validateOnChange={false}
-        validateOnBlur={true}
-      >
-        {({ values }: any) => (
-          <Form>
-            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
-            <Grid container spacing={2} padding={4} className='form-grid p-0'>
-              <Grid item xs={12}>
-                <Table sx={{ minWidth: 650 }} aria-label="validity table">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>
-                        <RichTextField label="Comments" name="preprosalComment" type="text" />
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Grid>
-              <Grid item xs={12} sx={{ mt: 2 }}>
-                <Button
-                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                  type="submit"
-                  variant="contained"
-                >
-                  Save <CheckCircleOutlineIcon />
-                </Button>
-              </Grid>
-            </Grid>
-          </Form>
-        )}
-      </Formik>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
+    <Grid item xs={12} style={style}>
+      <Grid item xs={12}>
+        <RedditTextField
+          label={label}
+          className={`${name} ${className || ''}`}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          value={getIn(values, name)}
+          name={name}
+          size="small"
+          disabled={disabled}
+          type={type}
+          placeholder={placeholder}
+          required={required}
+          sx={labelStyles}
+          inputProps={{
+            readOnly: readonly,
+            maxLength: maxLength,
+            minLength: minLength,
+            inputMode: type === 'number' ? 'decimal' : 'text',
+            pattern: type === 'number' ? undefined : undefined
+          }}
+          multiline={multiline}
+          rows={rows}
+          maxRows={maxRows}
+          fullWidth={fullWidth}
+          InputProps={{
+            startAdornment: startAdornment && (
+              <InputAdornment position="start">{startAdornment}</InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                {tooltip && (
+                  <Tooltip title={tooltip}>
+                    <IconButton size="small">
+                      <HelpOutlineIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {endAdornment}
+              </InputAdornment>
+            ),
+          }}
+          {...props}
+        />
+      </Grid>
+      <Grid item xs={12}>
+        <Typography
+          color="error"
+          variant="subtitle2"
+          gutterBottom
+          component="span"
+          className="mybooking_error"
+        >
+          {getErrorMessage()}
+        </Typography>
+      </Grid>
+    </Grid>
   );
 };
 
-export default InterestRateApplicable;
 
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
-import { Formik, Form, useFormikContext } from 'formik';
-import * as Yup from 'yup';
-import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AutoSave from '../../../components/framework/AutoSave';
-import { RichTextField } from '../../../components/framework/RichTextField';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
-
-const InterestRateApplicable = ({ irfId }) => {
-  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
-
-  const [options, setOptions] = useState([]);
-  const [selectedValue, setSelectedValue] = useState("");
-  const [selectedLabel, setSelectedLabel] = useState("");
-
-  useEffect(() => {
-    if (benchmarkData) {
-      const transformed = benchmarkData.map((item) => ({
-        key: item.BRM_RATE_ID,
-        value: item.BRM_RATE_ID,
-        label: item.BRM_RATE_NAME
-      }));
-      setOptions(transformed);
-    }
-  }, [benchmarkData]);
-
-  const handleChange = (value) => {
-    setSelectedValue(value);
-    const selected = options.find((opt) => opt.value === value);
-    if (selected) {
-      setSelectedLabel(selected.label);
-    }
-  };
-
-  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
-
-  const handleSubmitMemorandum = async (values) => {
-    try {
-      const finalValue = {
-        ...values,
-        irfId,
-        saveStatus: '01',
-        preprosalComment: values?.preprosalComment,
-      };
-      await saveMemorandumTxt(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Memorandum saved successfully");
-    } catch (error) {
-      console.error("Error saving memorandum:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Memorandum");
-    }
-  };
-
-  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState("success");
-
-  const initialValues = proposalData?.[0] || {
-    proposalType: '',
-    mclr: '',
-    ratingSpread: '',
-    intScore: '',
-    intScoreLink: '',
-    totalSpread: '',
-    finalRate: '',
-    grade: '',
-    benchmarkAsOn: '',
-    tenure: '',
-    benchmark: '',
-    benchmarkRate: '',
-    sidbiSpread: '',
-    minIntRate: '',
-    minIntRateTrmv: '',
-    interestType: ''
-  };
-
-  const validationSchema = Yup.object().shape({
-    interestType: Yup.string().required('Interest Type is required'),
-    proposalType: Yup.string().when('interestType', {
-      is: 'floating',
-      then: Yup.string().required('Proposal Type is required'),
-      otherwise: Yup.string().nullable()
-    }),
-  });
-
-  const handleSubmit = async (values) => {
-    try {
-      const dataToSave = { ...values, irfId, saveStatus: '01' };
-      await saveApplPrestProposal(dataToSave).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Proposal saved successfully");
-    } catch (error) {
-      console.error("Error saving proposal:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save proposal");
-    }
-  };
-
-  const handleSnackClose = () => setOpenSnackbar(false);
-
-  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
-
-  const InnerForm = () => {
-    const { values, setFieldValue, setValues } = useFormikContext();
-    const prevProposalTypeRef = useRef();
-    const prevInterestTypeRef = useRef();
-
-    useEffect(() => {
-      if (prevInterestTypeRef.current !== values?.interestType) {
-        setValues({
-          interestType: values?.interestType,
-          proposalType: values?.interestType === 'floating' ? '' : null,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-        setSelectedValue('');
-        setSelectedLabel('');
-      } else if (values?.interestType === 'floating' && prevProposalTypeRef.current !== values?.proposalType) {
-        setValues({
-          proposalType: values?.proposalType,
-          interestType: values?.interestType,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-      }
-      prevInterestTypeRef.current = values?.interestType;
-      prevProposalTypeRef.current = values?.proposalType;
-    }, [values?.interestType, values?.proposalType, setValues]);
-
-    useEffect(() => {
-      if (selectedLabel === "MCLR (1 year)") {
-        const baseSpread = parseFloat(values.ratingSpread) || 0;
-        const intScoreLink = parseFloat(values.intScoreLink) || 0;
-        const totalSpread = baseSpread + intScoreLink;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const mclr = parseFloat(values.mclr) || 0;
-        const finalRate = mclr + totalSpread;
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.intScoreLink, values.mclr, selectedLabel, setFieldValue]);
-
-    useEffect(() => {
-      if (values?.interestType === 'fixed') {
-        const fimmdaSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = fimmdaSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, values.interestType, setFieldValue]);
-
-    useEffect(() => {
-      if (selectedLabel === '3 Month T-Bill') {
-        const ratingSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = ratingSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, selectedLabel, setFieldValue]);
-
-    return (
-      <Form>
-        <Grid item xs={12} sm={4} md={4} lg={4}>
-          <EnhancedDropDown
-            label="Interest Type"
-            name="interestType"
-            customOptions={[
-              { key: 'fixed', value: 'fixed', label: 'Fixed' },
-              { key: 'floating', value: 'floating', label: 'Floating' },
-            ]}
-            domain=""
-          />
-        </Grid>
-
-        {values?.interestType === "floating" && (
-          <Grid item xs={12} sm={4} md={4} lg={4}>
-            <EnhancedDropDown
-              label="Proposal Type"
-              name="proposalType"
-              customOptions={options}
-              onChange={handleChange}
-              domain=""
-            />
-          </Grid>
-        )}
-
-        {values?.interestType === 'fixed' && (
-          <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - Fixed</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell><b>Rating Grade</b></TableCell>
-                <TableCell><b>Daily yield matrix as on</b></TableCell>
-                <TableCell><b>Tenure</b></TableCell>
-                <TableCell><b>FIMMDA yield (Benchmark)</b></TableCell>
-                <TableCell><b>FIMMDA Spread</b></TableCell>
-                <TableCell><b>SIDBI Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Minimum Interest Rate</b></TableCell>
-                <TableCell><b>TRMV Interest Rate</b></TableCell>
-                <TableCell><b>Final Rate</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="" name="grade" /></TableCell>
-                <TableCell><AdvanceDatePickerField label="" name="benchmarkAsOn" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="tenure" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="benchmarkRate" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="sidbiSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRate" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRateTrmv" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        {(selectedLabel === "MCLR (1 year)" || selectedLabel === "REPO RATE") && (
-          <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={6}><h6><b>Interest Rate applicable for present proposal - MCLR</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
-                <TableCell><b>Base Spread</b></TableCell>
-                <TableCell><b>Internal Score</b></TableCell>
-                <TableCell><b>Internal Score Linked Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Applicable Rate (%)</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="%" name="mclr" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Base Spread" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Internal Score" name="intScore" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        {selectedLabel === "3 Month T-Bill" && (
-          <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - T-bill</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell><b>Rating Grade</b></TableCell>
-                <TableCell><b>Benchmark as on</b></TableCell>
-                <TableCell><b>Benchmark</b></TableCell>
-                <TableCell><b>Benchmark Rate</b></TableCell>
-                <TableCell><b>Rating Spread (%)</b></TableCell>
-                <TableCell><b>SIDBI Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Minimum Interest Rate</b></TableCell>
-                <TableCell><b>TRMV Interest Rate</b></TableCell>
-                <TableCell><b>Final Rate</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="Rating Grade" name="grade" /></TableCell>
-                <TableCell><AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" /></TableCell>
-                <TableCell><AdvanceTextBoxField disabled transformValue={() => selectedLabel} label="Benchmark" name="benchmark" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="TRMV Interest Rate" name="minIntRateTrmv" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="Final Rate" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        <Button type="submit" variant="contained" color="primary" className="mt-2">Save</Button>
-      </Form>
-    );
-  };
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize={true}
-      >
-        <InnerForm />
-      </Formik>
-
-      <Formik
-        initialValues={{
-          irValidity: memorandumData?.irValidity || null,
-          dop: memorandumData?.dop || "",
-          dopComments: memorandumData?.dopComments || "",
-          discPowers: memorandumData?.discPowers || "",
-          verticalComments: memorandumData?.verticalComments || "",
-          recommendation: memorandumData?.recommendation || "",
-          preprosalComment: memorandumData?.preprosalComment || "",
-          rateReqComment: memorandumData?.rateReqComment || "",
-          committeName: memorandumData?.committeName || ""
-        }}
-        onSubmit={handleSubmitMemorandum}
-        enableReinitialize={true}
-        validateOnChange={false}
-        validateOnBlur={true}
-      >
-        {({ values }) => (
-          <Form>
-            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
-            <Grid container spacing={2} padding={4} className='form-grid p-0'>
-              <Grid item xs={12}>
-                <Table sx={{ minWidth: 650 }} aria-label="validity table">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>
-                        <RichTextField label="Comments" name="preprosalComment" />
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Grid>
-              <Grid item xs={12} sx={{ mt: 2 }}>
-                <Button
-                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                  type="submit"
-                  variant="contained"
-                >
-                  Save <CheckCircleOutlineIcon />
-                </Button>
-              </Grid>
-            </Grid>
-          </Form>
-        )}
-      </Formik>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
-  );
-};
-
-export default InterestRateApplicable;
-
-
-
-
-
-
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid, InputLabel, FormControl, Select, MenuItem } from "@mui/material";
-import { Formik, Form, useFormikContext } from 'formik';
-import * as Yup from 'yup';
-import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import AutoSave from '../../../components/framework/AutoSave';
-import { RichTextField } from '../../../components/framework/RichTextField';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
-
-const InterestRateApplicable = ({ irfId }: any) => {
-  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
-
-
-  const [options, setOptions] = useState([]);
-  const [selectedValue, setSelectedValue] = useState("");
-  const [selectedLabel, setSelectedLabel] = useState("");
-
-  useEffect(() => {
-    console.log("benchmarkData--> ", benchmarkData);
-    if (benchmarkData) {
-      const transformed = benchmarkData.map((item: any) => ({
-        key: item.BRM_RATE_ID,
-        value: item.BRM_RATE_ID,
-        label: item.BRM_RATE_NAME
-      }));
-      setOptions(transformed);
-    }
-  }, [benchmarkData]);
-
-  const handleChange = (value: string) => {
-    setSelectedValue(value);
-    const selected: any = options.find((opt: any) => opt.value === value);
-    if (selected) {
-      setSelectedLabel(selected.label);
-    }
-  };
-
-
-  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
-
-  const handleSubmitMemorandum = async (values: any) => {
-    try {
-      const finalValue = {
-        ...values,
-        irfId,
-        saveStatus: '01',
-        preprosalComment: values?.preprosalComment,
-      };
-      await saveMemorandumTxt(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Memorandum saved successfully");
-    } catch (error) {
-      console.error("Error saving memorandum:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Memorandum");
-    }
-  };
-
-
-  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
-  const [openSnackbar, setOpenSnackbar] = React.useState(false);
-  const [snackMsg, setSnackMsg] = React.useState("");
-  const [severity, setSeverity] = React.useState("success");
-
-  const initialValues = proposalData?.[0] || {
-    proposalType: '',
-    mclr: '',
-    ratingSpread: '',
-    intScore: '',
-    intScoreLink: '',
-    totalSpread: '',
-    finalRate: '',
-    grade: '',
-    benchmarkAsOn: '',
-    tenure: '',
-    benchmark: '',
-    benchmarkRate: '',
-    sidbiSpread: '',
-    minIntRate: '',
-    minIntRateTrmv: '',
-    interestType: ''
-  };
-
-  const validationSchema = Yup.object().shape({
-    interestType: Yup.string().required('Interest Type is required'),
-    proposalType: Yup.string(),
-
-  });
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const dataToSave = { ...values, irfId, saveStatus: '01' };
-      await saveApplPrestProposal(dataToSave).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Proposal saved successfully");
-    } catch (error) {
-      console.error("Error saving proposal:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save proposal");
-    }
-  };
-
-  const handleSnackClose = () => setOpenSnackbar(false);
-
-  if (isLoading) return <p>Loading...</p>;
-
-  const InnerForm = () => {
-    const { values, setFieldValue, setValues }: any = useFormikContext();
-    const prevProposalTypeRef = useRef();
-    const prevInteresetTypeRef = useRef();
-
-    useEffect(() => {
-      if (prevProposalTypeRef.current && prevProposalTypeRef.current !== values?.proposalType || prevInteresetTypeRef.current !== values?.interestType) {
-        setValues({
-          proposalType: values?.proposalType,
-          interestType: values?.interestType,
-          mclr: '',
-          ratingSpread: '',
-          intScore: '',
-          intScoreLink: '',
-          totalSpread: '',
-          finalRate: '',
-          grade: '',
-          benchmarkAsOn: '',
-          tenure: '',
-          benchmark: '',
-          benchmarkRate: '',
-          sidbiSpread: '',
-          minIntRate: '',
-          minIntRateTrmv: '',
-        });
-      }
-      prevProposalTypeRef.current = values?.proposalType;
-      prevInteresetTypeRef.current = values?.interestType;
-
-    }, [values?.interestType, values?.proposalType, setValues]);
-
-    useEffect(() => {
-      if (selectedLabel === "MCLR (1 year)") {
-        const baseSpread = parseFloat(values.ratingSpread) || 0;
-        const intScoreLink = parseFloat(values.intScoreLink) || 0;
-        const totalSpread = baseSpread + intScoreLink;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const mclr = parseFloat(values.mclr) || 0;
-        const finalRate = mclr + totalSpread;
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values?.proposalType, values?.ratingSpread, values?.intScoreLink, values?.mclr, setFieldValue]);
-
-    useEffect(() => {
-      if (values?.interestType === 'fixed') {
-        const fimmdaSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = fimmdaSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values?.interestType, values?.proposalType, values?.ratingSpread, values?.sidbiSpread, values?.benchmarkRate, values?.minIntRateTrmv, setFieldValue]);
-
-    useEffect(() => {
-      if (selectedLabel === '3 Month T-Bill') {
-        const ratingSpread = parseFloat(values.ratingSpread) || 0;
-        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
-        const totalSpread = ratingSpread + sidbiSpread;
-        setFieldValue('totalSpread', totalSpread.toFixed(2));
-        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
-        const minIntRate = benchmarkRate + totalSpread;
-        setFieldValue('minIntRate', minIntRate.toFixed(2));
-        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
-        const finalRate = Math.max(minIntRate, minIntRateTrmv);
-        setFieldValue('finalRate', finalRate.toFixed(2));
-      }
-    }, [values?.proposalType, values?.ratingSpread, values?.sidbiSpread, values?.benchmarkRate, values?.minIntRateTrmv, setFieldValue]);
-
-    return (
-      <Form>
-        {/* <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} /> */}
-        <Grid item xs={12} sm={4} md={4} lg={4}>
-          <EnhancedDropDown
-            label="Intereset Type"
-            name="interestType"
-            customOptions={[
-              { key: 'fixed', value: 'fixed', label: 'Fixed' },
-              { key: 'floating', value: 'floating', label: 'Floating' },
-            ]} domain={''} />
-        </Grid>
-
-        {
-          values?.interestType === "floating" && (<EnhancedDropDown
-            label="Proposal Type"
-            name="proposalType"
-            customOptions={options}
-            onChange={handleChange} domain='' />)
-
-        }
-
-
-        {(selectedLabel === "MCLR (1 year)" ||
-          selectedLabel === "REPO RATE") && (
-            <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
-              <TableHead>
-                <TableRow>
-                  <TableCell colSpan={6}><h6><b>Interest Rate applicable for present proposal - MCLR</b></h6></TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell style={{ width: '9%' }}><b>1 Y MCLR (%)</b></TableCell>
-                  <TableCell><b>Base Spread</b></TableCell>
-                  <TableCell><b>Internal Score</b></TableCell>
-                  <TableCell><b>Internal Score Linked Spread</b></TableCell>
-                  <TableCell><b>Total Spread</b></TableCell>
-                  <TableCell><b>Applicable Rate (%)</b></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell><AdvanceTextBoxField label="%" name="mclr" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Base Spread" name="ratingSpread" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Internal Score" name="intScore" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" type="number" disabled={true} /></TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-
-        {values?.interestType === 'fixed' && (
-          <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
-            <TableHead>
-              <TableRow>
-                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - Fixed</b></h6></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell><b>Rating Grade</b></TableCell>
-                <TableCell><b>Daily yield matrix as on</b></TableCell>
-                <TableCell><b>Tenure</b></TableCell>
-                <TableCell><b>FIMMDA yield (Benchmark)</b></TableCell>
-                <TableCell><b>FIMMDA Spread</b></TableCell>
-                <TableCell><b>SIDBI Spread</b></TableCell>
-                <TableCell><b>Total Spread</b></TableCell>
-                <TableCell><b>Minimum Interest Rate</b></TableCell>
-                <TableCell><b>TRMV Interest Rate</b></TableCell>
-                <TableCell><b>Final Rate</b></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell><AdvanceTextBoxField label="" name="grade" /></TableCell>
-                <TableCell><AdvanceDatePickerField label="" name="benchmarkAsOn" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="tenure" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="benchmarkRate" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="ratingSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="sidbiSpread" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="totalSpread" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRate" type="number" disabled={true} /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="minIntRateTrmv" type="number" /></TableCell>
-                <TableCell><AdvanceTextBoxField label="" name="finalRate" type="number" disabled={true} /></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-
-        {selectedLabel === "3 Month T-Bill"
-          && (
-            <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
-              <TableHead>
-                <TableRow>
-                  <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - T-bill</b></h6></TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell><b>Rating Grade</b></TableCell>
-                  <TableCell><b>Benchmark as on</b></TableCell>
-                  <TableCell><b>Benchmark</b></TableCell>
-                  <TableCell><b>Benchmark Rate</b></TableCell>
-                  <TableCell><b>Rating Spread (%)</b></TableCell>
-                  <TableCell><b>SIDBI Spread</b></TableCell>
-                  <TableCell><b>Total Spread</b></TableCell>
-                  <TableCell><b>Minimum Interest Rate</b></TableCell>
-                  <TableCell><b>TRMV Interest Rate</b></TableCell>
-                  <TableCell><b>Final Rate</b></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell><AdvanceTextBoxField label="Rating Grade" name="grade" /></TableCell>
-                  <TableCell><AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" /></TableCell>
-                  <TableCell><AdvanceTextBoxField disabled transformValue={() => selectedLabel} label="Benchmark" name="benchmark" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" type="number" disabled={true} /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="TRMV Interest Rate" name="minIntRateTrmv" type="number" /></TableCell>
-                  <TableCell><AdvanceTextBoxField label="Final Rate" name="finalRate" type="number" disabled={true} /></TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-
-
-        <Button type="submit" variant="contained" color="primary" className="mt-2">Save</Button>
-      </Form>
-    );
-  };
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Formik
-        initialValues={proposalData?.[0]}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize={true}
-      >
-        <InnerForm />
-      </Formik>
-      <Formik
-        initialValues={{
-          irValidity: memorandumData?.irValidity || null,
-          dop: memorandumData?.dop || "",
-          dopComments: memorandumData?.dopComments || "",
-          discPowers: memorandumData?.discPowers || "",
-          verticalComments: memorandumData?.verticalComments || "",
-          recommendation: memorandumData?.recommendation || "",
-          preprosalComment: memorandumData?.preprosalComment || "",
-          rateReqComment: memorandumData?.rateReqComment || "",
-          committeName: memorandumData?.committeName || ""
-        }}
-        onSubmit={handleSubmitMemorandum}
-        enableReinitialize={true}
-        validateOnChange={false}
-        validateOnBlur={true}
-      >
-        {({ values }) => (
-          <Form>
-            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
-            <Grid container spacing={2} padding={4} className='form-grid p-0'>
-              <Grid item xs={12}>
-                <Table sx={{ minWidth: 650 }} aria-label="validity table">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>
-                        <RichTextField
-                          label="Comments"
-                          name="preprosalComment"
-                        />
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Grid>
-
-              <Grid item xs={12} sx={{ mt: 2 }}>
-                <Button
-                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                  type='submit'
-                  variant="contained"
-                >
-                  Save <CheckCircleOutlineIcon />
-                </Button>
-              </Grid>
-            </Grid>
-          </Form>
-        )}
-      </Formik>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
-  );
-};
-
-export default InterestRateApplicable;
-
-import { useFormikContext } from "formik";
-import { debounce } from "lodash";
-import { useCallback, useEffect, useRef, useState } from "react";
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-
-const AutoSave = ({ debounceMs = 1000, handleSubmit, values, autoStyle }: any) => {
-    const formik: any = useFormikContext();
-    const [lastSaved, setLastSaved] = useState<Date | null>(null);
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error' | 'success'>('idle');
-    const isSubmittingRef = useRef(false);
-
-    const debouncedSubmit = useCallback(
-        debounce(async () => {
-            if (isSubmittingRef.current) return;
-
-            try {
-                isSubmittingRef.current = true;
-                setSaveStatus('saving');
-                setLastSaved(null);
-
-                const touchedValues = Object.keys(formik.touched)
-                    .reduce((acc: any, key) => {
-                        if (formik.touched[key]) {
-                            acc[key] = formik.values[key];
-                        }
-                        return acc;
-                    }, {});
-
-                const touchedErrors = await formik.validateForm(touchedValues);
-                const hasErrorsInTouchedFields = Object.keys(touchedErrors)
-                    .some(key => formik.touched[key] && touchedErrors[key]);
-
-                if (!hasErrorsInTouchedFields && Object.keys(touchedValues).length > 0) {
-                    const result = await handleSubmit(values);
-                    if (result !== false) {
-                        setSaveStatus('success');
-                        setLastSaved(new Date());
-                    } else {
-                        setSaveStatus('error');
-                        setLastSaved(null);
-                    }
-                }
-            } catch (error) {
-                console.error('Error during autosave:', error);
-                setSaveStatus('error');
-                setLastSaved(null);
-            } finally {
-                isSubmittingRef.current = false;
-            }
-        }, debounceMs),
-        [formik.values, formik.touched]
-    );
-
-    useEffect(() => {
-        debouncedSubmit();
-        return () => {
-            debouncedSubmit.cancel();
-        };
-    }, [formik.values, debouncedSubmit]);
-
-    if (saveStatus !== 'success' || !lastSaved) {
-        return null;
-    }
-
-    return (
-        <p className="autoSv" style={autoStyle && { marginLeft: '12px' }}>
-            <CheckCircleOutlineIcon /> &nbsp;
-            <b>Last Autosaved:</b> {lastSaved.toLocaleTimeString()}
-        </p>
-    );
-};
-
-export default AutoSave;
 
 
