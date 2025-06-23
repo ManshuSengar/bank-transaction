@@ -273,6 +273,335 @@ const InterestRateApplicable = ({ irfId }: any) => {
             </Grid>
           )}
 
+          <Grid item xs={12}>
+            <RichTextField name="preprosalComment" label="Pre-proposal Comment" />
+          </Grid>
+
+          <Grid item xs={12}>
+            <Button type="submit" variant="contained" color="primary">
+              Save Proposal
+            </Button>
+            <Button onClick={() => handleSubmitMemorandum(values)} variant="contained" color="secondary" style={{ marginLeft: '10px' }}>
+              Save Memorandum
+            </Button>
+          </Grid>
+
+          <AutoSave debounceMs={1000} />
+        </Grid>
+      </Form>
+    );
+  };
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize={true}
+      >
+        <InnerForm />
+      </Formik>
+
+      <NbfcSnackbar
+        open={openSnackbar}
+        onClose={handleSnackClose}
+        message={snackMsg}
+        severity={severity as any}
+      />
+    </div>
+  );
+};
+
+export default InterestRateApplicable;
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
+import { Formik, Form, useFormikContext } from 'formik';
+import * as Yup from 'yup';
+import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import AutoSave from '../../../components/framework/AutoSave';
+import { RichTextField } from '../../../components/framework/RichTextField';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
+
+const InterestRateApplicable = ({ irfId }: any) => {
+  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
+
+  const [options, setOptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (benchmarkData) {
+      const transformed = benchmarkData.map((item: any) => ({
+        key: item.BRM_RATE_ID,
+        value: item.BRM_RATE_ID,
+        label: item.BRM_RATE_NAME
+      }));
+      setOptions(transformed);
+    }
+  }, [benchmarkData]);
+
+  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
+
+  const handleSubmitMemorandum = async (values: any) => {
+    try {
+      const finalValue = {
+        ...values,
+        irfId,
+        saveStatus: '01',
+        preprosalComment: values?.preprosalComment,
+      };
+      await saveMemorandumTxt(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Memorandum saved successfully");
+    } catch (error) {
+      console.error("Error saving memorandum:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Memorandum");
+    }
+  };
+
+  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState("success");
+
+  const initialValues = proposalData?.[0] || {
+    interestType: '',
+    proposalType: '',
+    mclr: '',
+    ratingSpread: '',
+    intScore: '',
+    intScoreLink: '',
+    totalSpread: '',
+    finalRate: '',
+    grade: '',
+    benchmarkAsOn: '',
+    tenure: '',
+    benchmark: '',
+    benchmarkRate: '',
+    sidbiSpread: '',
+    minIntRate: '',
+    minIntRateTrmv: '',
+  };
+
+  const validationSchema = Yup.object().shape({
+    interestType: Yup.string().required('Interest Type is required'),
+    proposalType: Yup.string().when('interestType', {
+      is: 'floating',
+      then: Yup.string().required('Proposal Type is required'),
+      otherwise: Yup.string().nullable()
+    }),
+  });
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const dataToSave = { ...values, irfId, saveStatus: '01' };
+      await saveApplPrestProposal(dataToSave).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Proposal saved successfully");
+    } catch (error) {
+      console.error("Error saving proposal:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save proposal");
+    }
+  };
+
+  const handleSnackClose = () => setOpenSnackbar(false);
+
+  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
+
+  const InnerForm = () => {
+    const { values, setFieldValue, setValues }: any = useFormikContext();
+    const prevInterestTypeRef = useRef(values.interestType);
+    const prevProposalTypeRef = useRef(values.proposalType);
+
+    const selectedLabel = options.find((opt) => opt.value === values.proposalType)?.label || '';
+
+    useEffect(() => {
+      if (values.interestType !== prevInterestTypeRef.current) {
+        setValues({
+          interestType: values.interestType,
+          proposalType: values.interestType === 'floating' ? '' : null,
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+        });
+        prevInterestTypeRef.current = values.interestType;
+      } else if (values.interestType === 'floating' && values.proposalType !== prevProposalTypeRef.current) {
+        setValues({
+          interestType: values.interestType,
+          proposalType: values.proposalType,
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+        });
+        prevProposalTypeRef.current = values.proposalType;
+      }
+    }, [values.interestType, values.proposalType, setValues]);
+
+    return (
+      <Form>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={4} md={4} lg={4}>
+            <EnhancedDropDown
+              label="Interest Type"
+              name="interestType"
+              customOptions={[
+                { key: 'fixed', value: 'fixed', label: 'Fixed' },
+                { key: 'floating', value: 'floating', label: 'Floating' },
+              ]}
+              domain=""
+            />
+          </Grid>
+
+          {values?.interestType === "floating" && (
+            <Grid item xs={12} sm={4} md={4} lg={4}>
+              <EnhancedDropDown
+                label="Proposal Type"
+                name="proposalType"
+                customOptions={options}
+                onChange={(value: any) => setFieldValue('proposalType', value)}
+                domain=""
+              />
+            </Grid>
+          )}
+
+          {values?.interestType === "fixed" && (
+            <Grid item xs={12}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Final Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      <AdvanceTextBoxField name="finalRate" label="Final Rate" />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Grid>
+          )}
+
+          {values?.interestType === "floating" && selectedLabel === "MCLR" && (
+            <Grid item xs={12}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>MCLR</TableCell>
+                    <TableCell>Rating Spread</TableCell>
+                    <TableCell>Int Score</TableCell>
+                    <TableCell>Int Score Link</TableCell>
+                    <TableCell>Total Spread</TableCell>
+                    <TableCell>Final Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell><AdvanceTextBoxField name="mclr" label="MCLR" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="intScore" label="Int Score" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="intScoreLink" label="Int Score Link" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Grid>
+          )}
+
+          {values?.interestType === "floating" && selectedLabel === "T-Bill" && (
+            <Grid item xs={12}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Grade</TableCell>
+                    <TableCell>Benchmark As On</TableCell>
+                    <TableCell>Tenure</TableCell>
+                    <TableCell>Benchmark</TableCell>
+                    <TableCell>Benchmark Rate</TableCell>
+                    <TableCell>Rating Spread</TableCell>
+                    <TableCell>SIDBI Spread</TableCell>
+                    <TableCell>Total Spread</TableCell>
+                    <TableCell>Min Int Rate</TableCell>
+                    <TableCell>Min Int Rate TRMV</TableCell>
+                    <TableCell>Final Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell><AdvanceTextBoxField name="grade" label="Grade" /></TableCell>
+                    <TableCell><AdvanceDatePickerField name="benchmarkAsOn" label="Benchmark As On" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="tenure" label="Tenure" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="benchmark" label="Benchmark" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="benchmarkRate" label="Benchmark Rate" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="ratingSpread" label="Rating Spread" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="sidbiSpread" label="SIDBI Spread" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="totalSpread" label="Total Spread" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="minIntRate" label="Min Int Rate" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="minIntRateTrmv" label="Min Int Rate TRMV" /></TableCell>
+                    <TableCell><AdvanceTextBoxField name="finalRate" label="Final Rate" /></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Grid>
+          )}
+
           <Grid item xs={12
 
 
