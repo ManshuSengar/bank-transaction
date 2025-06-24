@@ -1,289 +1,559 @@
-import React, { FC, memo, useState } from "react"
-import Grid from '@mui/material/Grid';
-import { Button, CircularProgress, Typography } from "@mui/material";
-import { Link, useNavigate } from "react-router-dom";
-import { AiOutlineArrowLeft } from "react-icons/ai";
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import BorrowingForm from "../application-form/capitalResourceProfile/BorrowingForm";
-import EquityReserveForm from "../application-form/capitalResourceProfile/EquityReserveForm";
-import EquityInfusionForm from "../application-form/capitalResourceProfile/EquityInfusionForm";
-import LenderLimitOdForm from "../application-form/capitalResourceProfile/LenderLimitOdForm";
-import LenderTermLoanForm from "../application-form/capitalResourceProfile/LenderTermLoanForm";
-import { setApplId } from "../../features/user/userSlice";
-import { useAppDispatch } from "../../app/hooks";
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import SimCardDownloadIcon from '@mui/icons-material/SimCardDownload';
-import ExcelJS from 'exceljs';
-import * as XLSX from 'xlsx';
-import { DocumentAPI } from "../../features/application-form/documentUpload";
-import { OnlineSnackbar } from "../../components/shared/OnlineSnackbar";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UPLOADINGTEXT } from "../../utlis/constants";
-import FullScreenLoader from "../../components/common/FullScreenLoader";
+[
+  {
+    "id": 0,
+    "irfId": "string",
+    "slNo": 0,
+    "intRatingFY": "string",
+    "intRatingDate": "2025-06-24",
+    "intRatingScore": "string",
+    "intRating": "string",
+    "saveStatus": "string",
+    "ratingType": "SANCTION",
+    "comments": "string"
+  }
+]
 
-const CapitalResourceProfile: FC = () => {
-    const [expanded, setExpanded] = React.useState("");
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<any>("");
-    const [severity, setSeverity] = useState<string | any>("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
+import React, { useState } from 'react';
+import {
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
+} from "@mui/material";
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import moment from 'moment';
+import {
+  useGetInternalRatingSanctionQuery,
+  useGetInternalRatingPresentQuery,
+  useSaveInternalRatingMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import AutoSave from '../../../components/framework/AutoSave';
+import TextAreaAuto from '../../../components/framework/TextAreaAuto';
 
-    const [excelData, setExcelData] = useState<any>({
-        lenderTl: [],
-        lenderOd: [],
-    });
-    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
-    const onOpenChange =
-        (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
-            setExpanded(isExpanded ? panel : false);
-        };
+const RfInternalRating = ({ irfId }: any) => {
+  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetInternalRatingSanctionQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
 
+  const { data: presentRatings, isLoading: isLoadingPresent } = useGetInternalRatingPresentQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
 
-    const dispatch = useAppDispatch();
-    const navigate = useNavigate();
+  const [saveInternalRating] = useSaveInternalRatingMutation();
 
-    const handleNavigate = (e: any) => {
-        e.preventDefault();
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
 
-        if (window.location.pathname === "/refinance/online-dashboard") {
-            localStorage.removeItem('applId');
-        }
-        dispatch(setApplId(""));
-        navigate("/refinance/online-dashboard");
-    };
+  const initialValues = {
+    ratings: presentRatings || [],
+  };
 
-    const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        try {
-            setExcelUploadError(null);
-            setIsUploading(true);
+  // const validationSchema = Yup.object().shape({
+  //   ratings: Yup.array().of(
+  //     Yup.object().shape({
+  //       intRatingFY: Yup.string().required("Required"),
+  //       intRatingScore: Yup.string().required("Required"),
+  //       comments: Yup.string().required("Required"),
+  //     })
+  //   ),
+  // });
 
-            const file = event.target.files?.[0];
-            if (!file) return;
+  const handleSubmit = async (values: any) => {
+    try {
+      const finalValue = values.ratings.map((rating: any, index: number) => ({
+        ...rating,
+        irfId,
+        id: index + 1,
+        slNo:index+1,
+        saveStatus: '01',
+        intRatingType: 'present',
+      }));
+      await saveInternalRating(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Latest Internal Rating saved successfully");
+    } catch (error) {
+      console.error("Error saving latest internal rating:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Latest Internal Rating");
+    }
+  };
 
-            if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-                setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-                return;
-            }
-            //Check file size
-            if (file.size > MAX_FILE_SIZE_BYTES) {
-                setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-                return;
-            }
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
 
-            const buffer = await file.arrayBuffer();
-            const workbookExcelJS = new ExcelJS.Workbook();
-            await workbookExcelJS.xlsx.load(buffer);
-            console.log("workbookExcelJS--> ",workbookExcelJS);
-
-            const lenderTlSheet = workbookExcelJS.worksheets[1];
-            const lenderOdSheet = workbookExcelJS.worksheets[2];
-            if (!lenderTlSheet) {
-                throw new Error("Lender TL sheet not found in the Excel file.");
-            }
-            if (!lenderOdSheet) {
-                throw new Error("Lender OD sheet not found in the Excel file.");
-            }
-
-            const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
-                const jsonData: any[] = [];
-                worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
-                    jsonData.push(row.values);
-                });
-                return jsonData.slice(2);
-            };
-            const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
-            const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
-            setExcelData({
-                lenderTl: lenderTlData,
-                lenderOd: lenderOdData,
-            });
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setIsUploading(false);
-            setSnackMsg("Excel file uploaded successfully");
-        } catch (error: any) {
-            console.error("Excel upload error:", error);
-            setExcelUploadError(error.message || "Error parsing Excel file");
-            setOpenSnackbar(true);
-            setIsUploading(false);
-            setSeverity("error");
-            setSnackMsg("Error processing Excel file. Please check the format.");
-        }
-        finally {
-            setIsUploading(false); // Always turn off the loader
-            if (event.target) event.target.value = "";
-        }
-    };
-
-    const handleExternalDownload = async () => {
-        try {
-            const response = await DocumentAPI.downloadExternalTemplate('09');
-            const downloadLink = document.createElement('a');
-            downloadLink.href = URL.createObjectURL(new Blob([response.data]));
-            downloadLink.download = 'Capital_Resource_Template.xlsx';
-            downloadLink.target = '_blank';
-            downloadLink.click();
-        } catch (error: any) {
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg('Failed to download template document.');
-        }
-    };
-    // if (isUploading) return <div className="CrclProg"><CircularProgress /></div>;
-if (isUploading) return <FullScreenLoader open={isUploading} setOpenModal={setIsUploading} text={UPLOADINGTEXT} />;
-
-    return (
-        <div className="wrap-appraisal-area">
-            <div className="wrap-accordian">
-                <div className="wrap-tabs">
-
-                    <Grid className="top-header-container" container spacing={1} style={{ zIndex: '9', position: 'relative' }}>
-                        <Grid className="pb-2" item xs={7}>
-                            <Typography
-                                className="wrap-bold"
-                                noWrap
-                                variant="subtitle1"
-                                component="div"
-                            >
-                                <h6 className="title">Capital & Resource Profile</h6>
-                            </Typography>
-                        </Grid>
-                        <Grid
-                            className="pb-2"
-                            item
-                            xs={5}
-                            display="flex"
-                            justifyContent="end"
-                        >
-                            <Link className="in-clickable text-capitalize" to="/refinance/online-dashboard">
-                                <Button
-                                    color="inherit"
-                                    className="text-capitalize"
-                                    variant="outlined"
-                                    size="small"
-                                    onClick={handleNavigate}
-                                >
-                                    <AiOutlineArrowLeft className="me-2" /> Back
-                                </Button>
-                            </Link>
-                        </Grid>
-                    </Grid>
-
-                    <div className="up_btns">
-                        <input
-                            accept=".xlsx, .xls"
-                            id="excel-upload-button"
-                            type="file"
-                            onChange={handleExcelUpload}
-                            style={{ display: 'none' }}
-                        />
-                        <label htmlFor="excel-upload-button">
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                component="span"
-                                disabled={isUploading} // <-- Disable button while uploading
-                                style={{ marginLeft: '0px', padding: '4px 10px', textTransform: 'capitalize' }}
-                                startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <UploadFileIcon style={{ fontSize: '20px' }} />}
-                            >
-                                {isUploading ? "Uploading..." : "Upload Excel"}
-                            </Button>
-                        </label>
-
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            className="sbmtBtn dwldBtn"
-                            style={{ marginLeft: '10px' }}
-                            onClick={handleExternalDownload}
-                        >
-                            Download Sample <SimCardDownloadIcon />
-                        </Button>
-                    </div>
-                    {excelUploadError && (
-                        <div className="error-message mt-1 text-danger">
-                            {excelUploadError}
-                        </div>
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>Internal Score - At Sanction</TableCell>
+            <TableCell>
+              {isLoadingSanction ? (
+                <p>Loading...</p>
+              ) : (
+                <Table sx={{ minWidth: 650 }} aria-label="sanction internal ratings table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><b>FY</b></TableCell>
+                      <TableCell><b>Internal Score</b></TableCell>
+                      <TableCell><b>Date of Rating</b></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sanctionRatings?.length > 0 ? (
+                      sanctionRatings.map((rating: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{rating.intRatingFY}</TableCell>
+                          <TableCell>{rating.intRatingScore}</TableCell>
+                          <TableCell>{moment(rating.intRatingDate).format("DD-MM-YYYY")}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3}>No data available</TableCell>
+                      </TableRow>
                     )}
+                  </TableBody>
+                </Table>
+              )}
+            </TableCell>
+          </TableRow>
 
-                    <div className="form-container mt-1">
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel1'} onChange={onOpenChange('panel1')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel1-content"
-                                id="panel1-header"
+          <TableRow>
+            <TableCell>2</TableCell>
+            <TableCell>Internal Score - at Last Review / Present</TableCell>
+            <TableCell>
+              {isLoadingPresent ? (
+                <p>Loading...</p>
+              ) : (
+                <Formik
+                  initialValues={initialValues}
+                  // validationSchema={validationSchema}
+                  onSubmit={handleSubmit}
+                  enableReinitialize={true}
+                >
+                  {({ values, setFieldValue }) => (
+                    <Form>
+                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+                      <FieldArray name="ratings">
+                        {({ push, remove }) => (
+                          <>
+                            <Button
+                              type="button"
+                              size='small'
+                              className='text-capitalize mt-1 mb-3 saveBtn'
+                              variant="contained"
+                              color="primary"
+                              style={{ display: 'block' }}
+                              onClick={() => push({
+                                irfId,
+                                intRatingFY: "",
+                                intRatingScore: "",
+                                intRatingDate: null,
+                              })}
                             >
-                                Borrowing Cost details
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <BorrowingForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel2'} onChange={onOpenChange('panel2')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel2-content"
-                                id="panel1-header"
-                            >
-                                Details of Lenders - TL
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderTermLoanForm excelData={excelData?.lenderTl} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel3'} onChange={onOpenChange('panel3')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel3-content"
-                                id="panel1-header"
-                            >
-                                Details of Lenders -  CC/WC/OD
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderLimitOdForm excelData={excelData?.lenderOd} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel4'} onChange={onOpenChange('panel4')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel4-content"
-                                id="panel1-header"
-                            >
-                                Details of Equity and reserves
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityReserveForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel5'} onChange={onOpenChange('panel5')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel5-content"
-                                id="panel1-header"
-                            >
-                                Equity Infusion Details
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityInfusionForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
+                              Add <AddCircleIcon />
+                            </Button>
+                            <Table sx={{ minWidth: 650 }} aria-label="latest internal ratings table">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell><b>FY</b></TableCell>
+                                  <TableCell><b>Internal Score</b></TableCell>
+                                  <TableCell><b>Date of Rating</b></TableCell>
+                                  <TableCell><b>Actions</b></TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {values.ratings.length > 0 ? (
+                                  values.ratings.map((rating: any, index: number) => (
+                                    <TableRow key={index}>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.intRatingFY`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.intRatingScore`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextAreaAuto
+                                          label=""
+                                          name={`ratings.${index}.comments`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <IconButton
+                                          aria-label="delete"
+                                          color="error"
+                                          onClick={() => remove(index)}
+                                          disabled={values.ratings.length === 1}
+                                        >
+                                          <DeleteIcon />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={4}>No data available</TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                            <Grid item xs={12} sx={{ mt: 2 }}>
+                              <Button
+                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                type='submit'
+                                variant="contained"
+                              >
+                                Save <CheckCircleOutlineIcon />
+                              </Button>
+                            </Grid>
+                          </>
+                        )}
+                      </FieldArray>
+                    </Form>
+                  )}
+                </Formik>
+              )}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
-export default CapitalResourceProfile;
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default RfInternalRating;
+
+
+import React from 'react';
+import {
+  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
+} from "@mui/material";
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { Formik, FieldArray, Form } from 'formik';
+import * as Yup from 'yup';
+import { useAppSelector } from '../../../app/hooks';
+import {
+  useGetExternalRatingSanctionQuery,
+  useGetExternalRatingPresentQuery,
+  useSaveExternalRatingMutation
+} from '../../../features/monitoring/interestRateFixationApi';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import moment from 'moment';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { useState } from 'react';
+import AutoSave from '../../../components/framework/AutoSave';
+
+const RfExternalRating = ({ irfId }: any) => {
+
+  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const [saveExternalRating] = useSaveExternalRatingMutation();
+
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+
+  const initialValues = {
+    ratings: presentRatings || [],
+  };
+
+  const validationSchema = Yup.object().shape({
+    ratings: Yup.array().of(
+      Yup.object().shape({
+        agencyName: Yup.string().required("Required"),
+        instrument: Yup.string().required("Required"),
+        amount: Yup.number().typeError("Must be a number").required("Required"),
+        prevRating: Yup.string().required("Required"),
+        outlook: Yup.string().required("Required"),
+        ratingDate: Yup.string().required("Required"),
+      })
+    ),
+  });
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const finalValue = values.ratings.map((rating: any, index: number) => ({
+        ...rating,
+        irfId,
+        id: index + 1,
+        saveStatus: '01',
+      }));
+      await saveExternalRating(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Latest External Rating saved successfully");
+    } catch (error) {
+      console.error("Error saving latest external rating:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Latest External Rating");
+    }
+  };
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+        <TableHead>
+          <TableRow>
+            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
+            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
+            <TableCell><b>Remarks</b></TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow>
+            <TableCell>1</TableCell>
+            <TableCell>External rating at the time of sanction</TableCell>
+            <TableCell>
+              {isLoadingSanction ? (
+                <p>Loading...</p>
+              ) : (
+                <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><b>Name of Rating Agency</b></TableCell>
+                      <TableCell><b>Instrument</b></TableCell>
+                      <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                      <TableCell><b>Rating</b></TableCell>
+                      <TableCell><b>Outlook</b></TableCell>
+                      <TableCell><b>Date of Rating</b></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sanctionRatings?.length > 0 ? (
+                      sanctionRatings.map((rating: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{rating.agencyName}</TableCell>
+                          <TableCell>{rating.instrument}</TableCell>
+                          <TableCell>{rating.amount}</TableCell>
+                          <TableCell>{rating.prevRating}</TableCell>
+                          <TableCell>{rating.outlook}</TableCell>
+                          <TableCell>{moment(rating.ratingDate).format("DD-MM-YYYY")}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6}>No data available</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </TableCell>
+          </TableRow>
+
+          <TableRow>
+            <TableCell>2</TableCell>
+            <TableCell>Latest External Rating</TableCell>
+            <TableCell>
+              {isLoadingPresent ? (
+                <p>Loading...</p>
+              ) : (
+                <Formik
+                  initialValues={initialValues}
+                  validationSchema={validationSchema}
+                  onSubmit={handleSubmit}
+                  enableReinitialize={true}
+                >
+                  {({ values, setFieldValue }) => (
+                    <Form>
+                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+                      <FieldArray name="ratings">
+                        {({ push, remove }) => (
+                          <>
+                            <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
+                              variant="contained" color="primary" style={{ display: 'block' }}
+                              onClick={() => push({
+                                irfId,
+                                agencyName: "",
+                                instrument: "",
+                                amount: "",
+                                prevRating: "",
+                                outlook: "",
+                                ratingDate: null,
+                              })}
+                            >
+                              Add <AddCircleIcon />
+                            </Button>
+                            <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell><b>Name of Rating Agency</b></TableCell>
+                                  <TableCell><b>Instrument</b></TableCell>
+                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
+                                  <TableCell><b>Rating</b></TableCell>
+                                  <TableCell><b>Outlook</b></TableCell>
+                                  <TableCell><b>Date of Rating</b></TableCell>
+                                  <TableCell><b>Actions</b></TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {values.ratings.length > 0 ? (
+                                  values.ratings.map((rating: any, index: number) => (
+                                    <TableRow key={index}>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.agencyName`}
+                                          domain="mstr/getRatingAgency"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.instrument`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.amount`}
+                                          type="number"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <EnhancedDropDown
+                                          label=""
+                                          name={`ratings.${index}.prevRating`}
+                                          domain="mstr/getRatingCode"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <TextBoxField
+                                          label=""
+                                          name={`ratings.${index}.outlook`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <AdvanceDatePickerField
+                                          label=""
+                                          name={`ratings.${index}.ratingDate`}
+                                          disableFuture={true}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <IconButton
+                                          aria-label="delete"
+                                          color="error"
+                                          onClick={() => remove(index)}
+                                          disabled={values.ratings.length === 1}
+                                        >
+                                          <DeleteIcon />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={7}>No data available</TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                            <Grid item xs={12} sx={{ mt: 2 }}>
+                              <Button
+                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                                type='submit'
+                                variant="contained"> Save <CheckCircleOutlineIcon />
+                              </Button>
+                            </Grid>
+                          </>
+                        )}
+                      </FieldArray>
+                    </Form>
+                  )}
+                </Formik>
+              )}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default RfExternalRating;
+
+
+in this now Internal score – At sanction will be also like Internal score – at last review  for get that present api will work but at time of save same api will work only ratingType we pass ratingType 
+
+same do in [
+  {
+    "id": 0,
+    "irfId": "string",
+    "agencyName": "string",
+    "instrument": "string",
+    "amount": 0,
+    "ratingDate": "2025-06-24",
+    "ratingId": 0,
+    "prevRating": "string",
+    "prevRatingDate": "2025-06-24",
+    "precPrevRating": "string",
+    "precPrevDate": "2025-06-24",
+    "saveStatus": "string",
+    "ratingDesc": "string",
+    "outlook": "string",
+    "ratingType": "SANCTION"
+  }
+]
+RfExternalRating 
+same do in external rating also that External rating at the time of sanction that will be now dyanmic give me complete and proper code 
+
+
