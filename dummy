@@ -1,3 +1,93 @@
+// First, install the required package:
+// npm install xlsx-populate
+
+import XlsxPopulate from 'xlsx-populate';
+
+const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+        setExcelUploadError(null);
+        setIsUploading(true);
+
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            return;
+        }
+
+        // Check file size
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            return;
+        }
+
+        const buffer = await file.arrayBuffer();
+        
+        // Use xlsx-populate for password-protected files
+        let workbook;
+        try {
+            workbook = await XlsxPopulate.fromDataAsync(buffer, { password: 'abc' });
+        } catch (passwordError) {
+            // If password fails, try without password
+            try {
+                workbook = await XlsxPopulate.fromDataAsync(buffer);
+            } catch (loadError) {
+                throw new Error("Failed to open Excel file. Please check if the file is password-protected or corrupted.");
+            }
+        }
+
+        // Get sheets by index (0-based indexing)
+        const lenderTlSheet = workbook.sheet(1); // Second sheet
+        const lenderOdSheet = workbook.sheet(2); // Third sheet
+        
+        if (!lenderTlSheet) {
+            throw new Error("Lender TL sheet not found in the Excel file.");
+        }
+        if (!lenderOdSheet) {
+            throw new Error("Lender OD sheet not found in the Excel file.");
+        }
+
+        const parseSheetData = (sheet: any) => {
+            const jsonData: any[] = [];
+            const usedRange = sheet.usedRange();
+            
+            if (usedRange) {
+                const values = usedRange.value();
+                // Skip first 2 rows (headers) and return the rest
+                return values.slice(2);
+            }
+            return [];
+        };
+
+        const lenderTlData = parseSheetData(lenderTlSheet);
+        const lenderOdData = parseSheetData(lenderOdSheet);
+        
+        setExcelData({
+            lenderTl: lenderTlData,
+            lenderOd: lenderOdData,
+        });
+        
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Excel file uploaded successfully");
+        
+    } catch (error: any) {
+        console.error("Excel upload error:", error);
+        setExcelUploadError(error.message || "Error parsing Excel file");
+        setOpenSnackbar(true);
+        setSeverity("error");
+        setSnackMsg("Error processing Excel file. Please check the format and password.");
+    } finally {
+        setIsUploading(false);
+        if (event.target) event.target.value = "";
+    }
+};
+
+
+
+
+
 const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
         setExcelUploadError(null);
