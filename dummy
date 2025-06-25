@@ -14,6 +14,480 @@ import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDe
 import { useSaveCurntRateByRateIDAndAsOnDateMutation } from '../../../features/monitoring/interestResetApi';
 import moment from 'moment';
 
+const InterestRateApplicable = ({ irfId }: any) => {
+  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
+    skip: !irfId,
+    refetchOnMountOrArgChange: true,
+  });
+
+  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
+
+  const [options, setOptions] = useState<any[]>([]);
+  const [selectedValue, setSelectedValue] = useState<any>("");
+  const [selectedLabel, setSelectedLabel] = useState<any>("");
+
+  useEffect(() => {
+    if (benchmarkData) {
+      const transformed = benchmarkData.map((item: any) => ({
+        key: item.BRM_RATE_ID,
+        value: item.BRM_RATE_ID,
+        label: item.BRM_RATE_NAME
+      }));
+      setOptions(transformed);
+      if (proposalData?.[0]?.proposalType) {
+        const selectedOption = transformed.find((opt: any) => opt.value === proposalData[0].proposalType);
+        if (selectedOption) {
+          setSelectedValue(selectedOption.value);
+          setSelectedLabel(selectedOption.label);
+        }
+      }
+    }
+  }, [benchmarkData, proposalData]);
+
+  const handleChange = (value: any, setFieldValue: any) => {
+    setSelectedValue(value);
+    const selected = options.find((opt: any) => opt.value === value);
+    if (selected) {
+      setSelectedLabel(selected.label);
+      setFieldValue('proposalType', value);
+    }
+  };
+
+  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
+
+  const handleSubmitMemorandum = async (values: any) => {
+    try {
+      const finalValue = {
+        ...values,
+        irfId,
+        saveStatus: '01',
+        preprosalComment: values?.preprosalComment,
+      };
+      await saveMemorandumTxt(finalValue).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Memorandum saved successfully");
+    } catch (error) {
+      console.error("Error saving memorandum:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save Memorandum");
+    }
+  };
+
+  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
+  const [getBenchmarkRate] = useSaveCurntRateByRateIDAndAsOnDateMutation();
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState("success");
+
+  const initialValues = proposalData?.[0] || {
+    proposalType: '',
+    mclr: '',
+    ratingSpread: '',
+    intScore: '',
+    intScoreLink: '',
+    totalSpread: '',
+    finalRate: '',
+    grade: '',
+    benchmarkAsOn: '',
+    tenure: '',
+    benchmark: '',
+    benchmarkRate: '',
+    sidbiSpread: '',
+    minIntRate: '',
+    minIntRateTrmv: '',
+    interestType: ''
+  };
+
+  const validationSchema = Yup.object().shape({
+    interestType: Yup.string().required('Interest Type is required'),
+  });
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const dataToSave = { ...values, irfId, saveStatus: '01' };
+      await saveApplPrestProposal(dataToSave).unwrap();
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg("Proposal saved successfully");
+    } catch (error) {
+      console.error("Error saving proposal:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save proposal");
+    }
+  };
+
+  const handleSnackClose = () => setOpenSnackbar(false);
+
+  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
+
+  const InnerForm = () => {
+    const { values, setFieldValue, setValues }: any = useFormikContext();
+    const prevInterestTypeRef = useRef<any>(values?.interestType);
+    const prevProposalTypeRef = useRef<any>(values?.proposalType);
+
+    // Compute currentSelectedLabel based on values.proposalType
+    const selectedOption = options.find(opt => opt.value === values.proposalType);
+    const currentSelectedLabel = selectedOption ? selectedOption.label : '';
+
+    useEffect(() => {
+      if (prevInterestTypeRef.current !== values?.interestType) {
+        setValues({
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+          interestType: values?.interestType,
+          proposalType: values?.interestType === 'floating' ? '' : null,
+        });
+        if (values?.interestType === 'floating') {
+          setSelectedValue('');
+          setSelectedLabel('');
+        }
+        prevInterestTypeRef.current = values?.interestType;
+      } else if (values?.interestType === 'floating' && prevProposalTypeRef.current !== values?.proposalType) {
+        setValues({
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+          interestType: values?.interestType,
+          proposalType: values?.proposalType,
+        });
+        prevProposalTypeRef.current = values?.proposalType;
+      }
+    }, [values?.interestType, values?.proposalType, setValues]);
+
+    // Fetch benchmark rate for MCLR or Repo Rate when selected
+    useEffect(() => {
+      if (values.interestType === 'floating' && values.proposalType) {
+        if (currentSelectedLabel === 'MCLR' || currentSelectedLabel === 'Repo Rate') {
+          const fetchRate = async () => {
+            const currentDate = moment().format("DD-MMM-YYYY").toUpperCase();
+            try {
+              const response = await getBenchmarkRate({
+                asOnDate: currentDate,
+                benchMarkRateId: values.proposalType
+              }).unwrap();
+              if (response) {
+                setFieldValue("benchmarkRate", response);
+              }
+            } catch (error) {
+              console.error("Error fetching benchmark rate:", error);
+            }
+          };
+          fetchRate();
+        }
+      }
+    }, [values.interestType, values.proposalType, currentSelectedLabel, setFieldValue, getBenchmarkRate]);
+
+    // Calculations for non-T-Bill floating rates
+    useEffect(() => {
+      if (values.interestType === 'floating' && currentSelectedLabel !== '3 Month T-Bill') {
+        const baseSpread = parseFloat(values.ratingSpread) || 0;
+        const intScoreLink = parseFloat(values.intScoreLink) || 0;
+        const totalSpread = baseSpread + intScoreLink;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
+        const finalRate = benchmarkRate + totalSpread;
+        setFieldValue('finalRate', finalRate.toFixed(2));
+      }
+    }, [values.ratingSpread, values.intScoreLink, values.benchmarkRate, values.interestType, currentSelectedLabel, setFieldValue]);
+
+    // Calculations for fixed rates
+    useEffect(() => {
+      if (values?.interestType === 'fixed') {
+        const fimmdaSpread = parseFloat(values.ratingSpread) || 0;
+        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
+        const totalSpread = fimmdaSpread + sidbiSpread;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
+        const minIntRate = benchmarkRate + totalSpread;
+        setFieldValue('minIntRate', minIntRate.toFixed(2));
+        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
+        const finalRate = Math.max(minIntRate, minIntRateTrmv);
+        setFieldValue('finalRate', finalRate.toFixed(2));
+      }
+    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, values.interestType, setFieldValue]);
+
+    // Calculations for 3 Month T-Bill
+    useEffect(() => {
+      if (values.interestType === 'floating' && currentSelectedLabel === '3 Month T-Bill') {
+        const ratingSpread = parseFloat(values.ratingSpread) || 0;
+        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
+        const totalSpread = ratingSpread + sidbiSpread;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
+        const minIntRate = benchmarkRate + totalSpread;
+        setFieldValue('minIntRate', minIntRate.toFixed(2));
+        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
+        const finalRate = Math.max(minIntRate, minIntRateTrmv);
+        setFieldValue('finalRate', finalRate.toFixed(2));
+      }
+    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, values.interestType, currentSelectedLabel, setFieldValue]);
+
+    const handleDateChange = async (date: any) => {
+      const formattedDate = moment(date).format("DD-MMM-YYYY").toUpperCase();
+      try {
+        const response = await getBenchmarkRate({
+          asOnDate: formattedDate,
+          benchMarkRateId: values.proposalType
+        }).unwrap();
+        if (response) {
+          setFieldValue("benchmarkRate", response);
+        }
+      } catch (error) {
+        console.error("Error fetching benchmark rate:", error);
+      }
+    };
+
+    return (
+    <Form>
+      <Grid item xs={12} sm={4} md={4} lg={4}>
+        <EnhancedDropDown
+          label="Interest Type"
+          name="interestType"
+          customOptions={[
+            { key: 'fixed', value: 'fixed', label: 'Fixed' },
+            { key: 'floating', value: 'floating', label: 'Floating' },
+          ]}
+          domain=""
+        />
+      </Grid>
+
+      {values?.interestType === "floating" && (
+        <Grid item xs={12} sm={4} md={4} lg={4}>
+          <EnhancedDropDown
+            label="Benchmark"
+            name="proposalType"
+            customOptions={options}
+            onChange={(value: any) => handleChange(value, setFieldValue)}
+            domain=""
+          />
+        </Grid>
+      )}
+
+      {values?.interestType === 'fixed' && (
+        <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
+          <TableHead>
+            <TableRow>
+              <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - Fixed</b></h6></TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><b>Rating Grade</b></TableCell>
+              <TableCell><b>Daily yield matrix as on</b></TableCell>
+              <TableCell><b>Tenure</b></TableCell>
+              <TableCell><b>FIMMDA yield (Benchmark)</b></TableCell>
+              <TableCell><b>FIMMDA Spread</b></TableCell>
+              <TableCell><b>SIDBI Spread</b></TableCell>
+              <TableCell><b>Total Spread</b></TableCell>
+              <TableCell><b>Minimum Interest Rate</b></TableCell>
+              <TableCell><b>TRMV Interest Rate</b></TableCell>
+              <TableCell><b>Final Rate</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell><AdvanceTextBoxField label="" name="grade" type="text" /></TableCell>
+              <TableCell><AdvanceDatePickerField label="" name="benchmarkAsOn" disableFuture={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="tenure" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="benchmarkRate" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="ratingSpread" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="sidbiSpread" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="totalSpread" type="number" disabled={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="minIntRate" type="number" disabled={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="minIntRateTrmv" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="" name="finalRate" type="number" disabled={true} /></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      )}
+
+      {(values?.interestType === "floating" && currentSelectedLabel && currentSelectedLabel !== "3 Month T-Bill") && (
+        <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
+          <TableHead>
+            <TableRow>
+              <TableCell colSpan={6}><h6><b>Interest Rate applicable for present proposal - {currentSelectedLabel}</b></h6></TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell style={{ width: '9%' }}><b>Benchmark Rate</b></TableCell>
+              <TableCell><b>Base Spread</b></TableCell>
+              <TableCell><b>Internal Score</b></TableCell>
+              <TableCell><b>Internal Score Linked Spread</b></TableCell>
+              <TableCell><b>Total Spread</b></TableCell>
+              <TableCell><b>Applicable Rate (%)</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell><AdvanceTextBoxField label="%" name="benchmarkRate" disabled type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Base Spread" name="ratingSpread" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Internal Score" name="intScore" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" type="number" disabled={true} /></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      )}
+
+      {(values?.interestType === "floating" && currentSelectedLabel === "3 Month T-Bill") && (
+        <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
+          <TableHead>
+            <TableRow>
+              <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - T-bill</b></h6></TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><b>Rating Grade</b></TableCell>
+              <TableCell><b>Benchmark as on</b></TableCell>
+              <TableCell><b>Benchmark</b></TableCell>
+              <TableCell><b>Benchmark Rate</b></TableCell>
+              <TableCell><b>Rating Spread (%)</b></TableCell>
+              <TableCell><b>SIDBI Spread</b></TableCell>
+              <TableCell><b>Total Spread</b></TableCell>
+              <TableCell><b>Minimum Interest Rate</b></TableCell>
+              <TableCell><b>TRMV Interest Rate</b></TableCell>
+              <TableCell><b>Final Rate</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell><AdvanceTextBoxField label="Rating Grade" name="grade" type="text" /></TableCell>
+              <TableCell><AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" disableFuture={true} onDateChange={handleDateChange} /></TableCell>
+              <TableCell><AdvanceTextBoxField disabled value={currentSelectedLabel} label="Benchmark" name="benchmark" type="text" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" type="number" disabled /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" type="number" disabled={true} /></TableCell>
+              <TableCell><AdvanceTextBoxField label="TRMV Interest Rate" name="minIntRateTrmv" type="number" /></TableCell>
+              <TableCell><AdvanceTextBoxField label="Final Rate" name="finalRate" type="number" disabled={true} /></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      )}
+
+      <Button type="submit" variant="contained" color="primary" className="mt-2">Save</Button>
+    </Form>
+    );
+  };
+
+  return (
+    <div className="wrap-inner-table mt-0">
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize={true}
+      >
+        <InnerForm />
+      </Formik>
+
+      <Formik
+        initialValues={{
+          irValidity: memorandumData?.irValidity || null,
+          dop: memorandumData?.dop || "",
+          dopComments: memorandumData?.dopComments || "",
+          discPowers: memorandumData?.discPowers || "",
+          verticalComments: memorandumData?.verticalComments || "",
+          recommendation: memorandumData?.recommendation || "",
+          preprosalComment: memorandumData?.preprosalComment || "",
+          rateReqComment: memorandumData?.rateReqComment || "",
+          committeName: memorandumData?.committeName || ""
+        }}
+        onSubmit={handleSubmitMemorandum}
+        enableReinitialize={true}
+        validateOnChange={false}
+        validateOnBlur={true}
+      >
+        {({ values }: any) => (
+          <Form>
+            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
+            <Grid container spacing={2} padding={4} className='form-grid p-0'>
+              <Grid item xs={12}>
+                <Table sx={{ minWidth: 650 }} aria-label="validity table">
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <RichTextField label="Comments" name="preprosalComment" />
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </Grid>
+              <Grid item xs={12} sx={{ mt: 2 }}>
+                <Button
+                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                  type="submit"
+                  variant="contained"
+                >
+                  Save <CheckCircleOutlineIcon />
+                </Button>
+              </Grid>
+            </Grid>
+          </Form>
+        )}
+      </Formik>
+
+      <NbfcSnackbar
+        open={openSnackbar}
+        msg={snackMsg}
+        severity={severity}
+        handleSnackClose={handleSnackClose}
+        submitCall={false}
+      />
+    </div>
+  );
+};
+
+export default InterestRateApplicable;
+
+
+
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
+import { Formik, Form, useFormikContext } from 'formik';
+import * as Yup from 'yup';
+import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
+import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
+import AutoSave from '../../../components/framework/AutoSave';
+import { RichTextField } from '../../../components/framework/RichTextField';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
+import { useSaveCurntRateByRateIDAndAsOnDateMutation } from '../../../features/monitoring/interestResetApi';
+import moment from 'moment';
+
 
 const InterestRateApplicable = ({ irfId }: any) => {
   const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
