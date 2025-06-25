@@ -1,1263 +1,440 @@
-import React, { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
-} from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { Formik, FieldArray, Form } from 'formik';
+import React, { useEffect, useRef, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, Button, Grid } from "@mui/material";
+import { Formik, Form, useFormikContext } from 'formik';
 import * as Yup from 'yup';
-import moment from 'moment';
-import {
-  useGetExternalRatingSanctionQuery,
-  useGetExternalRatingPresentQuery,
-  useSaveExternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { useGetapplprestproposalQuery, useGetMemorandumTxtQuery, useSaveApplPrestProposalMutation, useSaveMemorandumTxtMutation } from '../../../features/monitoring/interestRateFixationApi';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { AdvanceTextBoxField } from '../../../components/framework/AdvanceTextBoxField';
+import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
 import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
 import AutoSave from '../../../components/framework/AutoSave';
-
-const RfExternalRating = ({ irfId }: any) => {
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const [saveExternalRating] = useSaveExternalRatingMutation();
-
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
-
-  const validationSchema = Yup.object().shape({
-    ratings: Yup.array().of(
-      Yup.object().shape({
-        agencyName: Yup.string().required("Required"),
-        instrument: Yup.string().required("Required"),
-        amount: Yup.number().typeError("Must be a number").required("Required"),
-        prevRating: Yup.string().required("Required"),
-        outlook: Yup.string().required("Required"),
-        ratingDate: Yup.string().required("Required"),
-      })
-    ),
-  });
-
-  const handleSubmitSanction = async (values: any) => {
-    try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        irfId,
-        id: index + 1,
-        saveStatus: '01',
-        ratingType: 'SANCTION',
-      }));
-      await saveExternalRating(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Sanction External Rating saved successfully");
-    } catch (error) {
-      console.error("Error saving sanction external rating:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Sanction External Rating");
-    }
-  };
-
-  const handleSubmitPresent = async (values: any) => {
-    try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        irfId,
-        id: index + 1,
-        saveStatus: '01',
-        ratingType: 'PRESENT',
-      }));
-      await saveExternalRating(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Present External Rating saved successfully");
-    } catch (error) {
-      console.error("Error saving present external rating:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Present External Rating");
-    }
-  };
-
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
-  };
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>External Rating at the Time of Sanction</TableCell>
-            <TableCell>
-              {isLoadingSanction ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={{ ratings: sanctionRatings || [] }}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmitSanction}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitSanction} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size="small"
-                              className="text-capitalize mt-1 mb-3 saveBtn"
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                agencyName: "",
-                                instrument: "",
-                                amount: "",
-                                prevRating: "",
-                                outlook: "",
-                                ratingDate: null,
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>Name of Rating Agency</b></TableCell>
-                                  <TableCell><b>Instrument</b></TableCell>
-                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                                  <TableCell><b>Rating</b></TableCell>
-                                  <TableCell><b>Outlook</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.agencyName`}
-                                          domain="mstr/getRatingAgency"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.instrument`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.amount`}
-                                          type="number"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.prevRating`}
-                                          domain="mstr/getRatingCode"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.outlook`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.ratingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={7}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type="submit"
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
-            <TableCell>
-              {isLoadingPresent ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={{ ratings: presentRatings || [] }}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmitPresent}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitPresent} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size="small"
-                              className="text-capitalize mt-1 mb-3 saveBtn"
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                agencyName: "",
-                                instrument: "",
-                                amount: "",
-                                prevRating: "",
-                                outlook: "",
-                                ratingDate: null,
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="present external ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>Name of Rating Agency</b></TableCell>
-                                  <TableCell><b>Instrument</b></TableCell>
-                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                                  <TableCell><b>Rating</b></TableCell>
-                                  <TableCell><b>Outlook</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.agencyName`}
-                                          domain="mstr/getRatingAgency"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.instrument`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.amount`}
-                                          type="number"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.prevRating`}
-                                          domain="mstr/getRatingCode"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.outlook`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.ratingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={7}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type="submit"
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
-  );
-};
-
-export default RfExternalRating;
-
-import React, { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
-} from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { RichTextField } from '../../../components/framework/RichTextField';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { Formik, FieldArray, Form } from 'formik';
-import * as Yup from 'yup';
+import { useGetBenchMarkQuery } from '../../../features/appraisal/shareholdingDetailsApi';
+import { useSaveCurntRateByRateIDAndAsOnDateMutation } from '../../../features/monitoring/interestResetApi';
 import moment from 'moment';
-import {
-  useGetInternalRatingSanctionQuery,
-  useGetInternalRatingPresentQuery,
-  useSaveInternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import AutoSave from '../../../components/framework/AutoSave';
-import TextAreaAuto from '../../../components/framework/TextAreaAuto';
 
-const RfInternalRating = ({ irfId }: any) => {
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetInternalRatingSanctionQuery(irfId, {
+
+const InterestRateApplicable = ({ irfId }: any) => {
+  const { data: proposalData, isLoading } = useGetapplprestproposalQuery(irfId, {
     skip: !irfId,
     refetchOnMountOrArgChange: true,
   });
 
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetInternalRatingPresentQuery(irfId, {
+  const { data: memorandumData, isLoading: isLoadingMemorandum } = useGetMemorandumTxtQuery(irfId, {
     skip: !irfId,
     refetchOnMountOrArgChange: true,
   });
 
-  const [saveInternalRating] = useSaveInternalRatingMutation();
+  const { data: benchmarkData, isLoading: isLoadingBenchmark } = useGetBenchMarkQuery("");
 
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
+  const [options, setOptions] = useState<any[]>([]);
+  const [selectedValue, setSelectedValue] = useState<any>("");
+  const [selectedLabel, setSelectedLabel] = useState<any>("");
 
-  const validationSchema = Yup.object().shape({
-    ratings: Yup.array().of(
-      Yup.object().shape({
-        intRatingFY: Yup.string().required("Required"),
-        intRatingScore: Yup.string().required("Required"),
-        intRatingDate: Yup.string().required("Required"),
-        comments: Yup.string().required("Required"),
-      })
-    ),
-  });
-
-  const handleSubmitSanction = async (values: any) => {
-    try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        irfId,
-        id: index + 1,
-        slNo: index + 1,
-        saveStatus: '01',
-        intRatingType: 'SANCTION',
+  useEffect(() => {
+    if (benchmarkData) {
+      const transformed = benchmarkData.map((item: any) => ({
+        key: item.BRM_RATE_ID,
+        value: item.BRM_RATE_ID,
+        label: item.BRM_RATE_NAME
       }));
-      await saveInternalRating(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Sanction Internal Rating saved successfully");
-    } catch (error) {
-      console.error("Error saving sanction internal rating:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Sanction Internal Rating");
+      setOptions(transformed);
+      if (proposalData?.[0]?.proposalType) {
+        const selectedOption = transformed.find((opt: any) => opt.value === proposalData[0].proposalType);
+        if (selectedOption) {
+          setSelectedValue(selectedOption.value);
+          setSelectedLabel(selectedOption.label);
+        }
+      }
+    }
+  }, [benchmarkData, proposalData]);
+
+  const handleChange = (value: any, setFieldValue: any) => {
+    setSelectedValue(value);
+    const selected = options.find((opt: any) => opt.value === value);
+    if (selected) {
+      setSelectedLabel(selected.label);
+      setFieldValue('proposalType', value);
     }
   };
 
-  const handleSubmitPresent = async (values: any) => {
+  const [saveMemorandumTxt] = useSaveMemorandumTxtMutation();
+
+  const handleSubmitMemorandum = async (values: any) => {
     try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
+      const finalValue = {
+        ...values,
         irfId,
-        id: index + 1,
-        slNo: index + 1,
         saveStatus: '01',
-        intRatingType: 'PRESENT',
-      }));
-      await saveInternalRating(finalValue).unwrap();
+        preprosalComment: values?.preprosalComment,
+      };
+      await saveMemorandumTxt(finalValue).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
-      setSnackMsg("Present Internal Rating saved successfully");
+      setSnackMsg("Memorandum saved successfully");
     } catch (error) {
-      console.error("Error saving present internal rating:", error);
+      console.error("Error saving memorandum:", error);
       setOpenSnackbar(true);
       setSeverity("error");
-      setSnackMsg("Failed to save Present Internal Rating");
+      setSnackMsg("Failed to save Memorandum");
     }
   };
 
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
-  };
+  const [saveApplPrestProposal] = useSaveApplPrestProposalMutation();
+  const [getBenchmarkRate] = useSaveCurntRateByRateIDAndAsOnDateMutation();
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState("success");
 
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Internal Score - At Sanction</TableCell>
-            <TableCell>
-              {isLoadingSanction ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={{ ratings: sanctionRatings || [] }}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmitSanction}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitSanction} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size="small"
-                              className="text-capitalize mt-1 mb-3 saveBtn"
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                intRatingFY: "",
-                                intRatingScore: "",
-                                intRatingDate: null,
-                                comments: "",
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="sanction internal ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>FY</b></TableCell>
-                                  <TableCell><b>Internal Score</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Comments</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingFY`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingScore`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.intRatingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextAreaAuto
-                                          label=""
-                                          name={`ratings.${index}.comments`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={5}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type="submit"
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Internal Score - at Last Review / Present</TableCell>
-            <TableCell>
-              {isLoadingPresent ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={{ ratings: presentRatings || [] }}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmitPresent}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitPresent} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size="small"
-                              className="text-capitalize mt-1 mb-3 saveBtn"
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                intRatingFY: "",
-                                intRatingScore: "",
-                                intRatingDate: null,
-                                comments: "",
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="present internal ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>FY</b></TableCell>
-                                  <TableCell><b>Internal Score</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Comments</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingFY`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingScore`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.intRatingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextAreaAuto
-                                          label=""
-                                          name={`ratings.${index}.comments`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          ThrustIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={5}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type="submit"
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
-  );
-};
-
-export default RfInternalRating;
-
-
-
-
-
-
-[
-  {
-    "id": 0,
-    "irfId": "string",
-    "slNo": 0,
-    "intRatingFY": "string",
-    "intRatingDate": "2025-06-24",
-    "intRatingScore": "string",
-    "intRating": "string",
-    "saveStatus": "string",
-    "ratingType": "SANCTION",
-    "comments": "string"
-  }
-]
-
-import React, { useState } from 'react';
-import {
-  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
-} from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { Formik, FieldArray, Form } from 'formik';
-import * as Yup from 'yup';
-import moment from 'moment';
-import {
-  useGetInternalRatingSanctionQuery,
-  useGetInternalRatingPresentQuery,
-  useSaveInternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import AutoSave from '../../../components/framework/AutoSave';
-import TextAreaAuto from '../../../components/framework/TextAreaAuto';
-
-const RfInternalRating = ({ irfId }: any) => {
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetInternalRatingSanctionQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetInternalRatingPresentQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const [saveInternalRating] = useSaveInternalRatingMutation();
-
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
-
-  const initialValues = {
-    ratings: presentRatings || [],
-  };
-
-  // const validationSchema = Yup.object().shape({
-  //   ratings: Yup.array().of(
-  //     Yup.object().shape({
-  //       intRatingFY: Yup.string().required("Required"),
-  //       intRatingScore: Yup.string().required("Required"),
-  //       comments: Yup.string().required("Required"),
-  //     })
-  //   ),
-  // });
-
-  const handleSubmit = async (values: any) => {
-    try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        irfId,
-        id: index + 1,
-        slNo:index+1,
-        saveStatus: '01',
-        intRatingType: 'present',
-      }));
-      await saveInternalRating(finalValue).unwrap();
-      setOpenSnackbar(true);
-      setSeverity("success");
-      setSnackMsg("Latest Internal Rating saved successfully");
-    } catch (error) {
-      console.error("Error saving latest internal rating:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save Latest Internal Rating");
-    }
-  };
-
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
-  };
-
-  return (
-    <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="internal ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>Internal Score - At Sanction</TableCell>
-            <TableCell>
-              {isLoadingSanction ? (
-                <p>Loading...</p>
-              ) : (
-                <Table sx={{ minWidth: 650 }} aria-label="sanction internal ratings table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><b>FY</b></TableCell>
-                      <TableCell><b>Internal Score</b></TableCell>
-                      <TableCell><b>Date of Rating</b></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sanctionRatings?.length > 0 ? (
-                      sanctionRatings.map((rating: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell>{rating.intRatingFY}</TableCell>
-                          <TableCell>{rating.intRatingScore}</TableCell>
-                          <TableCell>{moment(rating.intRatingDate).format("DD-MM-YYYY")}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3}>No data available</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </TableCell>
-          </TableRow>
-
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Internal Score - at Last Review / Present</TableCell>
-            <TableCell>
-              {isLoadingPresent ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={initialValues}
-                  // validationSchema={validationSchema}
-                  onSubmit={handleSubmit}
-                  enableReinitialize={true}
-                >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button
-                              type="button"
-                              size='small'
-                              className='text-capitalize mt-1 mb-3 saveBtn'
-                              variant="contained"
-                              color="primary"
-                              style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                intRatingFY: "",
-                                intRatingScore: "",
-                                intRatingDate: null,
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="latest internal ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>FY</b></TableCell>
-                                  <TableCell><b>Internal Score</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingFY`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.intRatingScore`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextAreaAuto
-                                          label=""
-                                          name={`ratings.${index}.comments`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={4}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type='submit'
-                                variant="contained"
-                              >
-                                Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-
-      <NbfcSnackbar
-        open={openSnackbar}
-        msg={snackMsg}
-        severity={severity}
-        handleSnackClose={handleSnackClose}
-        submitCall={false}
-      />
-    </div>
-  );
-};
-
-export default RfInternalRating;
-
-
-import React from 'react';
-import {
-  Table, TableBody, TableCell, TableHead, TableRow, Button, IconButton, Grid
-} from "@mui/material";
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { Formik, FieldArray, Form } from 'formik';
-import * as Yup from 'yup';
-import { useAppSelector } from '../../../app/hooks';
-import {
-  useGetExternalRatingSanctionQuery,
-  useGetExternalRatingPresentQuery,
-  useSaveExternalRatingMutation
-} from '../../../features/monitoring/interestRateFixationApi';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { TextBoxField } from '../../../components/framework/TextBoxField';
-import { EnhancedDropDown } from '../../../components/framework/EnhancedDropDown';
-import { AdvanceDatePickerField } from '../../../components/framework/EnhancedComponents';
-import moment from 'moment';
-import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
-import { useState } from 'react';
-import AutoSave from '../../../components/framework/AutoSave';
-
-const RfExternalRating = ({ irfId }: any) => {
-
-  const { data: sanctionRatings, isLoading: isLoadingSanction } = useGetExternalRatingSanctionQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const { data: presentRatings, isLoading: isLoadingPresent } = useGetExternalRatingPresentQuery(irfId, {
-    skip: !irfId,
-    refetchOnMountOrArgChange: true,
-  });
-
-  const [saveExternalRating] = useSaveExternalRatingMutation();
-
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
-
-  const initialValues = {
-    ratings: presentRatings || [],
+  const initialValues = proposalData?.[0] || {
+    proposalType: '',
+    mclr: '',
+    ratingSpread: '',
+    intScore: '',
+    intScoreLink: '',
+    totalSpread: '',
+    finalRate: '',
+    grade: '',
+    benchmarkAsOn: '',
+    tenure: '',
+    benchmark: '',
+    benchmarkRate: '',
+    sidbiSpread: '',
+    minIntRate: '',
+    minIntRateTrmv: '',
+    interestType: ''
   };
 
   const validationSchema = Yup.object().shape({
-    ratings: Yup.array().of(
-      Yup.object().shape({
-        agencyName: Yup.string().required("Required"),
-        instrument: Yup.string().required("Required"),
-        amount: Yup.number().typeError("Must be a number").required("Required"),
-        prevRating: Yup.string().required("Required"),
-        outlook: Yup.string().required("Required"),
-        ratingDate: Yup.string().required("Required"),
-      })
-    ),
+    interestType: Yup.string().required('Interest Type is required'),
+    // proposalType: Yup.string().when('interestType', {
+    //   is: 'floating',
+    //   then: Yup.string().required('Proposal Type is required'),
+    //   otherwise: Yup.string().nullable()
+    // }),
   });
 
   const handleSubmit = async (values: any) => {
     try {
-      const finalValue = values.ratings.map((rating: any, index: number) => ({
-        ...rating,
-        irfId,
-        id: index + 1,
-        saveStatus: '01',
-      }));
-      await saveExternalRating(finalValue).unwrap();
+      const dataToSave = { ...values, irfId, saveStatus: '01' };
+      await saveApplPrestProposal(dataToSave).unwrap();
       setOpenSnackbar(true);
       setSeverity("success");
-      setSnackMsg("Latest External Rating saved successfully");
+      setSnackMsg("Proposal saved successfully");
     } catch (error) {
-      console.error("Error saving latest external rating:", error);
+      console.error("Error saving proposal:", error);
       setOpenSnackbar(true);
       setSeverity("error");
-      setSnackMsg("Failed to save Latest External Rating");
+      setSnackMsg("Failed to save proposal");
     }
   };
 
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
+  const handleSnackClose = () => setOpenSnackbar(false);
+
+  if (isLoading || isLoadingMemorandum || isLoadingBenchmark) return <p>Loading...</p>;
+
+  const InnerForm = () => {
+    const { values, setFieldValue, setValues }: any = useFormikContext();
+    const prevInterestTypeRef = useRef<any>(values?.interestType);
+    const prevProposalTypeRef = useRef<any>(values?.proposalType);
+
+    useEffect(() => {
+      if (prevInterestTypeRef.current !== values?.interestType) {
+        setValues({
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+          interestType: values?.interestType,
+          proposalType: values?.interestType === 'floating' ? '' : null,
+        });
+        if (values?.interestType === 'floating') {
+          setSelectedValue('');
+          setSelectedLabel('');
+        }
+        prevInterestTypeRef.current = values?.interestType;
+      } else if (values?.interestType === 'floating' && prevProposalTypeRef.current !== values?.proposalType) {
+        setValues({
+          mclr: '',
+          ratingSpread: '',
+          intScore: '',
+          intScoreLink: '',
+          totalSpread: '',
+          finalRate: '',
+          grade: '',
+          benchmarkAsOn: '',
+          tenure: '',
+          benchmark: '',
+          benchmarkRate: '',
+          sidbiSpread: '',
+          minIntRate: '',
+          minIntRateTrmv: '',
+          interestType: values?.interestType,
+          proposalType: values?.proposalType,
+        });
+        prevProposalTypeRef.current = values?.proposalType;
+      }
+    }, [values?.interestType, values?.proposalType, setValues]);
+
+    useEffect(() => {
+      if (selectedLabel !== '3 Month T-Bill') {
+        const baseSpread = parseFloat(values.ratingSpread) || 0;
+        const intScoreLink = parseFloat(values.intScoreLink) || 0;
+        const totalSpread = baseSpread + intScoreLink;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const mclr = parseFloat(values.mclr) || 0;
+        const finalRate = mclr + totalSpread;
+        setFieldValue('finalRate', finalRate.toFixed(2));
+
+      }
+    }, [values.ratingSpread, values.intScoreLink, values.mclr, selectedLabel, setFieldValue]);
+
+    useEffect(() => {
+      if (values?.interestType === 'fixed') {
+        const fimmdaSpread = parseFloat(values.ratingSpread) || 0;
+        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
+        const totalSpread = fimmdaSpread + sidbiSpread;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
+        const minIntRate = benchmarkRate + totalSpread;
+        setFieldValue('minIntRate', minIntRate.toFixed(2));
+        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
+        const finalRate = Math.max(minIntRate, minIntRateTrmv);
+        setFieldValue('finalRate', finalRate.toFixed(2));
+      }
+    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, values.interestType, setFieldValue]);
+
+    useEffect(() => {
+      if (selectedLabel === '3 Month T-Bill') {
+        const ratingSpread = parseFloat(values.ratingSpread) || 0;
+        const sidbiSpread = parseFloat(values.sidbiSpread) || 0;
+        const totalSpread = ratingSpread + sidbiSpread;
+        setFieldValue('totalSpread', totalSpread.toFixed(2));
+        const benchmarkRate = parseFloat(values.benchmarkRate) || 0;
+        const minIntRate = benchmarkRate + totalSpread;
+        setFieldValue('minIntRate', minIntRate.toFixed(2));
+        const minIntRateTrmv = parseFloat(values.minIntRateTrmv) || 0;
+        const finalRate = Math.max(minIntRate, minIntRateTrmv);
+        setFieldValue('finalRate', finalRate.toFixed(2));
+      }
+    }, [values.ratingSpread, values.sidbiSpread, values.benchmarkRate, values.minIntRateTrmv, selectedLabel, setFieldValue]);
+
+  
+    const handleDateChange: any = async (date: any, type?: string) => {
+      const actualDate = type === "current" ? moment() : moment(date);
+      const formattedValue = actualDate.format("DD-MMM-YYYY").toUpperCase();
+
+      const response = await getBenchmarkRate({
+        asOnDate: formattedValue,
+        benchMarkRateId: selectedValue
+      }).unwrap();
+
+      console.log("testing", response, formattedValue, selectedValue);
+
+      if (response) {
+        setFieldValue("benchmarkRate", response);
+      }
+    };
+
+
+    return (
+      <Form>
+        <Grid item xs={12} sm={4} md={4} lg={4}>
+          <EnhancedDropDown
+            label="Interest Type"
+            name="interestType"
+            customOptions={[
+              { key: 'fixed', value: 'fixed', label: 'Fixed' },
+              { key: 'floating', value: 'floating', label: 'Floating' },
+            ]}
+            domain=""
+          />
+        </Grid>
+
+        {values?.interestType === "floating" && (
+          <Grid item xs={12} sm={4} md={4} lg={4}>
+            <EnhancedDropDown
+              label="Benchmark"
+              name="proposalType"
+              customOptions={options}
+              onChange={(value: any) => handleChange(value, setFieldValue)}
+              domain=""
+            />
+          </Grid>
+        )}
+
+        {values?.interestType === 'fixed' && (
+          <Table sx={{ minWidth: 650 }} aria-label="fixed table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - Fixed</b></h6></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell><b>Rating Grade</b></TableCell>
+                <TableCell><b>Daily yield matrix as on</b></TableCell>
+                <TableCell><b>Tenure</b></TableCell>
+                <TableCell><b>FIMMDA yield (Benchmark)</b></TableCell>
+                <TableCell><b>FIMMDA Spread</b></TableCell>
+                <TableCell><b>SIDBI Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Minimum Interest Rate</b></TableCell>
+                <TableCell><b>TRMV Interest Rate</b></TableCell>
+                <TableCell><b>Final Rate</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell><AdvanceTextBoxField label="" name="grade" type="text" /></TableCell>
+                <TableCell><AdvanceDatePickerField label="" name="benchmarkAsOn" disableFuture={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="tenure" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="benchmarkRate" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="ratingSpread" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="sidbiSpread" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="totalSpread" type="number" disabled={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="minIntRate" type="number" disabled={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="minIntRateTrmv" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="" name="finalRate" type="number" disabled={true} /></TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        )}
+
+        {(values?.interestType === "floating" && (selectedLabel !== "3 Month T-Bill")) && (
+          <Table sx={{ minWidth: 650 }} aria-label="mclr table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={6}><h6><b>Interest Rate applicable for present proposal - {selectedLabel}</b></h6></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={{ width: '9%' }}><b>Benchmark Rate</b></TableCell>
+                <TableCell><b>Base Spread</b></TableCell>
+                <TableCell><b>Internal Score</b></TableCell>
+                <TableCell><b>Internal Score Linked Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Applicable Rate (%)</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell><AdvanceTextBoxField label="%" name="benchmarkRate" disabled type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Base Spread" name="ratingSpread" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Internal Score" name="intScore" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Internal Score Linked Spread" name="intScoreLink" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Applicable Rate (%)" name="finalRate" type="number" disabled={true} /></TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        )}
+
+        {(values?.interestType === "floating" && selectedLabel === "3 Month T-Bill") && (
+          <Table sx={{ minWidth: 650 }} aria-label="tbill table" className="mt-4">
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={10}><h6><b>Interest Rate applicable for present proposal - T-bill</b></h6></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell><b>Rating Grade</b></TableCell>
+                <TableCell><b>Benchmark as on</b></TableCell>
+                <TableCell><b>Benchmark</b></TableCell>
+                <TableCell><b>Benchmark Rate</b></TableCell>
+                <TableCell><b>Rating Spread (%)</b></TableCell>
+                <TableCell><b>SIDBI Spread</b></TableCell>
+                <TableCell><b>Total Spread</b></TableCell>
+                <TableCell><b>Minimum Interest Rate</b></TableCell>
+                <TableCell><b>TRMV Interest Rate</b></TableCell>
+                <TableCell><b>Final Rate</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell><AdvanceTextBoxField label="Rating Grade" name="grade" type="text" /></TableCell>
+                <TableCell><AdvanceDatePickerField label="Benchmark as on" name="benchmarkAsOn" disableFuture={true} onDateChange={(currentValue) => handleDateChange(currentValue)} /></TableCell>
+                <TableCell><AdvanceTextBoxField disabled value={selectedLabel} label="Benchmark" name="benchmark" type="text" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Benchmark Rate" name="benchmarkRate" type="number" disabled /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Rating Spread (%)" name="ratingSpread" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="SIDBI Spread" name="sidbiSpread" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Total Spread" name="totalSpread" type="number" disabled={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Minimum Interest Rate" name="minIntRate" type="number" disabled={true} /></TableCell>
+                <TableCell><AdvanceTextBoxField label="TRMV Interest Rate" name="minIntRateTrmv" type="number" /></TableCell>
+                <TableCell><AdvanceTextBoxField label="Final Rate" name="finalRate" type="number" disabled={true} /></TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        )}
+
+        <Button type="submit" variant="contained" color="primary" className="mt-2">Save</Button>
+      </Form>
+    );
   };
 
   return (
     <div className="wrap-inner-table mt-0">
-      <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '6%' }}><b>Sr. No.</b></TableCell>
-            <TableCell style={{ width: '20%' }}><b>Particulars</b></TableCell>
-            <TableCell><b>Remarks</b></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <TableRow>
-            <TableCell>1</TableCell>
-            <TableCell>External rating at the time of sanction</TableCell>
-            <TableCell>
-              {isLoadingSanction ? (
-                <p>Loading...</p>
-              ) : (
-                <Table sx={{ minWidth: 650 }} aria-label="sanction external ratings table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><b>Name of Rating Agency</b></TableCell>
-                      <TableCell><b>Instrument</b></TableCell>
-                      <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                      <TableCell><b>Rating</b></TableCell>
-                      <TableCell><b>Outlook</b></TableCell>
-                      <TableCell><b>Date of Rating</b></TableCell>
-                    </TableRow>
-                  </TableHead>
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize={true}
+      >
+        <InnerForm />
+      </Formik>
+
+      <Formik
+        initialValues={{
+          irValidity: memorandumData?.irValidity || null,
+          dop: memorandumData?.dop || "",
+          dopComments: memorandumData?.dopComments || "",
+          discPowers: memorandumData?.discPowers || "",
+          verticalComments: memorandumData?.verticalComments || "",
+          recommendation: memorandumData?.recommendation || "",
+          preprosalComment: memorandumData?.preprosalComment || "",
+          rateReqComment: memorandumData?.rateReqComment || "",
+          committeName: memorandumData?.committeName || ""
+        }}
+        onSubmit={handleSubmitMemorandum}
+        enableReinitialize={true}
+        validateOnChange={false}
+        validateOnBlur={true}
+      >
+        {({ values }: any) => (
+          <Form>
+            <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmitMemorandum} />
+            <Grid container spacing={2} padding={4} className='form-grid p-0'>
+              <Grid item xs={12}>
+                <Table sx={{ minWidth: 650 }} aria-label="validity table">
                   <TableBody>
-                    {sanctionRatings?.length > 0 ? (
-                      sanctionRatings.map((rating: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell>{rating.agencyName}</TableCell>
-                          <TableCell>{rating.instrument}</TableCell>
-                          <TableCell>{rating.amount}</TableCell>
-                          <TableCell>{rating.prevRating}</TableCell>
-                          <TableCell>{rating.outlook}</TableCell>
-                          <TableCell>{moment(rating.ratingDate).format("DD-MM-YYYY")}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6}>No data available</TableCell>
-                      </TableRow>
-                    )}
+                    <TableRow>
+                      <TableCell>
+                        <RichTextField label="Comments" name="preprosalComment" />
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
-              )}
-            </TableCell>
-          </TableRow>
-
-          <TableRow>
-            <TableCell>2</TableCell>
-            <TableCell>Latest External Rating</TableCell>
-            <TableCell>
-              {isLoadingPresent ? (
-                <p>Loading...</p>
-              ) : (
-                <Formik
-                  initialValues={initialValues}
-                  validationSchema={validationSchema}
-                  onSubmit={handleSubmit}
-                  enableReinitialize={true}
+              </Grid>
+              <Grid item xs={12} sx={{ mt: 2 }}>
+                <Button
+                  className="sbmtBtn mt-0 mb-3 ms-2 me-2"
+                  type="submit"
+                  variant="contained"
                 >
-                  {({ values, setFieldValue }) => (
-                    <Form>
-                      <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
-                      <FieldArray name="ratings">
-                        {({ push, remove }) => (
-                          <>
-                            <Button type="button" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
-                              variant="contained" color="primary" style={{ display: 'block' }}
-                              onClick={() => push({
-                                irfId,
-                                agencyName: "",
-                                instrument: "",
-                                amount: "",
-                                prevRating: "",
-                                outlook: "",
-                                ratingDate: null,
-                              })}
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                            <Table sx={{ minWidth: 650 }} aria-label="latest external ratings table">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell><b>Name of Rating Agency</b></TableCell>
-                                  <TableCell><b>Instrument</b></TableCell>
-                                  <TableCell><b>Amount (in ₹ crore)</b></TableCell>
-                                  <TableCell><b>Rating</b></TableCell>
-                                  <TableCell><b>Outlook</b></TableCell>
-                                  <TableCell><b>Date of Rating</b></TableCell>
-                                  <TableCell><b>Actions</b></TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {values.ratings.length > 0 ? (
-                                  values.ratings.map((rating: any, index: number) => (
-                                    <TableRow key={index}>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.agencyName`}
-                                          domain="mstr/getRatingAgency"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.instrument`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.amount`}
-                                          type="number"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <EnhancedDropDown
-                                          label=""
-                                          name={`ratings.${index}.prevRating`}
-                                          domain="mstr/getRatingCode"
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <TextBoxField
-                                          label=""
-                                          name={`ratings.${index}.outlook`}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <AdvanceDatePickerField
-                                          label=""
-                                          name={`ratings.${index}.ratingDate`}
-                                          disableFuture={true}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <IconButton
-                                          aria-label="delete"
-                                          color="error"
-                                          onClick={() => remove(index)}
-                                          disabled={values.ratings.length === 1}
-                                        >
-                                          <DeleteIcon />
-                                        </IconButton>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={7}>No data available</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                            <Grid item xs={12} sx={{ mt: 2 }}>
-                              <Button
-                                className="sbmtBtn mt-0 mb-3 ms-2 me-2"
-                                type='submit'
-                                variant="contained"> Save <CheckCircleOutlineIcon />
-                              </Button>
-                            </Grid>
-                          </>
-                        )}
-                      </FieldArray>
-                    </Form>
-                  )}
-                </Formik>
-              )}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+                  Save <CheckCircleOutlineIcon />
+                </Button>
+              </Grid>
+            </Grid>
+          </Form>
+        )}
+      </Formik>
 
       <NbfcSnackbar
         open={openSnackbar}
@@ -1270,31 +447,7 @@ const RfExternalRating = ({ irfId }: any) => {
   );
 };
 
-export default RfExternalRating;
+export default InterestRateApplicable;
 
-
-in this now Internal score – At sanction will be also like Internal score – at last review  for get that present api will work but at time of save same api will work only ratingType we pass ratingType 
-
-same do in [
-  {
-    "id": 0,
-    "irfId": "string",
-    "agencyName": "string",
-    "instrument": "string",
-    "amount": 0,
-    "ratingDate": "2025-06-24",
-    "ratingId": 0,
-    "prevRating": "string",
-    "prevRatingDate": "2025-06-24",
-    "precPrevRating": "string",
-    "precPrevDate": "2025-06-24",
-    "saveStatus": "string",
-    "ratingDesc": "string",
-    "outlook": "string",
-    "ratingType": "SANCTION"
-  }
-]
-RfExternalRating 
-same do in external rating also that External rating at the time of sanction that will be now dyanmic give me complete and proper code 
 
 
