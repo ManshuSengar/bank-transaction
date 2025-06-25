@@ -1,3 +1,144 @@
+// Install: npm install luckyexcel
+// This library is free and works with Webpack 5+
+
+import LuckyExcel from 'luckyexcel';
+
+const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+        setExcelUploadError(null);
+        setIsUploading(true);
+
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            return;
+        }
+
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            return;
+        }
+
+        const buffer = await file.arrayBuffer();
+        
+        // LuckyExcel can handle some password-protected files
+        try {
+            const luckysheetData = await new Promise((resolve, reject) => {
+                LuckyExcel.transformExcelToLucky(
+                    file,
+                    {
+                        password: 'abc' // Password option
+                    },
+                    (exportJson: any, luckysheetfile: any) => {
+                        if (exportJson.sheets && exportJson.sheets.length > 0) {
+                            resolve(exportJson);
+                        } else {
+                            reject(new Error('No sheets found in Excel file'));
+                        }
+                    }
+                );
+            });
+
+            const sheets = (luckysheetData as any).sheets;
+            
+            if (sheets.length < 3) {
+                throw new Error("Excel file must contain at least 3 sheets");
+            }
+            
+            // Extract data from sheets (index 1 and 2)
+            const lenderTlSheet = sheets[1];
+            const lenderOdSheet = sheets[2];
+            
+            const extractSheetData = (sheet: any) => {
+                if (!sheet.celldata || !Array.isArray(sheet.celldata)) {
+                    return [];
+                }
+                
+                // Convert LuckyExcel format to array format
+                const rows: any[] = [];
+                sheet.celldata.forEach((cell: any) => {
+                    const rowIndex = cell.r;
+                    const colIndex = cell.c;
+                    const value = cell.v?.v || cell.v || '';
+                    
+                    if (!rows[rowIndex]) {
+                        rows[rowIndex] = [];
+                    }
+                    rows[rowIndex][colIndex] = value;
+                });
+                
+                // Skip first 2 rows and return data
+                return rows.slice(2).filter(row => row && row.length > 0);
+            };
+            
+            const lenderTlData = extractSheetData(lenderTlSheet);
+            const lenderOdData = extractSheetData(lenderOdSheet);
+            
+            setExcelData({
+                lenderTl: lenderTlData,
+                lenderOd: lenderOdData,
+            });
+            
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Excel file uploaded successfully");
+            
+        } catch (luckyError: any) {
+            // Fallback to regular XLSX if LuckyExcel fails
+            console.warn('LuckyExcel failed, trying XLSX:', luckyError);
+            
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const sheetNames = workbook.SheetNames;
+            
+            if (sheetNames.length < 3) {
+                throw new Error("Excel file must contain at least 3 sheets");
+            }
+            
+            const lenderTlSheet = workbook.Sheets[sheetNames[1]];
+            const lenderOdSheet = workbook.Sheets[sheetNames[2]];
+            
+            const lenderTlData = XLSX.utils.sheet_to_json(lenderTlSheet, { 
+                header: 1,
+                defval: null 
+            }).slice(2);
+            
+            const lenderOdData = XLSX.utils.sheet_to_json(lenderOdSheet, { 
+                header: 1,
+                defval: null 
+            }).slice(2);
+            
+            setExcelData({
+                lenderTl: lenderTlData,
+                lenderOd: lenderOdData,
+            });
+            
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Excel file uploaded successfully");
+        }
+        
+    } catch (error: any) {
+        console.error("Excel upload error:", error);
+        setExcelUploadError(error.message || "Error parsing Excel file");
+        setOpenSnackbar(true);
+        setSeverity("error");
+        setSnackMsg("Error processing Excel file. Please check the format and password.");
+    } finally {
+        setIsUploading(false);
+        if (event.target) event.target.value = "";
+    }
+};
+
+
+
+
+
+
+
+
+
 // First, install the required package:
 // npm install xlsx-populate
 
