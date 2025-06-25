@@ -1,3 +1,92 @@
+const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+        setExcelUploadError(null);
+        setIsUploading(true);
+
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            return;
+        }
+
+        // Check file size
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            return;
+        }
+
+        const buffer = await file.arrayBuffer();
+        const workbookExcelJS = new ExcelJS.Workbook();
+        
+        // Load the password-protected Excel file
+        try {
+            await workbookExcelJS.xlsx.load(buffer, {
+                password: 'abc' // Your password here
+            });
+        } catch (passwordError) {
+            // If password fails, try without password (for backward compatibility)
+            try {
+                await workbookExcelJS.xlsx.load(buffer);
+            } catch (loadError) {
+                throw new Error("Failed to open Excel file. Please check if the file is password-protected or corrupted.");
+            }
+        }
+
+        const lenderTlSheet = workbookExcelJS.worksheets[1];
+        const lenderOdSheet = workbookExcelJS.worksheets[2];
+        
+        if (!lenderTlSheet) {
+            throw new Error("Lender TL sheet not found in the Excel file.");
+        }
+        if (!lenderOdSheet) {
+            throw new Error("Lender OD sheet not found in the Excel file.");
+        }
+
+        const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
+            const jsonData: any[] = [];
+            worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
+                jsonData.push(row.values);
+            });
+            return jsonData.slice(2); // Skip header rows
+        };
+
+        const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
+        const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
+        
+        setExcelData({
+            lenderTl: lenderTlData,
+            lenderOd: lenderOdData,
+        });
+        
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Excel file uploaded successfully");
+        
+    } catch (error: any) {
+        console.error("Excel upload error:", error);
+        setExcelUploadError(error.message || "Error parsing Excel file");
+        setOpenSnackbar(true);
+        setSeverity("error");
+        setSnackMsg("Error processing Excel file. Please check the format and password.");
+    } finally {
+        setIsUploading(false);
+        if (event.target) event.target.value = "";
+    }
+};
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { FC, memo, useState } from "react"
 import Grid from '@mui/material/Grid';
 import { Button, CircularProgress, Typography } from "@mui/material";
