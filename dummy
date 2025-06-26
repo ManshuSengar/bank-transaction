@@ -1,609 +1,413 @@
-// Install: npm install luckyexcel
-// This library is free and works with Webpack 5+
+import { FieldArray, Form, Formik } from "formik";
+import { useEffect, useRef, useState } from "react";
+import { Table, TableCell, TableHead, TableRow, TableBody, Button } from '@mui/material';
+import { connect } from 'react-redux';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import FormLoader from "../../../loader/FormLoader";
+import ErrorMessageGlobal from "../../../components/framework/ErrorMessageGlobal";
+import AutoSave from "../../../components/framework/AutoSave";
+import { useGetLabelHeaderFormDataQuery, useGetMarketDetailPortfolioFormDataQuery, useSaveMarketDetailPortfolioFormDataMutation }
+    from "../../../features/application-form/marketPositionForm";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
 
-import LuckyExcel from 'luckyexcel';
-
-const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-        setExcelUploadError(null);
-        setIsUploading(true);
-
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-            return;
-        }
-
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-            return;
-        }
-
-        const buffer = await file.arrayBuffer();
-        
-        // LuckyExcel can handle some password-protected files
-        try {
-            const luckysheetData = await new Promise((resolve, reject) => {
-                LuckyExcel.transformExcelToLucky(
-                    file,
-                    {
-                        password: 'abc' // Password option
-                    },
-                    (exportJson: any, luckysheetfile: any) => {
-                        if (exportJson.sheets && exportJson.sheets.length > 0) {
-                            resolve(exportJson);
-                        } else {
-                            reject(new Error('No sheets found in Excel file'));
-                        }
-                    }
-                );
-            });
-
-            const sheets = (luckysheetData as any).sheets;
-            
-            if (sheets.length < 3) {
-                throw new Error("Excel file must contain at least 3 sheets");
-            }
-            
-            // Extract data from sheets (index 1 and 2)
-            const lenderTlSheet = sheets[1];
-            const lenderOdSheet = sheets[2];
-            
-            const extractSheetData = (sheet: any) => {
-                if (!sheet.celldata || !Array.isArray(sheet.celldata)) {
-                    return [];
-                }
-                
-                // Convert LuckyExcel format to array format
-                const rows: any[] = [];
-                sheet.celldata.forEach((cell: any) => {
-                    const rowIndex = cell.r;
-                    const colIndex = cell.c;
-                    const value = cell.v?.v || cell.v || '';
-                    
-                    if (!rows[rowIndex]) {
-                        rows[rowIndex] = [];
-                    }
-                    rows[rowIndex][colIndex] = value;
-                });
-                
-                // Skip first 2 rows and return data
-                return rows.slice(2).filter(row => row && row.length > 0);
-            };
-            
-            const lenderTlData = extractSheetData(lenderTlSheet);
-            const lenderOdData = extractSheetData(lenderOdSheet);
-            
-            setExcelData({
-                lenderTl: lenderTlData,
-                lenderOd: lenderOdData,
-            });
-            
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Excel file uploaded successfully");
-            
-        } catch (luckyError: any) {
-            // Fallback to regular XLSX if LuckyExcel fails
-            console.warn('LuckyExcel failed, trying XLSX:', luckyError);
-            
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const sheetNames = workbook.SheetNames;
-            
-            if (sheetNames.length < 3) {
-                throw new Error("Excel file must contain at least 3 sheets");
-            }
-            
-            const lenderTlSheet = workbook.Sheets[sheetNames[1]];
-            const lenderOdSheet = workbook.Sheets[sheetNames[2]];
-            
-            const lenderTlData = XLSX.utils.sheet_to_json(lenderTlSheet, { 
-                header: 1,
-                defval: null 
-            }).slice(2);
-            
-            const lenderOdData = XLSX.utils.sheet_to_json(lenderOdSheet, { 
-                header: 1,
-                defval: null 
-            }).slice(2);
-            
-            setExcelData({
-                lenderTl: lenderTlData,
-                lenderOd: lenderOdData,
-            });
-            
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Excel file uploaded successfully");
-        }
-        
-    } catch (error: any) {
-        console.error("Excel upload error:", error);
-        setExcelUploadError(error.message || "Error parsing Excel file");
-        setOpenSnackbar(true);
-        setSeverity("error");
-        setSnackMsg("Error processing Excel file. Please check the format and password.");
-    } finally {
-        setIsUploading(false);
-        if (event.target) event.target.value = "";
-    }
-};
-
-
-
-
-
-
-
-
-
-// First, install the required package:
-// npm install xlsx-populate
-
-import XlsxPopulate from 'xlsx-populate';
-
-const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-        setExcelUploadError(null);
-        setIsUploading(true);
-
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-            return;
-        }
-
-        // Check file size
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-            return;
-        }
-
-        const buffer = await file.arrayBuffer();
-        
-        // Use xlsx-populate for password-protected files
-        let workbook;
-        try {
-            workbook = await XlsxPopulate.fromDataAsync(buffer, { password: 'abc' });
-        } catch (passwordError) {
-            // If password fails, try without password
-            try {
-                workbook = await XlsxPopulate.fromDataAsync(buffer);
-            } catch (loadError) {
-                throw new Error("Failed to open Excel file. Please check if the file is password-protected or corrupted.");
-            }
-        }
-
-        // Get sheets by index (0-based indexing)
-        const lenderTlSheet = workbook.sheet(1); // Second sheet
-        const lenderOdSheet = workbook.sheet(2); // Third sheet
-        
-        if (!lenderTlSheet) {
-            throw new Error("Lender TL sheet not found in the Excel file.");
-        }
-        if (!lenderOdSheet) {
-            throw new Error("Lender OD sheet not found in the Excel file.");
-        }
-
-        const parseSheetData = (sheet: any) => {
-            const jsonData: any[] = [];
-            const usedRange = sheet.usedRange();
-            
-            if (usedRange) {
-                const values = usedRange.value();
-                // Skip first 2 rows (headers) and return the rest
-                return values.slice(2);
-            }
-            return [];
-        };
-
-        const lenderTlData = parseSheetData(lenderTlSheet);
-        const lenderOdData = parseSheetData(lenderOdSheet);
-        
-        setExcelData({
-            lenderTl: lenderTlData,
-            lenderOd: lenderOdData,
-        });
-        
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Excel file uploaded successfully");
-        
-    } catch (error: any) {
-        console.error("Excel upload error:", error);
-        setExcelUploadError(error.message || "Error parsing Excel file");
-        setOpenSnackbar(true);
-        setSeverity("error");
-        setSnackMsg("Error processing Excel file. Please check the format and password.");
-    } finally {
-        setIsUploading(false);
-        if (event.target) event.target.value = "";
-    }
-};
-
-
-
-
-
-const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-        setExcelUploadError(null);
-        setIsUploading(true);
-
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-            return;
-        }
-
-        // Check file size
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-            return;
-        }
-
-        const buffer = await file.arrayBuffer();
-        const workbookExcelJS = new ExcelJS.Workbook();
-        
-        // Load the password-protected Excel file
-        try {
-            await workbookExcelJS.xlsx.load(buffer, {
-                password: 'abc' // Your password here
-            });
-        } catch (passwordError) {
-            // If password fails, try without password (for backward compatibility)
-            try {
-                await workbookExcelJS.xlsx.load(buffer);
-            } catch (loadError) {
-                throw new Error("Failed to open Excel file. Please check if the file is password-protected or corrupted.");
-            }
-        }
-
-        const lenderTlSheet = workbookExcelJS.worksheets[1];
-        const lenderOdSheet = workbookExcelJS.worksheets[2];
-        
-        if (!lenderTlSheet) {
-            throw new Error("Lender TL sheet not found in the Excel file.");
-        }
-        if (!lenderOdSheet) {
-            throw new Error("Lender OD sheet not found in the Excel file.");
-        }
-
-        const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
-            const jsonData: any[] = [];
-            worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
-                jsonData.push(row.values);
-            });
-            return jsonData.slice(2); // Skip header rows
-        };
-
-        const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
-        const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
-        
-        setExcelData({
-            lenderTl: lenderTlData,
-            lenderOd: lenderOdData,
-        });
-        
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Excel file uploaded successfully");
-        
-    } catch (error: any) {
-        console.error("Excel upload error:", error);
-        setExcelUploadError(error.message || "Error parsing Excel file");
-        setOpenSnackbar(true);
-        setSeverity("error");
-        setSnackMsg("Error processing Excel file. Please check the format and password.");
-    } finally {
-        setIsUploading(false);
-        if (event.target) event.target.value = "";
-    }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { FC, memo, useState } from "react"
-import Grid from '@mui/material/Grid';
-import { Button, CircularProgress, Typography } from "@mui/material";
-import { Link, useNavigate } from "react-router-dom";
-import { AiOutlineArrowLeft } from "react-icons/ai";
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import BorrowingForm from "../application-form/capitalResourceProfile/BorrowingForm";
-import EquityReserveForm from "../application-form/capitalResourceProfile/EquityReserveForm";
-import EquityInfusionForm from "../application-form/capitalResourceProfile/EquityInfusionForm";
-import LenderLimitOdForm from "../application-form/capitalResourceProfile/LenderLimitOdForm";
-import LenderTermLoanForm from "../application-form/capitalResourceProfile/LenderTermLoanForm";
-import { setApplId } from "../../features/user/userSlice";
-import { useAppDispatch } from "../../app/hooks";
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import SimCardDownloadIcon from '@mui/icons-material/SimCardDownload';
-import ExcelJS from 'exceljs';
-import * as XLSX from 'xlsx';
-import { DocumentAPI } from "../../features/application-form/documentUpload";
-import { OnlineSnackbar } from "../../components/shared/OnlineSnackbar";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UPLOADINGTEXT } from "../../utlis/constants";
-import FullScreenLoader from "../../components/common/FullScreenLoader";
-
-const CapitalResourceProfile: FC = () => {
-    const [expanded, setExpanded] = React.useState("");
+const PortfolioDetailsForm = ({ applId, excelData }: any) => {
+    const [addPortfolioDetails] = useSaveMarketDetailPortfolioFormDataMutation();
+    const { data: portfolioDetails, isLoading, isError } = useGetMarketDetailPortfolioFormDataQuery(applId);
+    const { data: labelHeader } = useGetLabelHeaderFormDataQuery(applId);
+    const [initialValues, setInitialValues] = useState<any>({ data: [] });
     const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
     const [snackMsg, setSnackMsg] = useState<any>("");
     const [severity, setSeverity] = useState<string | any>("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
+    const formikRef = useRef<any>(null);
+    const setFieldValueRef = useRef<any>(null);
 
-    const [excelData, setExcelData] = useState<any>({
-        lenderTl: [],
-        lenderOd: [],
-    });
-    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
-    const onOpenChange =
-        (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
-            setExpanded(isExpanded ? panel : false);
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [snackMsgList, setSnackMsgList] = useState<any>("");
+
+    const [snackOpen, setSnackOpen] = useState(false);
+    const [snackSeverity, setSnackSeverity] = useState<'error' | 'success' | 'info'>('error');
+    const [snackMessages, setSnackMessages] = useState<string[]>([]);
+
+
+
+    useEffect(() => {
+        if (portfolioDetails) {
+            const dataWithApplId = portfolioDetails.map((item: any) => ({
+                ...item,
+                applId,
+            }));
+            setInitialValues({ data: dataWithApplId });
+        }
+    }, [portfolioDetails, applId]);
+
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '' || value === '#DIV/0!') return 0;
+        if (typeof value === 'string') value = value.replace(/,/g, '');
+        return parseFloat(value) || 0;
+    };
+
+    const findMatchingExcelRow = (jsonData: any[], particulars: string): any[] | null => {
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (row && row[0] && row[0].toString().trim() === particulars.trim()) {
+                return row;
+            }
+        }
+        return null;
+    };
+
+    const processExcelData = (excelData: any[], formData: any[]) => {
+        let totalOffBookAUM = 0;
+        const mappedData = formData.map((row: any, index: number) => {
+            const excelRow = findMatchingExcelRow(excelData, row.particulars);
+            let newRow = { ...row, applId };
+
+            if (excelRow) {
+                const lastAuditedQuarterVal = parseExcelValue(excelRow[1]);
+                const prev2ndQuarterVal = parseExcelValue(excelRow[2]);
+                const prevQuarterVal = parseExcelValue(excelRow[3]);
+
+                newRow = {
+                    ...newRow,
+                    lastAuditedQuarterVal,
+                    prev2ndQuarterVal,
+                    prevQuarterVal,
+                    yoyGrowth: calculateYoY(lastAuditedQuarterVal, prevQuarterVal).toFixed(2),
+                    qoqGrowth: calculateQoQ(prev2ndQuarterVal, prevQuarterVal).toFixed(2),
+                };
+
+
+                if (index >= 4 && index <= 8) {
+                    totalOffBookAUM += prevQuarterVal;
+                }
+            }
+
+            return newRow;
+        });
+
+        const onBookAUM = mappedData[1]?.prevQuarterVal || 0;
+        mappedData[0] = {
+            ...mappedData[0],
+            prevQuarterVal: (onBookAUM + totalOffBookAUM).toFixed(2),
+            yoyGrowth: calculateYoY(mappedData[0].lastAuditedQuarterVal, (onBookAUM + totalOffBookAUM)).toFixed(2),
+            qoqGrowth: calculateQoQ(mappedData[0].prev2ndQuarterVal, (onBookAUM + totalOffBookAUM)).toFixed(2),
         };
 
+        mappedData[3] = {
+            ...mappedData[3],
+            prevQuarterVal: totalOffBookAUM.toFixed(2),
+            yoyGrowth: calculateYoY(mappedData[3].lastAuditedQuarterVal, totalOffBookAUM).toFixed(2),
+            qoqGrowth: calculateQoQ(mappedData[3].prev2ndQuarterVal, totalOffBookAUM).toFixed(2),
+        };
 
-    const dispatch = useAppDispatch();
-    const navigate = useNavigate();
-
-    const handleNavigate = (e: any) => {
-        e.preventDefault();
-
-        if (window.location.pathname === "/refinance/online-dashboard") {
-            localStorage.removeItem('applId');
-        }
-        dispatch(setApplId(""));
-        navigate("/refinance/online-dashboard");
+        return mappedData;
     };
-
-    const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        try {
-            setExcelUploadError(null);
-            setIsUploading(true);
-
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-                setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-                return;
-            }
-            //Check file size
-            if (file.size > MAX_FILE_SIZE_BYTES) {
-                setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-                return;
-            }
-
-            const buffer = await file.arrayBuffer();
-            const workbookExcelJS = new ExcelJS.Workbook();
-            await workbookExcelJS.xlsx.load(buffer);
-
-            const lenderTlSheet = workbookExcelJS.worksheets[1];
-            const lenderOdSheet = workbookExcelJS.worksheets[2];
-            if (!lenderTlSheet) {
-                throw new Error("Lender TL sheet not found in the Excel file.");
-            }
-            if (!lenderOdSheet) {
-                throw new Error("Lender OD sheet not found in the Excel file.");
-            }
-
-            const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
-                const jsonData: any[] = [];
-                worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
-                    jsonData.push(row.values);
-                });
-                return jsonData.slice(2);
-            };
-            const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
-            const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
-            setExcelData({
-                lenderTl: lenderTlData,
-                lenderOd: lenderOdData,
-            });
+    useEffect(() => {
+        if (excelData && excelData.length > 0 && portfolioDetails) {
+            const processedData = processExcelData(excelData, portfolioDetails);
+            setFieldValueRef.current('data', processedData);
             setOpenSnackbar(true);
             setSeverity("success");
-            setIsUploading(false);
-            setSnackMsg("Excel file uploaded successfully");
-        } catch (error: any) {
-            console.error("Excel upload error:", error);
-            setExcelUploadError(error.message || "Error parsing Excel file");
-            setOpenSnackbar(true);
-            setIsUploading(false);
-            setSeverity("error");
-            setSnackMsg("Error processing Excel file. Please check the format.");
+            setSnackMsg("Portfolio Details data imported successfully");
         }
-        finally {
-            setIsUploading(false); // Always turn off the loader
-            if (event.target) event.target.value = "";
+    }, [excelData]);
+    const calculateYoY = (lastAuditedQuarterVal: number, prevQuarterVal: number): number => {
+        return ((prevQuarterVal - lastAuditedQuarterVal) / (lastAuditedQuarterVal === 0 ? 1 : lastAuditedQuarterVal)) * 100;
+    };
+
+    const calculateQoQ = (prev2ndQuarterVal: number, prevQuarterVal: number): number => {
+        return ((prevQuarterVal - prev2ndQuarterVal) / (prev2ndQuarterVal === 0 ? 1 : prev2ndQuarterVal)) * 100;
+    };
+
+
+
+
+    const handleSubmitApis = async (values: any) => {
+        try {
+            setIsUploading(true);
+            let requestBody = values.data;
+            if (!requestBody) {
+                requestBody = values;
+            }
+            if (await addPortfolioDetails(requestBody).unwrap()) {
+                if (requestBody?.[0]?.saveStatus === '02' || requestBody?.[0]?.saveStatus === '01') {
+                    setOpenSnackbar(true);
+                    setSeverity("success");
+                    if (requestBody?.[0]?.saveStatus === '02') {
+                        setSnackMsg("Section submitted successfully");
+                    } else if (requestBody?.[0]?.saveStatus === '01') {
+                        setSnackMsg("Record saved successfully");
+                    }
+                }
+                setActionVal(null);
+                return true;
+            }
+            return false;
+        } catch (error: any) {
+            console.error(error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save: " + error?.message);
+            return false;
         }
     };
 
-    const handleExternalDownload = async () => {
-        try {
-            const response = await DocumentAPI.downloadExternalTemplate('09');
-            const downloadLink = document.createElement('a');
-            downloadLink.href = URL.createObjectURL(new Blob([response.data]));
-            downloadLink.download = 'Capital_Resource_Template.xlsx';
-            downloadLink.target = '_blank';
-            downloadLink.click();
-        } catch (error: any) {
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg('Failed to download template document.');
+    const calculation = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        let totaloffbook = 0;
+        if (currentIndex === 4 || currentIndex === 5 || currentIndex === 6 || currentIndex === 7 || currentIndex === 8) {
+            totaloffbook = calculationOffBookAUM(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        }
+        if (currentIndex !== 2) {
+            calculationAUM(setFieldValue, values, currentIndex, currentVal, currentRowId, totaloffbook);
+        }
+        calculationYoY(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        calculationQoQ(setFieldValue, values, currentIndex, currentVal, currentRowId);
+    };
+
+    const calculationYoY = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const lastAuditedQuarterVal = currentRowId === 'lastAuditedQuarterVal' ? currentVal : currentRow.lastAuditedQuarterVal;
+        const prevQuarterVal = currentRowId === 'prevQuarterVal' ? currentVal : currentRow.prevQuarterVal;
+        const calculate = ((+prevQuarterVal - +lastAuditedQuarterVal) / (+(Number(lastAuditedQuarterVal) === 0 ? 1 : lastAuditedQuarterVal))) * 100;
+        const totalPrefix = 'data.' + currentIndex + '.yoyGrowth';
+        setFieldValue(`${totalPrefix}`, calculate.toFixed(2));
+    };
+
+    const calculationQoQ = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const prev2ndQuarterVal = currentRowId === 'prev2ndQuarterVal' ? currentVal : currentRow.prev2ndQuarterVal;
+        const prevQuarterVal = currentRowId === 'prevQuarterVal' ? currentVal : currentRow.prevQuarterVal;
+        const calculate = ((+prevQuarterVal - +prev2ndQuarterVal) / (+(Number(prev2ndQuarterVal) === 0 ? 1 : prev2ndQuarterVal))) * 100;
+        const totalPrefix = 'data.' + currentIndex + '.qoqGrowth';
+        setFieldValue(`${totalPrefix}`, calculate.toFixed(2));
+    };
+
+    const calculationAUM = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string, totaloffbook: number) => {
+        let onBook = currentVal;
+        if (currentIndex !== 1) {
+            onBook = getRowValue(values, 1, currentRowId);
+        } else {
+            totaloffbook = getRowValue(values, 3, currentRowId);
+        }
+        const total = (+onBook + +totaloffbook);
+        const totalPrefix = 'data.0.' + currentRowId;
+        setFieldValue(`${totalPrefix}`, total.toFixed(2));
+
+        calculationYoY(setFieldValue, values, 0, total, currentRowId);
+        calculationQoQ(setFieldValue, values, 0, total, currentRowId);
+    };
+
+    const calculationOffBookAUM = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        let total = 0;
+        for (let i = 4; i < 9; i++) {
+            if (i !== currentIndex) {
+                total = (+total + +getRowValue(values, i, currentRowId));
+            }
+        }
+        total = (+currentVal + +total);
+        const totalPrefix = 'data.3.' + currentRowId;
+        setFieldValue(`${totalPrefix}`, total.toFixed(2));
+
+        calculationYoY(setFieldValue, values, 3, total, currentRowId);
+        calculationQoQ(setFieldValue, values, 3, total, currentRowId);
+
+        return Number(total.toFixed(2));
+    };
+
+    const getRowValue = (values: any, index: number, currentRowId: string) => {
+        if (currentRowId === 'lastAuditedQuarterVal') {
+            return values.data[index].lastAuditedQuarterVal;
+        } else if (currentRowId === 'prev2ndQuarterVal') {
+            return values.data[index].prev2ndQuarterVal;
+        } else if (currentRowId === 'prevQuarterVal') {
+            return values.data[index].prevQuarterVal;
+        } else if (currentRowId === 'yoyGrowth') {
+            return values.data[index].yoyGrowth;
+        } else if (currentRowId === 'qoqGrowth') {
+            return values.data[index].qoqGrowth;
         }
     };
-    // if (isUploading) return <div className="CrclProg"><CircularProgress /></div>;
-if (isUploading) return <FullScreenLoader open={isUploading} setOpenModal={setIsUploading} text={UPLOADINGTEXT} />;
+
+    const handleClosePop = () => {
+        setOpenSnackbar(false);
+    };
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = (values: any) => {
+        setOpenConfirmation(false);
+        handleSubmitApis(values);
+    };
+
+    const handleSubmit = async (values: any) => {
+        const finalValue = values?.data?.map((listData: any) => ({
+            ...listData,
+            saveStatus: actionVal,
+        }));
+        if (actionVal === '02') {
+            setFormData(finalValue);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(finalValue);
+        }
+        setActionVal(null);
+    };
+
+    const handleClickSetAction = (action: any) => {
+        setActionVal(action);
+    };
+
+    if (isLoading) return <FormLoader />;
+    if (isError) return <ErrorMessageGlobal status={isError} />;
+    
 
     return (
-        <div className="wrap-appraisal-area">
-            <div className="wrap-accordian">
-                <div className="wrap-tabs">
-
-                    <Grid className="top-header-container" container spacing={1} style={{ zIndex: '9', position: 'relative' }}>
-                        <Grid className="pb-2" item xs={7}>
-                            <Typography
-                                className="wrap-bold"
-                                noWrap
-                                variant="subtitle1"
-                                component="div"
-                            >
-                                <h6 className="title">Capital & Resource Profile</h6>
-                            </Typography>
-                        </Grid>
-                        <Grid
-                            className="pb-2"
-                            item
-                            xs={5}
-                            display="flex"
-                            justifyContent="end"
-                        >
-                            <Link className="in-clickable text-capitalize" to="/refinance/online-dashboard">
-                                <Button
-                                    color="inherit"
-                                    className="text-capitalize"
-                                    variant="outlined"
-                                    size="small"
-                                    onClick={handleNavigate}
-                                >
-                                    <AiOutlineArrowLeft className="me-2" /> Back
-                                </Button>
-                            </Link>
-                        </Grid>
-                    </Grid>
-
-                    <div className="up_btns">
-                        <input
-                            accept=".xlsx, .xls"
-                            id="excel-upload-button"
-                            type="file"
-                            onChange={handleExcelUpload}
-                            style={{ display: 'none' }}
-                        />
-                        <label htmlFor="excel-upload-button">
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                component="span"
-                                disabled={isUploading} // <-- Disable button while uploading
-                                style={{ marginLeft: '0px', padding: '4px 10px', textTransform: 'capitalize' }}
-                                startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <UploadFileIcon style={{ fontSize: '20px' }} />}
-                            >
-                                {isUploading ? "Uploading..." : "Upload Excel"}
-                            </Button>
-                        </label>
-
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            className="sbmtBtn dwldBtn"
-                            style={{ marginLeft: '10px' }}
-                            onClick={handleExternalDownload}
-                        >
-                            Download Sample <SimCardDownloadIcon />
-                        </Button>
-                    </div>
-                    {excelUploadError && (
-                        <div className="error-message mt-1 text-danger">
-                            {excelUploadError}
-                        </div>
-                    )}
-
-                    <div className="form-container mt-1">
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel1'} onChange={onOpenChange('panel1')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel1-content"
-                                id="panel1-header"
-                            >
-                                Borrowing Cost details
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <BorrowingForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel2'} onChange={onOpenChange('panel2')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel2-content"
-                                id="panel1-header"
-                            >
-                                Details of Lenders - TL
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderTermLoanForm excelData={excelData?.lenderTl} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel3'} onChange={onOpenChange('panel3')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel3-content"
-                                id="panel1-header"
-                            >
-                                Details of Lenders -  CC/WC/OD
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderLimitOdForm excelData={excelData?.lenderOd} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel4'} onChange={onOpenChange('panel4')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel4-content"
-                                id="panel1-header"
-                            >
-                                Details of Equity and reserves
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityReserveForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel5'} onChange={onOpenChange('panel5')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel5-content"
-                                id="panel1-header"
-                            >
-                                Equity Infusion Details
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityInfusionForm />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                    </div>
-                </div>
+        <div className="custome-form">
+            <ConfirmationAlertDialog
+                id={applId}
+                type={4}
+                open={openConfirmation}
+                handleClose={handleCloseConfirmation}
+                handleDelete={handleSubmitConfirmation}
+                values={formData}
+            />
+            <div className="wrap-inner-table mt-0">
+                <Formik
+                    initialValues={initialValues}
+                    onSubmit={handleSubmit}
+                    enableReinitialize={true}
+                    innerRef={formikRef}
+                >
+                    {({ values, setFieldValue }) => {
+                        setFieldValueRef.current = setFieldValue;
+                        return (
+                            <Form>
+                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                    {values?.data?.[0]?.saveStatus !== "02" && (
+                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} autoStyle={true} />
+                                    )}
+                                    <FieldArray name="data">
+                                        {() => (
+                                            <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell><b>Sr.No</b></TableCell>
+                                                        <TableCell><b>Particulars</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head1}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head2}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head3}</b></TableCell>
+                                                        <TableCell><b>Y-o-Y Growth (%)</b></TableCell>
+                                                        <TableCell><b>Q-o-Q Growth (%)</b></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {values?.data?.map((item: any, index: any) => (
+                                                        <TableRow key={index + 1}>
+                                                            <TableCell>
+                                                                <p>{index + 1}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <p>{item?.particulars}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.lastAuditedQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'lastAuditedQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 3}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prev2ndQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'prev2ndQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 3}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prevQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'prevQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 3}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.yoyGrowth`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'yoyGrowth')}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.qoqGrowth`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'qoqGrowth')}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        )}
+                                    </FieldArray>
+                                </fieldset>
+                                {values?.data?.[0]?.saveStatus !== "02" && (
+                                    <>
+                                        <Button
+                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('01')}
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                        <Button
+                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('02')}
+                                            variant="contained"
+                                        >
+                                            Submit <SaveAsIcon />
+                                        </Button>
+                                    </>
+                                )}
+                            </Form>
+                        )
+                    }}
+                </Formik>
             </div>
+            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
         </div>
-    )
-}
+    );
+};
 
-export default CapitalResourceProfile;
+export default connect((state: any) => ({
+    applId: state.userStore.applId,
+}))(PortfolioDetailsForm);
 
+SO BEFORE THAT on 4th row there is calculation but on 1 extra row or u can say particular add at 2 
+so new row at 2 i here so i want that older calucation will shift by one and means now come to 5th row and other then this i want on second row new calucation for coloumn 1,2,3 in row two sum will be 3,4 row in column 3,4,5 that is already like we are doing 
