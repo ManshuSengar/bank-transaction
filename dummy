@@ -29,6 +29,448 @@ const PortfolioDetailsForm = ({ applId, excelData }: any) => {
 
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [snackMsgList, setSnackMsgList] = useState<any>("");
+    const [snackOpen, setSnackOpen] = useState(false);
+    const [snackSeverity, setSnackSeverity] = useState<'error' | 'success' | 'info'>('error');
+    const [snackMessages, setSnackMessages] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (portfolioDetails) {
+            const dataWithApplId = portfolioDetails.map((item: any) => ({
+                ...item,
+                applId,
+            }));
+            setInitialValues({ data: dataWithApplId });
+        }
+    }, [portfolioDetails, applId]);
+
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '' || value === '#DIV/0!') return 0;
+        if (typeof value === 'string') value = value.replace(/,/g, '');
+        return parseFloat(value) || 0;
+    };
+
+    const findMatchingExcelRow = (jsonData: any[], particulars: string): any[] | null => {
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (row && row[0] && row[0].toString().trim() === particulars.trim()) {
+                return row;
+            }
+        }
+        return null;
+    };
+
+    const processExcelData = (excelData: any[], formData: any[]) => {
+        let totalOffBookAUM = 0;
+        const mappedData = formData.map((row: any, index: number) => {
+            const excelRow = findMatchingExcelRow(excelData, row.particulars);
+            let newRow = { ...row, applId };
+
+            if (excelRow) {
+                const lastAuditedQuarterVal = parseExcelValue(excelRow[1]);
+                const prev2ndQuarterVal = parseExcelValue(excelRow[2]);
+                const prevQuarterVal = parseExcelValue(excelRow[3]);
+
+                newRow = {
+                    ...newRow,
+                    lastAuditedQuarterVal,
+                    prev2ndQuarterVal,
+                    prevQuarterVal,
+                    yoyGrowth: calculateYoY(lastAuditedQuarterVal, prevQuarterVal).toFixed(2),
+                    qoqGrowth: calculateQoQ(prev2ndQuarterVal, prevQuarterVal).toFixed(2),
+                };
+
+                if (index >= 5 && index <= 9) {
+                    totalOffBookAUM += prevQuarterVal;
+                }
+            }
+
+            return newRow;
+        });
+
+        // Calculate sums for new row at index 2
+        const sumLastAudited = (mappedData[3]?.lastAuditedQuarterVal || 0) + (mappedData[4]?.lastAuditedQuarterVal || 0);
+        const sumPrev2ndQuarter = (mappedData[3]?.prev2ndQuarterVal || 0) + (mappedData[4]?.prev2ndQuarterVal || 0);
+        const sumPrevQuarter = (mappedData[3]?.prevQuarterVal || 0) + (mappedData[4]?.prevQuarterVal || 0);
+
+        mappedData[2] = {
+            ...mappedData[2],
+            lastAuditedQuarterVal: sumLastAudited.toFixed(2),
+            prev2ndQuarterVal: sumPrev2ndQuarter.toFixed(2),
+            prevQuarterVal: sumPrevQuarter.toFixed(2),
+            yoyGrowth: calculateYoY(sumLastAudited, sumPrevQuarter).toFixed(2),
+            qoqGrowth: calculateQoQ(sumPrev2ndQuarter, sumPrevQuarter).toFixed(2),
+        };
+
+        const onBookAUM = mappedData[1]?.prevQuarterVal || 0;
+        mappedData[0] = {
+            ...mappedData[0],
+            prevQuarterVal: (onBookAUM + totalOffBookAUM).toFixed(2),
+            yoyGrowth: calculateYoY(mappedData[0].lastAuditedQuarterVal, (onBookAUM + totalOffBookAUM)).toFixed(2),
+            qoqGrowth: calculateQoQ(mappedData[0].prev2ndQuarterVal, (onBookAUM + totalOffBookAUM)).toFixed(2),
+        };
+
+        mappedData[4] = {
+            ...mappedData[4],
+            prevQuarterVal: totalOffBookAUM.toFixed(2),
+            yoyGrowth: calculateYoY(mappedData[4].lastAuditedQuarterVal, totalOffBookAUM).toFixed(2),
+            qoqGrowth: calculateQoQ(mappedData[4].prev2ndQuarterVal, totalOffBookAUM).toFixed(2),
+        };
+
+        return mappedData;
+    };
+
+    useEffect(() => {
+        if (excelData && excelData.length > 0 && portfolioDetails) {
+            const processedData = processExcelData(excelData, portfolioDetails);
+            setFieldValueRef.current('data', processedData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Portfolio Details data imported successfully");
+        }
+    }, [excelData]);
+
+    const calculateYoY = (lastAuditedQuarterVal: number, prevQuarterVal: number): number => {
+        return ((prevQuarterVal - lastAuditedQuarterVal) / (lastAuditedQuarterVal === 0 ? 1 : lastAuditedQuarterVal)) * 100;
+    };
+
+    const calculateQoQ = (prev2ndQuarterVal: number, prevQuarterVal: number): number => {
+        return ((prevQuarterVal - prev2ndQuarterVal) / (prev2ndQuarterVal === 0 ? 1 : prev2ndQuarterVal)) * 100;
+    };
+
+    const handleSubmitApis = async (values: any) => {
+        try {
+            setIsUploading(true);
+            let requestBody = values.data;
+            if (!requestBody) {
+                requestBody = values;
+            }
+            if (await addPortfolioDetails(requestBody).unwrap()) {
+                if (requestBody?.[0]?.saveStatus === '02' || requestBody?.[0]?.saveStatus === '01') {
+                    setOpenSnackbar(true);
+                    setSeverity("success");
+                    if (requestBody?.[0]?.saveStatus === '02') {
+                        setSnackMsg("Section submitted successfully");
+                    } else if (requestBody?.[0]?.saveStatus === '01') {
+                        setSnackMsg("Record saved successfully");
+                    }
+                }
+                setActionVal(null);
+                return true;
+            }
+            return false;
+        } catch (error: any) {
+            console.error(error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save: " + error?.message);
+            return false;
+        }
+    };
+
+    const calculation = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        let totaloffbook = 0;
+        if (currentIndex === 5 || currentIndex === 6 || currentIndex === 7 || currentIndex === 8 || currentIndex === 9) {
+            totaloffbook = calculationOffBookAUM(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        }
+        if (currentIndex !== 2 && currentIndex !== 3) {
+            calculationAUM(setFieldValue, values, currentIndex, currentVal, currentRowId, totaloffbook);
+        }
+        calculationYoY(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        calculationQoQ(setFieldValue, values, currentIndex, currentVal, currentRowId);
+
+        // Update row 2 with sum of rows 3 and 4
+        if (currentIndex === 3 || currentIndex === 4) {
+            const sumLastAudited = (getRowValue(values, 3, 'lastAuditedQuarterVal') || 0) + 
+                                  (getRowValue(values, 4, 'lastAuditedQuarterVal') || 0);
+            const sumPrev2ndQuarter = (getRowValue(values, 3, 'prev2ndQuarterVal') || 0) + 
+                                    (getRowValue(values, 4, 'prev2ndQuarterVal') || 0);
+            const sumPrevQuarter = (getRowValue(values, 3, 'prevQuarterVal') || 0) + 
+                                  (getRowValue(values, 4, 'prevQuarterVal') || 0);
+
+            setFieldValue(`data.2.lastAuditedQuarterVal`, sumLastAudited.toFixed(2));
+            setFieldValue(`data.2.prev2ndQuarterVal`, sumPrev2ndQuarter.toFixed(2));
+            setFieldValue(`data.2.prevQuarterVal`, sumPrevQuarter.toFixed(2));
+            setFieldValue(`data.2.yoyGrowth`, calculateYoY(sumLastAudited, sumPrevQuarter).toFixed(2));
+            setFieldValue(`data.2.qoqGrowth`, calculateQoQ(sumPrev2ndQuarter, sumPrevQuarter).toFixed(2));
+        }
+    };
+
+    const calculationYoY = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const lastAuditedQuarterVal = currentRowId === 'lastAuditedQuarterVal' ? currentVal : currentRow.lastAuditedQuarterVal;
+        const prevQuarterVal = currentRowId === 'prevQuarterVal' ? currentVal : currentRow.prevQuarterVal;
+        const calculate = ((+prevQuarterVal - +lastAuditedQuarterVal) / (+(Number(lastAuditedQuarterVal) === 0 ? 1 : lastAuditedQuarterVal))) * 100;
+        const totalPrefix = 'data.' + currentIndex + '.yoyGrowth';
+        setFieldValue(`${totalPrefix}`, calculate.toFixed(2));
+    };
+
+    const calculationQoQ = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const prev2ndQuarterVal = currentRowId === 'prev2ndQuarterVal' ? currentVal : currentRow.prev2ndQuarterVal;
+        const prevQuarterVal = currentRowId === 'prevQuarterVal' ? currentVal : currentRow.prevQuarterVal;
+        const calculate = ((+prevQuarterVal - +prev2ndQuarterVal) / (+(Number(prev2ndQuarterVal) === 0 ? 1 : prev2ndQuarterVal))) * 100;
+        const totalPrefix = 'data.' + currentIndex + '.qoqGrowth';
+        setFieldValue(`${totalPrefix}`, calculate.toFixed(2));
+    };
+
+    const calculationAUM = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string, totaloffbook: number) => {
+        let onBook = currentVal;
+        if (currentIndex !== 1) {
+            onBook = getRowValue(values, 1, currentRowId);
+        } else {
+            totaloffbook = getRowValue(values, 4, currentRowId);
+        }
+        const total = (+onBook + +totaloffbook);
+        const totalPrefix = 'data.0.' + currentRowId;
+        setFieldValue(`${totalPrefix}`, total.toFixed(2));
+
+        calculationYoY(setFieldValue, values, 0, total, currentRowId);
+        calculationQoQ(setFieldValue, values, 0, total, currentRowId);
+    };
+
+    const calculationOffBookAUM = (setFieldValue: any, values: any, currentIndex: number, currentVal: number, currentRowId: string) => {
+        let total = 0;
+        for (let i = 5; i < 10; i++) {
+            if (i !== currentIndex) {
+                total = (+total + +getRowValue(values, i, currentRowId));
+            }
+        }
+        total = (+currentVal + +total);
+        const totalPrefix = 'data.4.' + currentRowId;
+        setFieldValue(`${totalPrefix}`, total.toFixed(2));
+
+        calculationYoY(setFieldValue, values, 4, total, currentRowId);
+        calculationQoQ(setFieldValue, values, 4, total, currentRowId);
+
+        return Number(total.toFixed(2));
+    };
+
+    const getRowValue = (values: any, index: number, currentRowId: string) => {
+        if (currentRowId === 'lastAuditedQuarterVal') {
+            return values.data[index].lastAuditedQuarterVal;
+        } else if (currentRowId === 'prev2ndQuarterVal') {
+            return values.data[index].prev2ndQuarterVal;
+        } else if (currentRowId === 'prevQuarterVal') {
+            return values.data[index].prevQuarterVal;
+        } else if (currentRowId === 'yoyGrowth') {
+            return values.data[index].yoyGrowth;
+        } else if (currentRowId === 'qoqGrowth') {
+            return values.data[index].qoqGrowth;
+        }
+    };
+
+    const handleClosePop = () => {
+        setOpenSnackbar(false);
+    };
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = (values: any) => {
+        setOpenConfirmation(false);
+        handleSubmitApis(values);
+    };
+
+    const handleSubmit = async (values: any) => {
+        const finalValue = values?.data?.map((listData: any) => ({
+            ...listData,
+            saveStatus: actionVal,
+        }));
+        if (actionVal === '02') {
+            setFormData(finalValue);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(finalValue);
+        }
+        setActionVal(null);
+    };
+
+    const handleClickSetAction = (action: any) => {
+        setActionVal(action);
+    };
+
+    if (isLoading) return <FormLoader />;
+    if (isError) return <ErrorMessageGlobal status={isError} />;
+    
+    return (
+        <div className="custome-form">
+            <ConfirmationAlertDialog
+                id={applId}
+                type={4}
+                open={openConfirmation}
+                handleClose={handleCloseConfirmation}
+                handleDelete={handleSubmitConfirmation}
+                values={formData}
+            />
+            <div className="wrap-inner-table mt-0">
+                <Formik
+                    initialValues={initialValues}
+                    onSubmit={handleSubmit}
+                    enableReinitialize={true}
+                    innerRef={formikRef}
+                >
+                    {({ values, setFieldValue }) => {
+                        setFieldValueRef.current = setFieldValue;
+                        return (
+                            <Form>
+                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                    {values?.data?.[0]?.saveStatus !== "02" && (
+                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} autoStyle={true} />
+                                    )}
+                                    <FieldArray name="data">
+                                        {() => (
+                                            <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell><b>Sr.No</b></TableCell>
+                                                        <TableCell><b>Particulars</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head1}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head2}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head3}</b></TableCell>
+                                                        <TableCell><b>Y-o-Y Growth (%)</b></TableCell>
+                                                        <TableCell><b>Q-o-Q Growth (%)</b></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {values?.data?.map((item: any, index: any) => (
+                                                        <TableRow key={index + 1}>
+                                                            <TableCell>
+                                                                <p>{index + 1}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <p>{item?.particulars}</p>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.lastAuditedQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'lastAuditedQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 2 || index === 4}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prev2ndQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'prev2ndQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 2 || index === 4}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prevQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'prevQuarterVal')}
+                                                                    type={'number'}
+                                                                    disabled={index === 0 || index === 2 || index === 4}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.yoyGrowth`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'yoyGrowth')}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.qoqGrowth`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        calculation(setFieldValue, values, index, currentVal, 'qoqGrowth')}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        )}
+                                    </FieldArray>
+                                </fieldset>
+                                {values?.data?.[0]?.saveStatus !== "02" && (
+                                    <>
+                                        <Button
+                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('01')}
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                        <Button
+                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('02')}
+                                            variant="contained"
+                                        >
+                                            Submit <SaveAsIcon />
+                                        </Button>
+                                    </>
+                                )}
+                            </Form>
+                        )
+                    }}
+                </Formik>
+            </div>
+            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
+        </div>
+    );
+};
+
+export default connect((state: any) => ({
+    applId: state.userStore.applId,
+}))(PortfolioDetailsForm);
+
+
+
+
+
+
+
+
+import { FieldArray, Form, Formik } from "formik";
+import { useEffect, useRef, useState } from "react";
+import { Table, TableCell, TableHead, TableRow, TableBody, Button } from '@mui/material';
+import { connect } from 'react-redux';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import FormLoader from "../../../loader/FormLoader";
+import ErrorMessageGlobal from "../../../components/framework/ErrorMessageGlobal";
+import AutoSave from "../../../components/framework/AutoSave";
+import { useGetLabelHeaderFormDataQuery, useGetMarketDetailPortfolioFormDataQuery, useSaveMarketDetailPortfolioFormDataMutation }
+    from "../../../features/application-form/marketPositionForm";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+
+const PortfolioDetailsForm = ({ applId, excelData }: any) => {
+    const [addPortfolioDetails] = useSaveMarketDetailPortfolioFormDataMutation();
+    const { data: portfolioDetails, isLoading, isError } = useGetMarketDetailPortfolioFormDataQuery(applId);
+    const { data: labelHeader } = useGetLabelHeaderFormDataQuery(applId);
+    const [initialValues, setInitialValues] = useState<any>({ data: [] });
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
+    const formikRef = useRef<any>(null);
+    const setFieldValueRef = useRef<any>(null);
+
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [snackMsgList, setSnackMsgList] = useState<any>("");
 
     const [snackOpen, setSnackOpen] = useState(false);
     const [snackSeverity, setSnackSeverity] = useState<'error' | 'success' | 'info'>('error');
