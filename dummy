@@ -27,6 +27,330 @@ const PortfolioDetailsForm = ({ applId, excelData }: any) => {
     const formikRef = useRef<any>(null);
     const setFieldValueRef = useRef<any>(null);
 
+    const calculatedIndices = [0, 1, 4];
+    const calculatedRowsDependencies = {
+        1: [2, 3],          // Index 1 is sum of indices 2 and 3
+        4: [5, 6, 7, 8],    // Index 4 is sum of indices 5 to 8 (shifted from index 3)
+        0: [1, 2, 3, 4, 5]  // Index 0 is sum of indices 1, 2, 3, 4, and 5
+    };
+
+    useEffect(() => {
+        if (portfolioDetails) {
+            const dataWithApplId = portfolioDetails.map((item: any) => ({
+                ...item,
+                applId,
+            }));
+            setInitialValues({ data: dataWithApplId });
+        }
+    }, [portfolioDetails, applId]);
+
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '' || value === '#DIV/0!') return 0;
+        if (typeof value === 'string') value = value.replace(/,/g, '');
+        return parseFloat(value) || 0;
+    };
+
+    const findMatchingExcelRow = (jsonData: any[], particulars: string): any[] | null => {
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (row && row[0] && row[0].toString().trim()    return row;
+        }
+        return null;
+    };
+
+    const processExcelData = (excelData: any[], formData: any[]) => {
+        let mappedData = formData.map((row: any, index: number) => {
+            const excelRow = findMatchingExcelRow(excelData, row.particulars);
+            if (excelRow) {
+                return {
+                    ...row,
+                    lastAuditedQuarterVal: parseExcelValue(excelRow[1]),
+                    prev2ndQuarterVal: parseExcelValue(excelRow[2]),
+                    prevQuarterVal: parseExcelValue(excelRow[3]),
+                };
+            }
+            return row;
+        });
+
+        // Recalculate calculated rows
+        ['lastAuditedQuarterVal', 'prev2ndQuarterVal', 'prevQuarterVal'].forEach(col => {
+            const sum1 = calculatedRowsDependencies[1].reduce((acc, i) => acc + Number(mappedData[i][col] || 0), 0);
+            mappedData[1] = { ...mappedData[1], [col]: sum1.toFixed(2) };
+
+            const sum4 = calculatedRowsDependencies[4].reduce((acc, i) => acc + Number(mappedData[i][col] || 0), 0);
+            mappedData[4] = { ...mappedData[4], [col]: sum4.toFixed(2) };
+
+            const sum0 = calculatedRowsDependencies[0].reduce((acc, i) => acc + Number(mappedData[i][col] || 0), 0);
+            mappedData[0] = { ...mappedData[0], [col]: sum0.to OBSOLETEFixed(2) };
+        });
+
+        // Calculate growth for all rows
+        mappedData = mappedData.map(row => {
+            const lastAuditedQuarterVal = Number(row.lastAuditedQuarterVal) || 0;
+            const prev2ndQuarterVal = Number(row.prev2ndQuarterVal) || 0;
+            const prevQuarterVal = Number(row.prevQuarterVal) || 0;
+            const yoyGrowth = ((prevQuarterVal - lastAuditedQuarterVal) / (lastAuditedQuarterVal === 0 ? 1 : lastAuditedQuarterVal) * 100).toFixed(2);
+            const qoqGrowth = ((prevQuarterVal - prev2ndQuarterVal) / (prev2ndQuarterVal === 0 ? 1 : prev2ndQuarterVal) * 100).toFixed(2);
+            return { ...row, yoyGrowth, qoqGrowth };
+        });
+
+        return mappedData;
+    };
+
+    useEffect(() => {
+        if (excelData && excelData.length > 0 && portfolioDetails) {
+            const processedData = processExcelData(excelData, portfolioDetails);
+            setFieldValueRef.current('data', processedData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Portfolio Details data imported successfully");
+        }
+    }, [excelData]);
+
+    const handleSubmitApis = async (values: any) => {
+        try {
+            let requestBody = values.data || values;
+            if (await addPortfolioDetails(requestBody).unwrap()) {
+                if (requestBody?.[0]?.saveStatus === '02' || requestBody?.[0]?.saveStatus === '01') {
+                    setOpenSnackbar(true);
+                    setSeverity("success");
+                    setSnackMsg(requestBody?.[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
+                }
+                setActionVal(null);
+                return true;
+            }
+            return false;
+        } catch (error: any) {
+            console.error(error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save: " + error?.message);
+            return false;
+        }
+    };
+
+    const updateCalculatedRow = (calcIndex: number, col: string, setFieldValue: any, values: any) => {
+        const deps = calculatedRowsDependencies[calcIndex];
+        if (deps) {
+            const sum = deps.reduce((acc, depIndex) => acc + Number(values.data[depIndex][col] || 0), 0);
+            setFieldValue(`data.${calcIndex}.${col}`, sum.toFixed(2));
+        }
+    };
+
+    const handleFieldChange = (index: number, col: string, value: any, setFieldValue: any, values: any) => {
+        setFieldValue(`data.${index}.${col}`, value);
+
+        Object.keys(calculatedRowsDependencies).forEach(calcIndex => {
+            if (calculatedRowsDependencies[calcIndex].includes(index)) {
+                updateCalculatedRow(Number(calcIndex), col, setFieldValue, values);
+                Object.keys(calculatedRowsDependencies).forEach(parentCalcIndex => {
+                    if (calculatedRowsDependencies[parentCalcIndex].includes(Number(calcIndex))) {
+                        updateCalculatedRow(Number(parentCalcIndex), col, setFieldValue, values);
+                    }
+                });
+            }
+        });
+
+        values.data.forEach((_: any, idx: number) => {
+            const row = values.data[idx];
+            const lastAuditedQuarterVal = Number(row.lastAuditedQuarterVal) || 0;
+            const prev2ndQuarterVal = Number(row.prev2ndQuarterVal) || 0;
+            const prevQuarterVal = Number(row.prevQuarterVal) || 0;
+            setFieldValue(`data.${idx}.yoyGrowth`, ((prevQuarterVal - lastAuditedQuarterVal) / (lastAuditedQuarterVal === 0 ? 1 : lastAuditedQuarterVal) * 100).toFixed(2));
+            setFieldValue(`data.${idx}.qoqGrowth`, ((prevQuarterVal - prev2ndQuarterVal) / (prev2ndQuarterVal === 0 ? 1 : prev2ndQuarterVal) * 100).toFixed(2));
+        });
+    };
+
+    const handleClosePop = () => setOpenSnackbar(false);
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+    const handleSubmitConfirmation = (values: any) => {
+        setOpenConfirmation(false);
+        handleSubmitApis(values);
+    };
+    const handleSubmit = async (values: any) => {
+        const finalValue = values.data.map((listData: any) => ({
+            ...listData,
+            saveStatus: actionVal,
+        }));
+        if (actionVal === '02') {
+            setFormData(finalValue);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(finalValue);
+        }
+        setActionVal(null);
+    };
+    const handleClickSetAction = (action: any) => setActionVal(action);
+
+    if (isLoading) return <FormLoader />;
+    if (isError) return <ErrorMessageGlobal status={isError} />;
+
+    return (
+        <div className="custome-form">
+            <ConfirmationAlertDialog
+                id={applId}
+                type={4}
+                open={openConfirmation}
+                handleClose={handleCloseConfirmation}
+                handleDelete={handleSubmitConfirmation}
+                values={formData}
+            />
+            <div className="wrap-inner-table mt-0">
+                <Formik
+                    initialValues={initialValues}
+                    onSubmit={handleSubmit}
+                    enableReinitialize={true}
+                    innerRef={formikRef}
+                >
+                    {({ values, setFieldValue }) => {
+                        setFieldValueRef.current = setFieldValue;
+                        return (
+                            <Form>
+                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                    {values?.data?.[0]?.saveStatus !== "02" && (
+                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} autoStyle={true} />
+                                    )}
+                                    <FieldArray name="data">
+                                        {() => (
+                                            <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell><b>Sr.No</b></TableCell>
+                                                        <TableCell><b>Particulars</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head1}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head2}</b></TableCell>
+                                                        <TableCell><b>{labelHeader?.head3}</b></TableCell>
+                                                        <TableCell><b>Y-o-Y Growth (%)</b></TableCell>
+                                                        <TableCell><b>Q-o-Q Growth (%)</b></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {values?.data?.map((item: any, index: any) => (
+                                                        <TableRow key={index + 1}>
+                                                            <TableCell>{index + 1}</TableCell>
+                                                            <TableCell>{item?.particulars}</TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.lastAuditedQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        handleFieldChange(index, 'lastAuditedQuarterVal', currentVal, setFieldValue, values)}
+                                                                    type={'number'}
+                                                                    disabled={calculatedIndices.includes(index)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prev2ndQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        handleFieldChange(index, 'prev2ndQuarterVal', currentVal, setFieldValue, values)}
+                                                                    type={'number'}
+                                                                    disabled={calculatedIndices.includes(index)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.prevQuarterVal`}
+                                                                    label={""}
+                                                                    onCustomChange={(currentVal: any) =>
+                                                                        handleFieldChange(index, 'prevQuarterVal', currentVal, setFieldValue, values)}
+                                                                    type={'number'}
+                                                                    disabled={calculatedIndices.includes(index)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.yoyGrowth`}
+                                                                    label={""}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <AdvanceTextBoxField
+                                                                    name={`data.${index}.qoqGrowth`}
+                                                                    label={""}
+                                                                    type={'number'}
+                                                                    disabled={true}
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        )}
+                                    </FieldArray>
+                                </fieldset>
+                                {values?.data?.[0]?.saveStatus !== "02" && (
+                                    <>
+                                        <Button
+                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('01')}
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                        <Button
+                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('02')}
+                                            variant="contained"
+                                        >
+                                            Submit <SaveAsIcon />
+                                        </Button>
+                                    </>
+                                )}
+                            </Form>
+                        );
+                    }}
+                </Formik>
+            </div>
+            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
+        </div>
+    );
+};
+
+export default connect((state: any) => ({
+    applId: state.userStore.applId,
+}))(PortfolioDetailsForm);
+
+
+
+
+import { FieldArray, Form, Formik } from "formik";
+import { useEffect, useRef, useState } from "react";
+import { Table, TableCell, TableHead, TableRow, TableBody, Button } from '@mui/material';
+import { connect } from 'react-redux';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import FormLoader from "../../../loader/FormLoader";
+import ErrorMessageGlobal from "../../../components/framework/ErrorMessageGlobal";
+import AutoSave from "../../../components/framework/AutoSave";
+import { useGetLabelHeaderFormDataQuery, useGetMarketDetailPortfolioFormDataQuery, useSaveMarketDetailPortfolioFormDataMutation }
+    from "../../../features/application-form/marketPositionForm";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+
+const PortfolioDetailsForm = ({ applId, excelData }: any) => {
+    const [addPortfolioDetails] = useSaveMarketDetailPortfolioFormDataMutation();
+    const { data: portfolioDetails, isLoading, isError } = useGetMarketDetailPortfolioFormDataQuery(applId);
+    const { data: labelHeader } = useGetLabelHeaderFormDataQuery(applId);
+    const [initialValues, setInitialValues] = useState<any>({ data: [] });
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
+    const formikRef = useRef<any>(null);
+    const setFieldValueRef = useRef<any>(null);
+
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [snackMsgList, setSnackMsgList] = useState<any>("");
 
