@@ -45,6 +45,747 @@ const CalculatedFields = () => {
       const instrestRateTypeValue: any = +values?.benchmarkRate && +values?.spread ? +values?.benchmarkRate + +values?.spread : 0;
       setFieldValue('interestRate', instrestRateTypeValue.toFixed(2));
       setFieldValue('fiRate', instrestRateTypeValue.toFixed(2));
+      
+      // Calculate spread = creditSpread + riskPremium - discretion + interestPremium
+      const spreadValue: any = (+values?.creditSpread || 0) + 
+                             (+values?.riskPremium || 0) - 
+                             (+values?.discretion || 0) + 
+                             (+values?.interestPremium || 0);
+      setFieldValue('spread', spreadValue.toFixed(2));
+    }
+  }, [values?.creditSpread, values?.riskPremium, values?.discretion, values?.interestPremium, values?.benchmarkRate, values?.interestRateType, setFieldValue]);
+  return null;
+};
+
+const FacilityDetails = ({ applId, currentModuleStatus, compExposureData }: any) => {
+  const [openAlertSnackbar, setOpenAlertSnackbar] = useState<boolean>(false);
+  const [alertMessage, setAlertMessage] = useState<string>('');
+  const [alertSeverity, setAlertSeverity] = useState<AlertColor>('success');
+  const textFieldRef = useRef<HTMLInputElement>(null);
+  const productId = sessionStorage.getItem("productId");
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<any>("");
+  const [severity, setSeverity] = useState<string | any>("success");
+  const [actionVal, setActionVal] = useState<any>("");
+  const [minTenure, setMinTenure] = useState(0);
+  const [maxTenure, setMaxTenure] = useState(0);
+  const [maxMoratorium, setMaxMoratorium] = useState(0);
+  const [minMoratorium, setMinMoratorium] = useState(0);
+
+  const { data: schemeValueData } = useGetProdSchemesQuery(productId as any, { refetchOnMountOrArgChange: true });
+  const [addFacilityDetails] = useSaveFacilityDetailsMutation();
+  const { data: facilityData, isLoading } = useGetFacilityDetailsByIdQuery(applId, { refetchOnMountOrArgChange: true });
+  const { data: committe } = useGetAllCommitteeMastersQuery("");
+  const [getBenchmarkRate] = useLazyGetBenchmarkRateByRateIdQuery();
+
+  const handleClickSetAction = (action: any) => {
+    setActionVal(action);
+  };
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  const handleSubmit = async (values: any) => {
+    try {
+      values.interestRate = +values.interestRate;
+      values.tenure = +values.tenure;
+      values.moratorium = +values.moratorium;
+      values.benchmarkRate = +values.benchmarkRate;
+      values.spread = +values.spread;
+      values.dop = String(values.dop);
+      values.upfrontFeeText = String(values.upfrontFeeText);
+      values.fiRate = +values.fiRate
+      if (await addFacilityDetails(values).unwrap()) {
+        if (actionVal === '01') {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("Record saved successfully");
+          return false;
+        }
+        setActionVal(null);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Error saving facility details:", err);
+    }
+  };
+
+  const handleCloseSnackbar = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason == "clickaway") {
+      return
+    }
+    setOpenAlertSnackbar(false)
+  }
+
+  useEffect(() => {
+    if (textFieldRef.current) {
+      textFieldRef.current.focus();
+    }
+  }, []);
+
+  const [fundMaster, setFundMaster] = useState<any>([]);
+
+  const getFacilityMaster = async (schemeCode: any) => {
+    const data = await FacilityFormAPI.getFacilityApi(schemeCode);
+    setFundMaster(data?.data);
+  }
+
+  const getSchemeDetails = async (schemeCode: any) => {
+    const { data: schemeData } = await FacilityFormAPI.getSchemeDetails(schemeCode);
+    setMaxTenure(schemeData?.data?.schemeMaxTenure);
+    setMinTenure(schemeData?.data?.schemeMINTenure);
+    setMaxMoratorium(schemeData?.data?.schemeMAXMoratorium);
+    setMinMoratorium(schemeData?.data?.schemeMINMoratorium);
+  }
+
+  useEffect(() => {
+    if (facilityData?.scheme) {
+      getFacilityMaster(facilityData?.scheme);
+      getSchemeDetails(facilityData?.scheme);
+    }
+  }, [facilityData])
+
+  const validationSchema = Yup.object().shape({
+    loanAmtProposed: Yup.string().required("Loan Amount Proposed is required")
+      .test('positive', 'Amount must be greater than 0', val => val ? Number(val) > 0 : false),
+    tenure: Yup.string().required("Tenure is required")
+      .test('positive', 'Tenure must be greater than 0', val => val ? Number(val) > 0 : false),
+  });
+
+  const loginData: any = Cookies.get("user") ?? null;
+  const loginCookiesData: any = JSON.parse(loginData);
+
+  if (isLoading) return <FormLoader />;
+
+  return (
+    <div className="custome-form">
+      <Formik
+        initialValues={{ ...facilityData, applId }}
+        onSubmit={handleSubmit}
+        validationSchema={validationSchema}
+        validateOnChange={true}
+        validateOnBlur={true}
+        enableReinitialize={true}
+      >
+        {({ values, setFieldValue, handleChange }) => {
+
+          const handleRateNameChange = (e: any) => {
+            const scheme = e.target.value;
+            setFieldValue('scheme', scheme);
+            getFacilityMaster(scheme);
+            getSchemeDetails(scheme);
+          }
+          const handlePercentage = (percentageValue: number) => {
+            if (percentageValue) {
+              const percentageCalVal = Number(((facilityData?.loanAmtProposed * percentageValue) / 100) * 10000000);
+              setFieldValue('upfrontFeeText', percentageCalVal.toFixed(2));
+            } else {
+              setFieldValue('upfrontFeeText', 0)
+            }
+          }
+
+          const handleAbsolute = (absoluteValue: number) => {
+            if (absoluteValue) {
+              setFieldValue('upfrontFeeText', absoluteValue);
+            } else {
+              setFieldValue('upfrontFeeText', 0);
+            }
+          }
+
+          const handleCalTotalExposure = (currentVal: number) => {
+            if (Number(currentVal) > 10000) {
+              setFieldValue('loanAmtProposed', 10000);
+              setOpenSnackbar(true);
+              setSeverity("error");
+              setSnackMsg("Loan Amount Proposed can not be > 10000");
+              return;
+            }
+            const tentativeExposureVal = facilityData?.tentativeExposure === null ? 0 : facilityData?.tentativeExposure;
+            const totalExposureVal = Number(+currentVal + +tentativeExposureVal);
+            setFieldValue('totalExposure', totalExposureVal);
+
+            if (compExposureData?.connLendingFlag === 'N') {
+              if (totalExposureVal <= 300) {
+                setFieldValue('dop', 1);
+              } else if (totalExposureVal > 300 && totalExposureVal <= 750) {
+                setFieldValue('dop', 2);
+              } else if (totalExposureVal > 750) {
+                setFieldValue('dop', 3);
+              }
+            } else if (compExposureData?.connLendingFlag === 'Y') {
+              setFieldValue('dop', 3);
+            }
+          }
+
+          const handleCalFII = (currentVal: number) => {
+            setFieldValue('fiRate', currentVal);
+          }
+
+          const handleMoratoriumChecks = (moratorium: number) => {
+            if (Number(moratorium) < 0) {
+              setAlertMessage('Value cannot be less than 0.');
+              setAlertSeverity('error');
+              setOpenAlertSnackbar(true);
+            }
+            else if (Number(moratorium) >= minMoratorium && Number(moratorium) <= maxMoratorium) {
+              setAlertMessage('Value is within the allowed range.');
+              setAlertSeverity('success');
+              setOpenAlertSnackbar(true);
+            } else if (Number(moratorium) > maxMoratorium) {
+              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxMoratorium + '.');
+              setAlertSeverity('error');
+              setOpenAlertSnackbar(true);
+              setFieldValue('moratorium', maxMoratorium);
+            }
+          }
+
+          const handleTenureChecks = (tenure: number) => {
+            if (Number(tenure) < 0) {
+              setAlertMessage('Value cannot be less than 0.');
+              setAlertSeverity('error');
+              setOpenAlertSnackbar(true);
+            }
+            else if (Number(tenure) >= minTenure && Number(tenure) <= maxTenure) {
+              setAlertMessage('Value is within the allowed range.');
+              setAlertSeverity('success');
+              setOpenAlertSnackbar(true);
+            } else if (Number(tenure) > maxTenure) {
+              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxTenure + '.');
+              setAlertSeverity('error');
+              setOpenAlertSnackbar(true);
+            }
+          }
+
+          const handleChangeBenchmark = async (rateId: any) => {
+            const benchData = await getBenchmarkRate(rateId).unwrap();
+            if (benchData) {
+              setFieldValue('benchmarkRate', benchData?.BPM_PLR);
+            }
+          }
+
+          return (
+            <Form>
+              <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                || loginCookiesData?.regType === "Checker"}>
+                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                  && loginCookiesData?.regType === "Maker" &&
+                  <RemoteViewsAutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+                }
+                <CalculatedFields />
+                <Grid spacing={2} padding={4} container className="form-grid">
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <AdvanceTextBoxField
+                      type="number"
+                      name="loanAmtProposed"
+                      label="Loan Amount Proposed"
+                      value={values?.loanAmtProposed}
+                      onCustomChange={(currentVal: any) => handleCalTotalExposure(currentVal)}
+                      endAdornment={
+                        <InputAdornment position="end">
+                          (In ₹ crore)
+                        </InputAdornment>
+                      }
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <AdvanceDatePickerField
+                      label="Validity period of sanction"
+                      name="drawlValidity"
+                      disablePast={true}
+                      onChange={(date: Date) => {
+                        setFieldValue('drawlValidity', moment(date).format("DD-MM-YYYY"));
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Scheme: *
+                      </InputLabel>
+                      <Select
+                        label="Scheme: *"
+                        name="scheme"
+                        onChange={(event) => handleRateNameChange(event)}
+                        value={values?.scheme}
+                      >
+                        {
+                          schemeValueData?.map((item: any, index: number) => (
+                            <MenuItem key={item?.schCd} value={item?.schCd}>{item?.schLongName}</MenuItem>
+                          ))
+                        }
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Fund: *
+                      </InputLabel>
+                      <Select
+                        label="Fund: *"
+                        name="fund"
+                        value={values?.fund}
+                        onChange={handleChange}
+                        disabled={loginCookiesData?.regType !== "Maker"}
+                      >
+                        {
+                          fundMaster?.data?.map((item: any) => (
+                            <MenuItem key={item?.fundCode} value={item?.fundCode}>{item?.fundDesc}</MenuItem>
+                          ))
+                        }
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <AdvanceTextBoxField
+                      type="text"
+                      name="totalExposure"
+                      label="Total Exposure"
+                      value={values?.totalExposure}
+                      disabled
+                      endAdornment={
+                        <InputAdornment position="end">
+                          (In ₹ crore)
+                        </InputAdornment>
+                      }
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <AdvanceTextBoxField
+                      name="tenure"
+                      label="Tenure (In months)"
+                      type="number"
+                      onCustomChange={(currentVal: any) => handleTenureChecks(currentVal)}
+                      disabled={loginCookiesData?.regType !== "Maker"}
+                    />
+                  </Grid>
+
+                  {+values?.tenure > maxTenure && (
+                    <Grid item xs={12} sm={12} md={12} lg={12}>
+                      <label>
+                        <Typography className='text-end-- text-warning-- mb-1 fw-bold' variant="body2">
+                          <Alert severity="info" style={{ fontSize: '12px', padding: '2px 10px' }}>
+                            <b>Note:</b> Comments if tenure does not fall under scheme parameters
+                          </Alert>
+                        </Typography>
+                      </label>
+
+                      <TextAreaField label="comments"
+                        name="tenureCommt" />
+                    </Grid>
+                  )
+                  }
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <AdvanceTextBoxField label="Moratorium (In months)"
+                      name="moratorium" type="number" allowDecimal={false}
+                      onCustomChange={(currentVal: any) => handleMoratoriumChecks(currentVal)} />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Repayment frequency
+                      </InputLabel>
+                      <Select
+                        label="Repayment frequency"
+                        name="repaymentFrequency"
+                        value={values?.repaymentFrequency}
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="M">Monthly</MenuItem>
+                        <MenuItem value="Q">Quarterly</MenuItem>
+                        <MenuItem value="H">Half-yearly</MenuItem>
+                        <MenuItem value="Y">Yearly</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Interest rate Type
+                      </InputLabel>
+                      <Select
+                        label="Interest rate Type"
+                        name="interestRateType"
+                        value={values?.interestRateType}
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="fixed">Fixed</MenuItem>
+                        <MenuItem value="floating">Floating</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+
+                  {
+                    values?.interestRateType === "fixed" ? (<></>) : (
+                      <>
+                        <Grid item xs={12} sm={4} md={4} lg={4}>
+                          <EnhancedDropDown
+                            label="Benchmark"
+                            name="benchmark"
+                            domain="mstr/getBenchMark"
+                            disabled={values?.interestRateType === "fixed"}
+                            onChange={(currentVal: any) => handleChangeBenchmark(currentVal)}
+                          />
+
+                        </Grid>
+                        <Grid item xs={12} sm={4} md={4} lg={4}>
+                          <AdvanceTextBoxField
+                            className="disabled-inputs-lbl"
+                            label="Benchmark Rate"
+                            name="benchmarkRate"
+                            type="number"
+                            disabled={values?.interestRateType === "fixed"}
+                          />
+                        </Grid>
+                      </>
+                    )
+                  }
+
+                  {values?.interestRateType === "fixed" ? (<></>) : (
+                    <>
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <AdvanceTextBoxField
+                          label="Interest rate"
+                          name="interestRate"
+                          type="number"
+                        />
+
+                      </Grid>
+
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <AdvanceTextBoxField
+                          label="Credit Spread"
+                          name="creditSpread"
+                          type="number"
+                        />
+
+                      </Grid>
+
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <AdvanceTextBoxField
+                          label="Risk Premium"
+                          name="riskPremium"
+                          type="number"
+                        />
+
+                      </Grid>
+
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <AdvanceTextBoxField
+                          label="Discretion"
+                          name="discretion"
+                          type="number"
+                        />
+
+                      </Grid>
+
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <AdvanceTextBoxField
+                          label="Interest Premium"
+                          name="interestPremium"
+                          type="number"
+                        />
+
+                      </Grid>
+
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <TextBoxField
+                          label="Spread"
+                          name="spread"
+                          type="number"
+                          disabled={values?.interestRateType === "fixed"}
+                        />
+                      </Grid></>)
+
+                  }
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <TextBoxField
+                      name="fiRate"
+                      label="FI Rate"
+                      type="number"
+                      disabled
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">Security</InputLabel>
+                      <Select
+                        label="Security"
+                        name="security"
+                        value={values?.security}
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="exclusive">Exclusive</MenuItem>
+                        <MenuItem value="pari-Passu">Pari-Passu</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <TextField
+                      name="acr"
+                      label="ACR"
+                      value={values?.acr}
+                      size="small"
+                      type="number"
+                      fullWidth
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        handleChange(e);
+                        const acr = Number(e.target.value);
+                        if (acr < 0) {
+                          setAlertMessage('Value cannot be less than 0.');
+                          setAlertSeverity('error');
+                          setOpenAlertSnackbar(true);
+                        }
+                        else if (acr >= 0 && acr <= 2) {
+                          setAlertMessage('Value is within the allowed range.');
+                          setAlertSeverity('success');
+                          setOpenAlertSnackbar(true);
+                        } else if (acr > 2) {
+                          setAlertMessage('Exceed Limit! Value must be between 1 and 2.');
+                          setAlertSeverity('error');
+                          setOpenAlertSnackbar(true);
+                        }
+                      }}
+                      disabled={loginCookiesData?.regType !== "Maker"}
+                    />
+                  </Grid>
+
+                  {
+                    +(values?.acr) > 2 && (
+                      <Grid item xs={12} sm={4} md={4} lg={4}>
+                        <TextAreaField label="comments if ACR does not fall under parameters"
+                          name="acrCommt" />
+                      </Grid>
+                    )
+                  }
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Qualifying Assets
+                      </InputLabel>
+                      <Select
+                        label="Qualifying Assets"
+                        name="qualAssets"
+                        value={values?.qualAssets}
+                        onChange={handleChange}
+                      >
+                        <MenuItem value="secured">Secured</MenuItem>
+                        <MenuItem value="un-secured">Un-secured</MenuItem>
+                        <MenuItem value="secure_un-secured">
+                          Secured / Un-secured
+                        </MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <TextBoxField label="Penal Charge"
+                      name="penalCharges" type="number" />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4} md={4} lg={4}>
+                    <FormControl fullWidth>
+                      <InputLabel className="select-label">
+                        Delegation of Power
+                      </InputLabel>
+                      <Select
+                        label="Delegation of Power"
+                        name="dop"
+                        value={values?.dop}
+                        onChange={handleChange}
+                        disabled
+                      >
+                        {
+                          committe && committe.length > 0 ? committe?.map((item: any, index: any) => (
+                            <MenuItem key={item?.commId} value={item.commId}>{item?.commName}</MenuItem>
+                          ))
+                            : null}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={6} sm={12}>
+                    <div style={{
+                      border: '1px solid #E0ECE4', marginTop: '10px', padding: '15px 20px',
+                      boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.05)', borderRadius: '10px'
+                    }}>
+
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={1} className="mt-2 mb-0">
+                          <b>Upfront Fee</b>
+                        </Grid>
+                        <Grid item xs={12} sm={3} className="mt-2 mb-0">
+                          <OutlinedInput
+                            type="text"
+                            value={Number(values?.upfrontFeeText === null ? 0 : values?.upfrontFeeText === "null" ? 0 : values?.upfrontFeeText).toFixed(2)}
+                            disabled
+                            name="upfrontFeeText"
+                            sx={{ maxHeight: '25px' }}
+                            endAdornment={
+                              <InputAdornment position="end">
+                                (In ₹)
+                              </InputAdornment>
+                            }
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={1}></Grid>
+                        <Grid item xs={12} sm={3}>
+                          <FormControlLabel
+                            control={<Radio
+                              checked={values?.upfrontFlag === "percentage"}
+                              onChange={() => {
+                                setFieldValue('upfrontFlag', "percentage");
+                                setFieldValue('upfrontFee', '')
+                              }}
+                            />}
+                            label="Percentage" />
+
+                          {
+                            values?.upfrontFlag === "percentage" ?
+                              <AdvanceTextBoxField
+                                name="upfrontPercent"
+                                label="Percentage Fee"
+                                fullWidth
+                                type="number"
+                                onCustomChange={(currentVal: any) => handlePercentage(currentVal)}
+                                disabled={values?.upfrontFlag === "absolute"}
+                              />
+
+                              : <></>
+                          }
+                        </Grid>
+
+
+                        <Grid item xs={12} sm={3}>
+                          <FormControlLabel
+                            control={<Radio
+                              checked={values?.upfrontFlag === "absolute"}
+                              onChange={() => {
+                                setFieldValue('upfrontFlag', "absolute");
+                                setFieldValue('upfrontPercent', '')
+                              }}
+                            />}
+                            label="Absolute" />
+
+                          {
+                            values.upfrontFlag === "absolute" ?
+                              <AdvanceTextBoxField
+                                name="upfrontFee"
+                                label="Absolute Fee"
+                                fullWidth
+                                type="number"
+                                onCustomChange={(currentVal: any) => handleAbsolute(currentVal)}
+                                disabled={values?.upfrontFlag === "percentage"}
+                              />
+                              : <></>
+                          }
+
+                        </Grid>
+                      </Grid>
+                    </div>
+                  </Grid>
+
+                </Grid>
+                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                  && loginCookiesData?.regType === "Maker" &&
+                  <Button className="sbmtBtn psn_btn mt-0 mb-2 ms-0" type='submit'
+                    onClick={() => handleClickSetAction('01')}
+                    variant="contained"> Save <CheckCircleOutlineIcon />
+                  </Button>
+                }
+              </fieldset>
+            </Form>
+          )
+        }}
+      </Formik>
+
+      <Snackbar open={openAlertSnackbar} autoHideDuration={5000} onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: "right" }}>
+        <Alert onClose={handleCloseSnackbar} severity={alertSeverity} sx={{ width: "100%" }}>
+          {alertMessage}
+        </Alert>
+      </Snackbar>
+
+      <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
+        handleSnackClose={handleSnackClose} submitCall={false} />
+    </div>
+  );
+};
+
+export default FacilityDetails;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useRef, useEffect } from "react";
+import { Formik, Form, useFormikContext } from "formik";
+import {
+  Grid,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormControlLabel,
+  Radio,
+  TextField,
+  Snackbar,
+  Alert,
+  AlertColor,
+  Button,
+  OutlinedInput,
+  InputAdornment,
+  Typography
+} from "@mui/material";
+import {
+  useSaveFacilityDetailsMutation,
+  useGetFacilityDetailsByIdQuery,
+  useGetAllCommitteeMastersQuery,
+  useGetProdSchemesQuery,
+  useLazyGetBenchmarkRateByRateIdQuery,
+} from "../../../features/appraisal/facilityDetailsApi";
+import { TextBoxField } from "../../../components/framework/TextBoxField";
+import { TextAreaField } from "../../../components/framework/TextAreaAuto";
+import AutoSave from "../../../components/framework/AutoSave";
+import { FacilityFormAPI } from "../../../features/appraisal/facilityApi";
+import Cookies from "js-cookie";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import moment from "moment";
+import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
+import FormLoader from "../../../loader/FormLoader";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import * as Yup from 'yup';
+import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+
+const CalculatedFields = () => {
+  const { values, setFieldValue } = useFormikContext<any>();
+  useEffect(() => {
+    if (values?.interestRateType === "floating") {
+      const instrestRateTypeValue: any = +values?.benchmarkRate && +values?.spread ? +values?.benchmarkRate + +values?.spread : 0;
+      setFieldValue('interestRate', instrestRateTypeValue.toFixed(2));
+      setFieldValue('fiRate', instrestRateTypeValue.toFixed(2));
     }
   }, [values, setFieldValue]);
   return null;
