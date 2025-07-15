@@ -1,101 +1,568 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Formik, Form, useFormikContext } from "formik";
+[
+  {
+    "applId": "string",
+    "slNo": 0,
+    "cifName": "string",
+    "assistType": "string",
+    "outstandingAmount": 0,
+    "panNo": "string",
+    "acctNumber": "string",
+    "acctDate": "2025-07-15",
+    "rejectionReason": "string"
+  }
+]
+
+import { useState } from "react";
+import "../../../styles/appraisal.scss";
+import { Button, Grid, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
 import {
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Radio,
-  TextField,
-  Snackbar,
-  Alert,
-  AlertColor,
-  Button,
-  OutlinedInput,
-  InputAdornment,
-  Typography
-} from "@mui/material";
-import {
-  useSaveFacilityDetailsMutation,
-  useGetFacilityDetailsByIdQuery,
-  useGetAllCommitteeMastersQuery,
-  useGetProdSchemesQuery,
-  useLazyGetBenchmarkRateByRateIdQuery,
-} from "../../../features/appraisal/facilityDetailsApi";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
+  useGetNbfcOtherAssistWithCodeQuery,
+  useGetNbfcPasstAssistWithNameQuery,
+  useGetUnAvailedFacIdQuery
+}
+  from "../../../features/appraisal/introAppraisalApi"
+import { Form, Formik } from "formik";
 import { TextAreaField } from "../../../components/framework/TextAreaAuto";
 import AutoSave from "../../../components/framework/AutoSave";
-import { FacilityFormAPI } from "../../../features/appraisal/facilityApi";
-import Cookies from "js-cookie";
+import { initialValues, validationSchema } from '../../../models/appraisal/detailsPastAssistance';
+import {
+  useGetMfiProfileByIdQuery,
+  useSaveMfiProfileMutation
+} from "../../../features/appraisal/mfiProfileApi";
+import DummyTable from "../../../components/shared/DummyTable";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import moment from "moment";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import Cookies from "js-cookie";
 import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
-import FormLoader from "../../../loader/FormLoader";
-import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
-import * as Yup from 'yup';
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
 
-const CalculatedFields = () => {
-  const { values, setFieldValue } = useFormikContext<any>();
-  useEffect(() => {
-    if (values?.interestRateType === "floating") {
-      const instrestRateTypeValue: any = +values?.benchmarkRate && +values?.spread ? +values?.benchmarkRate + +values?.spread : 0;
-      setFieldValue('interestRate', instrestRateTypeValue.toFixed(2));
-      setFieldValue('fiRate', instrestRateTypeValue.toFixed(2));
-      
-      // Calculate spread = creditSpread + riskPremium - discretion + interestPremium
-      const spreadValue: any = (+values?.creditSpread || 0) + 
-                             (+values?.riskPremium || 0) - 
-                             (+values?.discretion || 0) + 
-                             (+values?.interestPremium || 0);
-      setFieldValue('spread', spreadValue.toFixed(2));
-    }
-  }, [values?.creditSpread, values?.riskPremium, values?.discretion, values?.interestPremium, values?.benchmarkRate, values?.interestRateType, setFieldValue]);
-  return null;
-};
+const DetailsPastAssistance = ({ applId, currentModuleStatus }: any) => {
+  const { data: assistance } = useGetNbfcPasstAssistWithNameQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
 
-const FacilityDetails = ({ applId, currentModuleStatus, compExposureData }: any) => {
-  const [openAlertSnackbar, setOpenAlertSnackbar] = useState<boolean>(false);
-  const [alertMessage, setAlertMessage] = useState<string>('');
-  const [alertSeverity, setAlertSeverity] = useState<AlertColor>('success');
-  const textFieldRef = useRef<HTMLInputElement>(null);
-  const productId = sessionStorage.getItem("productId");
+  const { data: collectiveData } = useGetMfiProfileByIdQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+  const { data: otherAssistance } = useGetNbfcOtherAssistWithCodeQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+
+  const { data: getUnAvailedFac } = useGetUnAvailedFacIdQuery(applId, { refetchOnMountOrArgChange: true });
+
+  const [updateMfiProfile] = useSaveMfiProfileMutation()
+
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<any>("");
   const [severity, setSeverity] = useState<string | any>("success");
   const [actionVal, setActionVal] = useState<any>("");
-  const [minTenure, setMinTenure] = useState(0);
-  const [maxTenure, setMaxTenure] = useState(0);
-  const [maxMoratorium, setMaxMoratorium] = useState(0);
-  const [minMoratorium, setMinMoratorium] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const { data: schemeValueData } = useGetProdSchemesQuery(productId as any, { refetchOnMountOrArgChange: true });
-  const [addFacilityDetails] = useSaveFacilityDetailsMutation();
-  const { data: facilityData, isLoading } = useGetFacilityDetailsByIdQuery(applId, { refetchOnMountOrArgChange: true });
-  const { data: committe } = useGetAllCommitteeMastersQuery("");
-  const [getBenchmarkRate] = useLazyGetBenchmarkRateByRateIdQuery();
-
-  const handleClickSetAction = (action: any) => {
-    setActionVal(action);
-  };
   const handleSnackClose = () => {
     setOpenSnackbar(false);
   };
 
+  const handleClickSetAction = (action: any) => {
+    setActionVal(action);
+  };
+
   const handleSubmit = async (values: any) => {
     try {
-      values.interestRate = +values.interestRate;
-      values.tenure = +values.tenure;
-      values.moratorium = +values.moratorium;
-      values.benchmarkRate = +values.benchmarkRate;
-      values.spread = +values.spread;
-      values.dop = String(values.dop);
-      values.upfrontFeeText = String(values.upfrontFeeText);
-      values.fiRate = +values.fiRate
-      if (await addFacilityDetails(values).unwrap()) {
+      setIsSaving(true);
+      const finalData = { ...collectiveData, applId, ...values }
+      if (await updateMfiProfile(finalData).unwrap()) {
+        if (actionVal === '01') {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("Record saved successfully");
+          setActionVal(null);
+          setIsSaving(false);
+          return false;
+        }
+        setIsSaving(false);
+        setActionVal(null);
+        return true;
+      }
+      setIsSaving(false);
+      setActionVal(null);
+    } catch (err) {
+      setIsSaving(false);
+      console.error("Error saving data:", err);
+    }
+  };
+
+
+  const loginData: any = Cookies.get("user") ?? null;
+  const loginCookiesData: any = JSON.parse(loginData);
+
+  let totalSanctionAmt = assistance?.reduce(function (acc: any, obj: any) { return acc + obj.sanctionAmount; }, 0);
+  let totalDisbureAmt = assistance?.reduce(function (acc: any, obj: any) { return acc + obj.disbursedAmount; }, 0);
+  let totalOutStandAmt = assistance?.reduce(function (acc: any, obj: any) { return acc + obj.outstandinAmount; }, 0);
+
+  return (
+    <div className="custome-form">
+      <div className="wrap-inner-table mt-0 mb-0 table-responsive">
+        <Table
+          sx={{ minWidth: '1250px' }}
+          aria-label="simple table"
+          className="table"
+        >
+          <TableHead>
+            <TableRow>
+              <TableCell style={{ maxWidth: '70px' }}><b>Sr. No.</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Account No</b></TableCell>
+              <TableCell style={{ maxWidth: '180px' }}><b>Scheme Name</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned authority</b></TableCell>
+              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Sanction Date</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned amount (in ₹)</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Disbursement amount (in ₹)</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>ACR</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Present o/s</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Asset Classification</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}> <b> Security pari-passu</b></TableCell>
+              {/* <TableCell ><b>Security</b></TableCell> */}
+              <TableCell style={{ maxWidth: '120px' }}><b>Interest Rate(%)</b></TableCell>
+              <TableCell style={{ maxWidth: '250px' }}><b>Interest Type (Fixed/Floating) - Benchmark</b></TableCell>
+              {/* <TableCell ><b>Benchmark</b></TableCell> */}
+              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Terminal Date</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {
+              assistance?.length === 0 ? <DummyTable /> : assistance?.map((value: any, index: number) => (
+                <TableRow key={index + 1}>
+                  <TableCell style={{ maxWidth: '70px' }}>{index + 1}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.accountNo}</TableCell>
+                  <TableCell style={{ maxWidth: '180px' }}>{value.schemeName}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.sancAuth}</TableCell>
+                  <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.sanctionDt}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.sanctionAmount}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.disbursedAmount}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.acr}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.outstandinAmount}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value.assetClassification}</TableCell>
+                  <TableCell style={{ maxWidth: '120px' }}>{value?.securityPariPassu}</TableCell>
+                  {/* <TableCell>{value.security}</TableCell> */}
+                  <TableCell style={{ maxWidth: '120px' }}>{value.interesetRate}</TableCell>
+                  <TableCell style={{ maxWidth: '250px' }}>
+                    {value.interestRateType} {value.interestRateType !== 'FIXED' ? '-' : ''} {value.benchmark}
+                  </TableCell>
+                  {/* <TableCell>{value.benchmark}</TableCell> */}
+                  <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.terminalDt}</TableCell>
+                </TableRow>
+              ))
+            }
+            <TableRow>
+              <TableCell><b> Total</b></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell>{totalSanctionAmt}</TableCell>
+              <TableCell>{totalDisbureAmt}</TableCell>
+              <TableCell></TableCell>
+              <TableCell>{totalOutStandAmt}</TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+      <Grid
+        spacing={2}
+        padding={4}
+        container
+        className='form-grid'
+      >
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <b className="mb-0">Exposure Under Any Other Products</b>
+        </Grid>
+
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <div className="wrap-inner-table mt-0">
+            <Table aria-label="simple table">
+              <TableHead>
+                <TableRow>
+                  <TableCell><b>CIF Code</b></TableCell>
+                  <TableCell><b>CIF Name</b></TableCell>
+                  <TableCell><b>Assist Type</b></TableCell>
+                  <TableCell><b>Outstanding Amount</b></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {
+                  otherAssistance?.length === 0 ? <DummyTable /> :
+                    <TableRow>
+                      <TableCell>{otherAssistance?.[0]?.cifCode}</TableCell>
+                      <TableCell>{otherAssistance?.[0]?.cifName}</TableCell>
+                      <TableCell>{otherAssistance?.[0]?.assistType}</TableCell>
+                      <TableCell>{otherAssistance?.[0]?.outstandingAmount}</TableCell>
+                    </TableRow>
+                }
+              </TableBody>
+            </Table>
+          </div>
+        </Grid>
+
+        <Grid item xs={12} sm={6} lg={12} className="pt-3">
+          <Formik
+            initialValues={collectiveData || { ...initialValues, applId }}
+            onSubmit={() => { }}
+            enableReinitialize={true}
+            validationSchema={validationSchema}
+            validateOnChange={true}
+            validateOnBlur={true}
+          >
+            {({ values }) => (
+              <Form>
+                <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                  || loginCookiesData?.regType === "Checker"}>
+                  {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                    && loginCookiesData?.regType === "Maker" &&
+                    <AutoSave debounceMs={1000} values={values} handleSubmit={handleSubmit} />
+                  }
+                  <Grid
+                    spacing={2}
+                    padding={4}
+                    container
+                    className='form-grid pb-0'
+                  >
+                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
+                      <div className="wrap-richtext">
+                        <TextAreaField label="Pending major compliances, if any" name="pendingComl"
+                          disabled={loginCookiesData?.regType === "Maker" ? false : true} />
+                      </div>
+                    </Grid>
+                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
+                      <div className="wrap-richtext">
+                        <TextAreaField label="Details of Any Covenents Breach in the past, If any" name="covenantBreach"
+                          disabled={loginCookiesData?.regType === "Maker" ? false : true} />
+                      </div>
+                    </Grid>
+                  </Grid>
+                </fieldset>
+                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                  && loginCookiesData?.regType === "Maker" &&
+                  <Button
+                    type="submit"
+                    size='small'
+                    className='text-capitalize sbmtBtn ms-0 m-3 mt-0'
+                    variant="contained"
+                    color="primary"
+                    style={{ "float": "left" }}
+                    onClick={() => handleClickSetAction('01')}
+                  >
+                    Save  <CheckCircleOutlineIcon />
+                  </Button>
+                }
+              </Form>
+            )}
+          </Formik>
+          <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
+            handleSnackClose={handleSnackClose} submitCall={false} />
+        </Grid>
+
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <b> Details of Facilities Rejected/Unavailed</b>
+        </Grid>
+      </Grid>
+      <div className="wrap-inner-table mt-0">
+        <Table sx={{ minWidth: 650 }} aria-label="simple table">
+          <TableHead>
+            <TableRow>
+              <TableCell><b>Application No</b></TableCell>
+              <TableCell><b>Application Date</b></TableCell>
+              <TableCell><b>Facility Requested</b></TableCell>
+              <TableCell><b>Amount Requested</b></TableCell>
+              <TableCell><b>Reason for Rejection</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {
+              getUnAvailedFac?.map((item: any, index: number) => (
+                <TableRow key={index + 1}>
+                  <TableCell>{item?.applId}</TableCell>
+                  <TableCell>{item?.applDate}</TableCell>
+                  <TableCell>{item?.facilityReq}</TableCell>
+                  <TableCell>{item?.asstSought}</TableCell>
+                  <TableCell>{item?.reason}</TableCell>
+                </TableRow>
+              ))
+            }
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}
+export default DetailsPastAssistance;
+
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { customBaseQuery } from "../../app/commonApi";
+
+const BASE_PATH = `appr`;
+const BASE_PATH_COM = `com`;
+const BASE_PATH_APPl = `appl`;
+
+export const introAppraisalApi = createApi({
+    reducerPath: 'introAppraisalApi',
+    baseQuery: customBaseQuery('refapi'),
+    tagTypes: ['execSummary', 'comAssist', 'externalRating', 'internalRating', 'losListing', "getUnAvailedFacValue", "losComment","pastAssitance"],
+    endpoints: (builder) => ({
+
+        getStockListingDetails: builder.query<any, string>({
+            query: (applId) => `${BASE_PATH}/getLosListing/${applId}`,
+            providesTags: ['losListing']
+        }),
+
+        getUnAvailedFacId: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH_APPl}/getUnAvailedFac/${applId}`,
+            providesTags: ['getUnAvailedFacValue']
+        }),
+
+        saveStockListingDetails: builder.mutation<any, any[]>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveLosListing`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`losListing`],
+        }),
+
+        deleteLosStockListingDetailsById: builder.mutation<any, any>({
+            query: ({ applId, index }) => ({
+                url: `${BASE_PATH}/delLosListing/${applId}/${index}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['losListing'],
+        }),
+        getExecutiveSummaryById: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH}/getExecSum/${applId}`,
+            providesTags: ['execSummary']
+        }),
+        saveExecutiveSummary: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveExecSum`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`execSummary`],
+        }),
+
+        getNbfcPasstAssistWithName: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH_COM}/getPastAssistWithApplId/${applId}`,
+            providesTags: ['comAssist']
+        }),
+
+        getNbfcOtherAssistWithCode: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH_COM}/getOtherAssistWithApplId/${applId}`,
+            providesTags: ['comAssist']
+        }),
+
+        getExternalRatingById: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH}/getExternalRating/${applId}`,
+            providesTags: ['externalRating']
+        }),
+        saveExternalRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveExternalRating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`externalRating`],
+        }),
+        deleteExternalRatingById: builder.mutation<any, any>({
+            query: ({ applId, index }) => ({
+                url: `${BASE_PATH}/deleteExternalRating/${applId}/${index}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['externalRating'],
+        }),
+        getInternalRatingById: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH}/getInternalRating/${applId}`,
+            providesTags: ['internalRating']
+        }),
+        saveInternalRating: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveInternalRating`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`internalRating`],
+        }),
+        deleteInternalRatingById: builder.mutation<any, any>({
+            query: ({ applId, index }) => ({
+                url: `${BASE_PATH}/deleteInternalRating/${applId}/${index}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['internalRating'],
+        }),
+
+        saveLosSummCmnts: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveLosSummCmnts`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`losComment`],
+        }),
+
+        getLosSummCmnts: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH}/getLosSummCmnts/${applId}`,
+            providesTags: ['losComment']
+        }),
+
+
+        saveOtherFacilityDetails: builder.mutation<any, any>({
+            query: (data) => ({
+                url: `${BASE_PATH}/saveotherfacdtls`,
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: [`pastAssitance`],
+        }),
+
+        getOtherFacilityDetails: builder.query<any, any>({
+            query: (applId) => `${BASE_PATH}/getotherfacdtls/${applId}`,
+            providesTags: ['pastAssitance']
+        }),
+
+    }),
+});
+
+export const {
+    useSaveExecutiveSummaryMutation,
+    useGetExecutiveSummaryByIdQuery,
+    useGetNbfcPasstAssistWithNameQuery,
+    useGetNbfcOtherAssistWithCodeQuery,
+    useSaveExternalRatingMutation,
+    useGetExternalRatingByIdQuery,
+    useDeleteExternalRatingByIdMutation,
+    useSaveInternalRatingMutation,
+    useGetInternalRatingByIdQuery,
+    useDeleteInternalRatingByIdMutation,
+    useGetStockListingDetailsQuery,
+    useSaveStockListingDetailsMutation,
+    useDeleteLosStockListingDetailsByIdMutation,
+    useGetUnAvailedFacIdQuery,
+    useSaveLosSummCmntsMutation,
+    useGetLosSummCmntsQuery,
+    useSaveOtherFacilityDetailsMutation,
+    useGetOtherFacilityDetailsQuery
+} = introAppraisalApi
+
+
+
+
+import {
+  FormControl, Grid, IconButton, Table, TableBody, Button,
+  TableCell, TableHead, TableRow
+} from "@mui/material"
+import { TextBoxField } from "../../../components/framework/TextBoxField";
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useDeleteExternalRatingByIdMutation, useGetExternalRatingByIdQuery, useSaveExternalRatingMutation }
+  from "../../../features/appraisal/introAppraisalApi";
+import { profileInitialValues, validationSchema } from '../../../models/appraisal/externalRating';
+import AutoSave from "../../../components/framework/AutoSave";
+import { Formik, Form, FieldArray } from "formik";
+import { RichTextField } from "../../../components/framework/RichTextField";
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { TextAreaField } from "../../../components/framework/TextAreaAuto";
+import FormLoader from "../../../loader/FormLoader";
+import { useGetMfiProfileByIdQuery, useSaveMfiProfileMutation } from "../../../features/appraisal/mfiProfileApi";
+import Cookies from "js-cookie";
+import { useEffect, useState } from "react";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import moment from "moment";
+import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+
+
+const ExternalRating = ({ applId, currentModuleStatus }: any) => {
+  const { data: externalRatingData } = useGetExternalRatingByIdQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+});
+  const [updateExternalRating] = useSaveExternalRatingMutation();
+  const [deleteExternalRating] = useDeleteExternalRatingByIdMutation();
+
+  const { data: mfiProfileData, isLoading: isLoadingProfile } = useGetMfiProfileByIdQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+});
+  const [updateMfiProfile] = useSaveMfiProfileMutation();
+
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<any>("");
+  const [severity, setSeverity] = useState<string | any>("success");
+  const [actionVal, setActionVal] = useState<any>("");
+  const [index, setIndex] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  const handleClickSetAction = (action: any) => {
+    setActionVal(action);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+  };
+
+  const handleClickOpen = (index: number) => {
+    setIndex(index);
+    setOpen(true);
+  };
+
+  const handleDelete = async (applId: any, index: number) => {
+    handleClose();
+    try {
+      if (await deleteExternalRating({ applId, index }).unwrap()) {
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Record Deleted successfully");
+      }
+    } catch (error) {
+      console.error("Error saving compliance position:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to delete");
+    }
+  }
+
+  const handleSubmit = async (values: any) => {
+    try {
+      const finalValue = values.ratings.map((rating: any, index: any) => {
+        return {
+          ...rating, applId, saveStatus: actionVal, id: index + 1
+        }
+      });
+      if (await updateExternalRating(finalValue).unwrap()) {
+        if (actionVal === '01') {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("Record saved successfully");
+          return false;
+        }
+        setActionVal(null);
+        return true;
+      }
+      return false;
+    }
+    catch (err) {
+      console.error("Error saving data:", err);
+    }
+  };
+
+
+  const profileHandleSubmit = async (values: any) => {
+    try {
+      const finalValue = { ...values, applId, saveStatus: actionVal }
+      if (await updateMfiProfile(finalValue).unwrap()) {
         if (actionVal === '01') {
           setOpenSnackbar(true);
           setSeverity("success");
@@ -107,1548 +574,401 @@ const FacilityDetails = ({ applId, currentModuleStatus, compExposureData }: any)
       }
       return false;
     } catch (err) {
-      console.error("Error saving facility details:", err);
+      console.error("Error saving data:", err);
     }
   };
 
-  const handleCloseSnackbar = (event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason == "clickaway") {
-      return
-    }
-    setOpenAlertSnackbar(false)
-  }
-
+  const [initialValues, setInitialValues] = useState<any>({ data: [] });
   useEffect(() => {
-    if (textFieldRef.current) {
-      textFieldRef.current.focus();
+    if (externalRatingData) {
+      setInitialValues({ ratings: externalRatingData });
     }
-  }, []);
+  }, [externalRatingData]);
 
-  const [fundMaster, setFundMaster] = useState<any>([]);
-
-  const getFacilityMaster = async (schemeCode: any) => {
-    const data = await FacilityFormAPI.getFacilityApi(schemeCode);
-    setFundMaster(data?.data);
-  }
-
-  const getSchemeDetails = async (schemeCode: any) => {
-    const { data: schemeData } = await FacilityFormAPI.getSchemeDetails(schemeCode);
-    setMaxTenure(schemeData?.data?.schemeMaxTenure);
-    setMinTenure(schemeData?.data?.schemeMINTenure);
-    setMaxMoratorium(schemeData?.data?.schemeMAXMoratorium);
-    setMinMoratorium(schemeData?.data?.schemeMINMoratorium);
-  }
-
-  useEffect(() => {
-    if (facilityData?.scheme) {
-      getFacilityMaster(facilityData?.scheme);
-      getSchemeDetails(facilityData?.scheme);
-    }
-  }, [facilityData])
-
-  const validationSchema = Yup.object().shape({
-    loanAmtProposed: Yup.string().required("Loan Amount Proposed is required")
-      .test('positive', 'Amount must be greater than 0', val => val ? Number(val) > 0 : false),
-    tenure: Yup.string().required("Tenure is required")
-      .test('positive', 'Tenure must be greater than 0', val => val ? Number(val) > 0 : false),
-  });
-
-  const loginData: any = Cookies.get("user") ?? null;
+  const loginData: any = Cookies.get("user") || null;
   const loginCookiesData: any = JSON.parse(loginData);
 
-  if (isLoading) return <FormLoader />;
-
   return (
-    <div className="custome-form">
-      <Formik
-        initialValues={{ ...facilityData, applId }}
-        onSubmit={handleSubmit}
-        validationSchema={validationSchema}
-        validateOnChange={true}
-        validateOnBlur={true}
-        enableReinitialize={true}
-      >
-        {({ values, setFieldValue, handleChange }) => {
-
-          const handleRateNameChange = (e: any) => {
-            const scheme = e.target.value;
-            setFieldValue('scheme', scheme);
-            getFacilityMaster(scheme);
-            getSchemeDetails(scheme);
-          }
-          const handlePercentage = (percentageValue: number) => {
-            if (percentageValue) {
-              const percentageCalVal = Number(((facilityData?.loanAmtProposed * percentageValue) / 100) * 10000000);
-              setFieldValue('upfrontFeeText', percentageCalVal.toFixed(2));
-            } else {
-              setFieldValue('upfrontFeeText', 0)
-            }
-          }
-
-          const handleAbsolute = (absoluteValue: number) => {
-            if (absoluteValue) {
-              setFieldValue('upfrontFeeText', absoluteValue);
-            } else {
-              setFieldValue('upfrontFeeText', 0);
-            }
-          }
-
-          const handleCalTotalExposure = (currentVal: number) => {
-            if (Number(currentVal) > 10000) {
-              setFieldValue('loanAmtProposed', 10000);
-              setOpenSnackbar(true);
-              setSeverity("error");
-              setSnackMsg("Loan Amount Proposed can not be > 10000");
-              return;
-            }
-            const tentativeExposureVal = facilityData?.tentativeExposure === null ? 0 : facilityData?.tentativeExposure;
-            const totalExposureVal = Number(+currentVal + +tentativeExposureVal);
-            setFieldValue('totalExposure', totalExposureVal);
-
-            if (compExposureData?.connLendingFlag === 'N') {
-              if (totalExposureVal <= 300) {
-                setFieldValue('dop', 1);
-              } else if (totalExposureVal > 300 && totalExposureVal <= 750) {
-                setFieldValue('dop', 2);
-              } else if (totalExposureVal > 750) {
-                setFieldValue('dop', 3);
-              }
-            } else if (compExposureData?.connLendingFlag === 'Y') {
-              setFieldValue('dop', 3);
-            }
-          }
-
-          const handleCalFII = (currentVal: number) => {
-            setFieldValue('fiRate', currentVal);
-          }
-
-          const handleMoratoriumChecks = (moratorium: number) => {
-            if (Number(moratorium) < 0) {
-              setAlertMessage('Value cannot be less than 0.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-            else if (Number(moratorium) >= minMoratorium && Number(moratorium) <= maxMoratorium) {
-              setAlertMessage('Value is within the allowed range.');
-              setAlertSeverity('success');
-              setOpenAlertSnackbar(true);
-            } else if (Number(moratorium) > maxMoratorium) {
-              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxMoratorium + '.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-              setFieldValue('moratorium', maxMoratorium);
-            }
-          }
-
-          const handleTenureChecks = (tenure: number) => {
-            if (Number(tenure) < 0) {
-              setAlertMessage('Value cannot be less than 0.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-            else if (Number(tenure) >= minTenure && Number(tenure) <= maxTenure) {
-              setAlertMessage('Value is within the allowed range.');
-              setAlertSeverity('success');
-              setOpenAlertSnackbar(true);
-            } else if (Number(tenure) > maxTenure) {
-              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxTenure + '.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-          }
-
-          const handleChangeBenchmark = async (rateId: any) => {
-            const benchData = await getBenchmarkRate(rateId).unwrap();
-            if (benchData) {
-              setFieldValue('benchmarkRate', benchData?.BPM_PLR);
-            }
-          }
-
-          return (
+    <>
+      <ConfirmationAlertDialog
+        id={applId}
+        index={index}
+        type={2}
+        open={open}
+        handleClose={handleClose}
+        handleDelete={handleDelete}
+      />
+      <div className='custome-form'>
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          validateOnChange={true}
+          validateOnBlur={true}
+          enableReinitialize={true}
+        >
+          {({ values, setFieldValue }) => (
             <Form>
               <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
                 || loginCookiesData?.regType === "Checker"}>
                 {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
                   && loginCookiesData?.regType === "Maker" &&
-                  <RemoteViewsAutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+                  <AutoSave debounceMs={10000} values={values} handleSubmit={handleSubmit} />
                 }
-                <CalculatedFields />
-                <Grid spacing={2} padding={4} container className="form-grid">
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      type="number"
-                      name="loanAmtProposed"
-                      label="Loan Amount Proposed"
-                      value={values?.loanAmtProposed}
-                      onCustomChange={(currentVal: any) => handleCalTotalExposure(currentVal)}
-                      endAdornment={
-                        <InputAdornment position="end">
-                          (In ₹ crore)
-                        </InputAdornment>
-                      }
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceDatePickerField
-                      label="Validity period of sanction"
-                      name="drawlValidity"
-                      disablePast={true}
-                      onChange={(date: Date) => {
-                        setFieldValue('drawlValidity', moment(date).format("DD-MM-YYYY"));
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Scheme: *
-                      </InputLabel>
-                      <Select
-                        label="Scheme: *"
-                        name="scheme"
-                        onChange={(event) => handleRateNameChange(event)}
-                        value={values?.scheme}
-                      >
-                        {
-                          schemeValueData?.map((item: any, index: number) => (
-                            <MenuItem key={item?.schCd} value={item?.schCd}>{item?.schLongName}</MenuItem>
-                          ))
-                        }
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Fund: *
-                      </InputLabel>
-                      <Select
-                        label="Fund: *"
-                        name="fund"
-                        value={values?.fund}
-                        onChange={handleChange}
-                        disabled={loginCookiesData?.regType !== "Maker"}
-                      >
-                        {
-                          fundMaster?.data?.map((item: any) => (
-                            <MenuItem key={item?.fundCode} value={item?.fundCode}>{item?.fundDesc}</MenuItem>
-                          ))
-                        }
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      type="text"
-                      name="totalExposure"
-                      label="Total Exposure"
-                      value={values?.totalExposure}
-                      disabled
-                      endAdornment={
-                        <InputAdornment position="end">
-                          (In ₹ crore)
-                        </InputAdornment>
-                      }
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      name="tenure"
-                      label="Tenure (In months)"
-                      type="number"
-                      onCustomChange={(currentVal: any) => handleTenureChecks(currentVal)}
-                      disabled={loginCookiesData?.regType !== "Maker"}
-                    />
-                  </Grid>
-
-                  {+values?.tenure > maxTenure && (
-                    <Grid item xs={12} sm={12} md={12} lg={12}>
-                      <label>
-                        <Typography className='text-end-- text-warning-- mb-1 fw-bold' variant="body2">
-                          <Alert severity="info" style={{ fontSize: '12px', padding: '2px 10px' }}>
-                            <b>Note:</b> Comments if tenure does not fall under scheme parameters
-                          </Alert>
-                        </Typography>
-                      </label>
-
-                      <TextAreaField label="comments"
-                        name="tenureCommt" />
-                    </Grid>
-                  )
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField label="Moratorium (In months)"
-                      name="moratorium" type="number" allowDecimal={false}
-                      onCustomChange={(currentVal: any) => handleMoratoriumChecks(currentVal)} />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Repayment frequency
-                      </InputLabel>
-                      <Select
-                        label="Repayment frequency"
-                        name="repaymentFrequency"
-                        value={values?.repaymentFrequency}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="M">Monthly</MenuItem>
-                        <MenuItem value="Q">Quarterly</MenuItem>
-                        <MenuItem value="H">Half-yearly</MenuItem>
-                        <MenuItem value="Y">Yearly</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Interest rate Type
-                      </InputLabel>
-                      <Select
-                        label="Interest rate Type"
-                        name="interestRateType"
-                        value={values?.interestRateType}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="fixed">Fixed</MenuItem>
-                        <MenuItem value="floating">Floating</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-
-                  {
-                    values?.interestRateType === "fixed" ? (<></>) : (
-                      <>
-                        <Grid item xs={12} sm={4} md={4} lg={4}>
-                          <EnhancedDropDown
-                            label="Benchmark"
-                            name="benchmark"
-                            domain="mstr/getBenchMark"
-                            disabled={values?.interestRateType === "fixed"}
-                            onChange={(currentVal: any) => handleChangeBenchmark(currentVal)}
-                          />
-
-                        </Grid>
-                        <Grid item xs={12} sm={4} md={4} lg={4}>
-                          <AdvanceTextBoxField
-                            className="disabled-inputs-lbl"
-                            label="Benchmark Rate"
-                            name="benchmarkRate"
-                            type="number"
-                            disabled={values?.interestRateType === "fixed"}
-                          />
-                        </Grid>
-                      </>
-                    )
-                  }
-
-                  {values?.interestRateType === "fixed" ? (<></>) : (
+                <FieldArray name="ratings">
+                  {({ push, remove }) => (
                     <>
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Interest rate"
-                          name="interestRate"
-                          type="number"
-                        />
+                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                        && loginCookiesData?.regType === "Maker" &&
+                        <Button type="submit" size='small' className='text-capitalize mt-1 mb-3  saveBtn'
+                          variant="contained" color="primary" style={{ display: 'block' }}
+                          onClick={() => push({
+                            applId: applId,
+                            agencyName: "",
+                            instrument: "",
+                            amount: "",
+                            outlook: "",
+                            ratingDate: null,
+                            prevRating: "",
+                            prevratingDate: null,
+                            precPrevRating: "",
+                            precPrevRatingDate: null,
+                            externalRatingDesc: ""
+                          })
+                          }>
+                          Add <AddCircleIcon />
+                        </Button>
+                      }
+                      <div className="wrap-inner-table mt-2">
+                        <Table sx={{ minWidth: 650 }} aria-label="external ratings table">
+                          <TableHead>
+                            <TableRow>
+                              {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                                && loginCookiesData?.regType === "Maker" &&
+                                <TableCell width={'3%'}> </TableCell>
+                              }
+                              <TableCell><b>Name of Rating Agency</b></TableCell>
+                              <TableCell width={'10%'}><b>Instrument</b></TableCell>
+                              <TableCell width={'10%'}><b>Amount (in ₹ crore)</b></TableCell>
+                              <TableCell width={'10%'}><b>Rating</b></TableCell>
+                              <TableCell width={'10%'}><b>Outlook</b></TableCell>
+                              <TableCell width={'12%'}><b>Date of Rating </b></TableCell>
+                              <TableCell width={'8%'}><b>Previous Rating</b></TableCell>
+                              <TableCell width={'12%'}><b>Date of Previous Rating</b></TableCell>
+                              <TableCell width={'8%'}><b>Preceding Previous Rating</b></TableCell>
+                              <TableCell width={'12%'}><b>Date of Rating Preceding Previous Rating</b></TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {values?.ratings?.map((exRating: any, index: number) => (
+                              <TableRow key={index + 1}>
+                                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                                  && loginCookiesData?.regType === "Maker" &&
+                                  <TableCell>
+                                    <IconButton aria-label="delete" color="error"
+                                      onClick={() => exRating?.id ? handleClickOpen(exRating.id) : remove(index)}
+                                      disabled={values.ratings.length === 1}>
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </TableCell>
+                                }
+                                <TableCell>
+                                  <Grid item xs={12}>
+                                    <EnhancedDropDown
+                                      label=""
+                                      name={`ratings.${index}.agencyName`}
+                                      domain="mstr/getRatingAgency"
+                                    />
+                                  </Grid>
+                                </TableCell>
+                                <TableCell>
+                                  <TextBoxField label=""
+                                    name={`ratings.${index}.instrument`} />
+                                </TableCell>
+                                <TableCell>
+                                  <TextBoxField label=""
+                                    name={`ratings.${index}.amount`} type="number" />
+                                </TableCell>
+                                <TableCell>
+                                  <Grid item xs={12}>
+                                    <EnhancedDropDown
+                                      label=""
+                                      name={`ratings.${index}.externalRatingDesc`}
+                                      domain="mstr/getRatingCode"
+                                    />
+                                  </Grid>
+                                </TableCell>
 
-                      </Grid>
+                                <TableCell>
+                                  <TextBoxField label=""
+                                    name={`ratings.${index}.outlook`} />
+                                </TableCell>
 
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Credit Spread"
-                          name="creditSpread"
-                          type="number"
-                        />
+                                <TableCell>
+                                  <AdvanceDatePickerField label=""
+                                    name={`ratings.${index}.ratingDate`}
+                                    onChange={(date: Date) => {
+                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
+                                    }}
+                                    disableFuture={true}
+                                  />
+                                </TableCell>
 
-                      </Grid>
+                                <TableCell>
+                                  <Grid item xs={12}>
+                                    <EnhancedDropDown
+                                      label=""
+                                      name={`ratings.${index}.prevRating`}
+                                      domain="mstr/getRatingCode"
+                                    />
+                                  </Grid>
+                                </TableCell>
 
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Risk Premium"
-                          name="riskPremium"
-                          type="number"
-                        />
+                                <TableCell>
+                                  <AdvanceDatePickerField label=""
+                                    name={`ratings.${index}.prevratingDate`}
+                                    onChange={(date: Date) => {
+                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
+                                    }}
+                                    disableFuture={true}
+                                  />
+                                </TableCell>
 
-                      </Grid>
+                                <TableCell>
+                                  <Grid item xs={12}>
+                                    <EnhancedDropDown
+                                      label=""
+                                      name={`ratings.${index}.precPrevRating`}
+                                      domain="mstr/getRatingCode"
+                                    />
+                                  </Grid>
+                                </TableCell>
 
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Discretion"
-                          name="discretion"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Interest Premium"
-                          name="interestPremium"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <TextBoxField
-                          label="Spread"
-                          name="spread"
-                          type="number"
-                          disabled={values?.interestRateType === "fixed"}
-                        />
-                      </Grid></>)
-
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextBoxField
-                      name="fiRate"
-                      label="FI Rate"
-                      type="number"
-                      disabled
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">Security</InputLabel>
-                      <Select
-                        label="Security"
-                        name="security"
-                        value={values?.security}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="exclusive">Exclusive</MenuItem>
-                        <MenuItem value="pari-Passu">Pari-Passu</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextField
-                      name="acr"
-                      label="ACR"
-                      value={values?.acr}
-                      size="small"
-                      type="number"
-                      fullWidth
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        handleChange(e);
-                        const acr = Number(e.target.value);
-                        if (acr < 0) {
-                          setAlertMessage('Value cannot be less than 0.');
-                          setAlertSeverity('error');
-                          setOpenAlertSnackbar(true);
+                                <TableCell>
+                                  <AdvanceDatePickerField label=""
+                                    name={`ratings.${index}.precPrevRatingDate`}
+                                    onChange={(date: Date) => {
+                                      setFieldValue('dateOfPrevDayClose', moment(date).format("DD-MM-YYYY"));
+                                    }}
+                                    disableFuture={true}
+                                  />
+                                </TableCell>
+                                
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
+                          && loginCookiesData?.regType === "Maker" &&
+                          <Grid item xs={12} sx={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
+                            <Button type="submit" size="small"
+                              onClick={() => handleClickSetAction('01')}
+                              className="sbmtBtn psn_btn mt-3 mb-3 ms-3" variant="contained" >
+                              Save <CheckCircleOutlineIcon />
+                            </Button>
+                          </Grid>
                         }
-                        else if (acr >= 0 && acr <= 2) {
-                          setAlertMessage('Value is within the allowed range.');
-                          setAlertSeverity('success');
-                          setOpenAlertSnackbar(true);
-                        } else if (acr > 2) {
-                          setAlertMessage('Exceed Limit! Value must be between 1 and 2.');
-                          setAlertSeverity('error');
-                          setOpenAlertSnackbar(true);
-                        }
-                      }}
-                      disabled={loginCookiesData?.regType !== "Maker"}
-                    />
-                  </Grid>
-
-                  {
-                    +(values?.acr) > 2 && (
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <TextAreaField label="comments if ACR does not fall under parameters"
-                          name="acrCommt" />
-                      </Grid>
-                    )
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Qualifying Assets
-                      </InputLabel>
-                      <Select
-                        label="Qualifying Assets"
-                        name="qualAssets"
-                        value={values?.qualAssets}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="secured">Secured</MenuItem>
-                        <MenuItem value="un-secured">Un-secured</MenuItem>
-                        <MenuItem value="secure_un-secured">
-                          Secured / Un-secured
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextBoxField label="Penal Charge"
-                      name="penalCharges" type="number" />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Delegation of Power
-                      </InputLabel>
-                      <Select
-                        label="Delegation of Power"
-                        name="dop"
-                        value={values?.dop}
-                        onChange={handleChange}
-                        disabled
-                      >
-                        {
-                          committe && committe.length > 0 ? committe?.map((item: any, index: any) => (
-                            <MenuItem key={item?.commId} value={item.commId}>{item?.commName}</MenuItem>
-                          ))
-                            : null}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={6} sm={12}>
-                    <div style={{
-                      border: '1px solid #E0ECE4', marginTop: '10px', padding: '15px 20px',
-                      boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.05)', borderRadius: '10px'
-                    }}>
-
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} sm={1} className="mt-2 mb-0">
-                          <b>Upfront Fee</b>
-                        </Grid>
-                        <Grid item xs={12} sm={3} className="mt-2 mb-0">
-                          <OutlinedInput
-                            type="text"
-                            value={Number(values?.upfrontFeeText === null ? 0 : values?.upfrontFeeText === "null" ? 0 : values?.upfrontFeeText).toFixed(2)}
-                            disabled
-                            name="upfrontFeeText"
-                            sx={{ maxHeight: '25px' }}
-                            endAdornment={
-                              <InputAdornment position="end">
-                                (In ₹)
-                              </InputAdornment>
-                            }
-                          />
-                        </Grid>
-                        <Grid item xs={12} sm={1}></Grid>
-                        <Grid item xs={12} sm={3}>
-                          <FormControlLabel
-                            control={<Radio
-                              checked={values?.upfrontFlag === "percentage"}
-                              onChange={() => {
-                                setFieldValue('upfrontFlag', "percentage");
-                                setFieldValue('upfrontFee', '')
-                              }}
-                            />}
-                            label="Percentage" />
-
-                          {
-                            values?.upfrontFlag === "percentage" ?
-                              <AdvanceTextBoxField
-                                name="upfrontPercent"
-                                label="Percentage Fee"
-                                fullWidth
-                                type="number"
-                                onCustomChange={(currentVal: any) => handlePercentage(currentVal)}
-                                disabled={values?.upfrontFlag === "absolute"}
-                              />
-
-                              : <></>
-                          }
-                        </Grid>
-
-
-                        <Grid item xs={12} sm={3}>
-                          <FormControlLabel
-                            control={<Radio
-                              checked={values?.upfrontFlag === "absolute"}
-                              onChange={() => {
-                                setFieldValue('upfrontFlag', "absolute");
-                                setFieldValue('upfrontPercent', '')
-                              }}
-                            />}
-                            label="Absolute" />
-
-                          {
-                            values.upfrontFlag === "absolute" ?
-                              <AdvanceTextBoxField
-                                name="upfrontFee"
-                                label="Absolute Fee"
-                                fullWidth
-                                type="number"
-                                onCustomChange={(currentVal: any) => handleAbsolute(currentVal)}
-                                disabled={values?.upfrontFlag === "percentage"}
-                              />
-                              : <></>
-                          }
-
-                        </Grid>
-                      </Grid>
-                    </div>
-                  </Grid>
-
-                </Grid>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
-                  && loginCookiesData?.regType === "Maker" &&
-                  <Button className="sbmtBtn psn_btn mt-0 mb-2 ms-0" type='submit'
-                    onClick={() => handleClickSetAction('01')}
-                    variant="contained"> Save <CheckCircleOutlineIcon />
-                  </Button>
-                }
+                      </div>
+                    </>
+                  )}
+                </FieldArray>
               </fieldset>
             </Form>
-          )
-        }}
-      </Formik>
+          )}
+        </Formik>
 
-      <Snackbar open={openAlertSnackbar} autoHideDuration={5000} onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: "right" }}>
-        <Alert onClose={handleCloseSnackbar} severity={alertSeverity} sx={{ width: "100%" }}>
-          {alertMessage}
-        </Alert>
-      </Snackbar>
-
-      <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
-        handleSnackClose={handleSnackClose} submitCall={false} />
-    </div>
-  );
-};
-
-export default FacilityDetails;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { useState, useRef, useEffect } from "react";
-import { Formik, Form, useFormikContext } from "formik";
-import {
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Radio,
-  TextField,
-  Snackbar,
-  Alert,
-  AlertColor,
-  Button,
-  OutlinedInput,
-  InputAdornment,
-  Typography
-} from "@mui/material";
-import {
-  useSaveFacilityDetailsMutation,
-  useGetFacilityDetailsByIdQuery,
-  useGetAllCommitteeMastersQuery,
-  useGetProdSchemesQuery,
-  useLazyGetBenchmarkRateByRateIdQuery,
-} from "../../../features/appraisal/facilityDetailsApi";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
-import AutoSave from "../../../components/framework/AutoSave";
-import { FacilityFormAPI } from "../../../features/appraisal/facilityApi";
-import Cookies from "js-cookie";
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import moment from "moment";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
-import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
-import FormLoader from "../../../loader/FormLoader";
-import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
-import * as Yup from 'yup';
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-
-const CalculatedFields = () => {
-  const { values, setFieldValue } = useFormikContext<any>();
-  useEffect(() => {
-    if (values?.interestRateType === "floating") {
-      const instrestRateTypeValue: any = +values?.benchmarkRate && +values?.spread ? +values?.benchmarkRate + +values?.spread : 0;
-      setFieldValue('interestRate', instrestRateTypeValue.toFixed(2));
-      setFieldValue('fiRate', instrestRateTypeValue.toFixed(2));
-    }
-  }, [values, setFieldValue]);
-  return null;
-};
-
-const FacilityDetails = ({ applId, currentModuleStatus, compExposureData }: any) => {
-  const [openAlertSnackbar, setOpenAlertSnackbar] = useState<boolean>(false);
-  const [alertMessage, setAlertMessage] = useState<string>('');
-  const [alertSeverity, setAlertSeverity] = useState<AlertColor>('success');
-  const textFieldRef = useRef<HTMLInputElement>(null);
-  const productId = sessionStorage.getItem("productId");
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<any>("");
-  const [severity, setSeverity] = useState<string | any>("success");
-  const [actionVal, setActionVal] = useState<any>("");
-  const [minTenure, setMinTenure] = useState(0);
-  const [maxTenure, setMaxTenure] = useState(0);
-  const [maxMoratorium, setMaxMoratorium] = useState(0);
-  const [minMoratorium, setMinMoratorium] = useState(0);
-
-  const { data: schemeValueData } = useGetProdSchemesQuery(productId as any, { refetchOnMountOrArgChange: true });
-  const [addFacilityDetails] = useSaveFacilityDetailsMutation();
-  const { data: facilityData, isLoading } = useGetFacilityDetailsByIdQuery(applId, { refetchOnMountOrArgChange: true });
-  const { data: committe } = useGetAllCommitteeMastersQuery("");
-  const [getBenchmarkRate] = useLazyGetBenchmarkRateByRateIdQuery();
-
-  const handleClickSetAction = (action: any) => {
-    setActionVal(action);
-  };
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
-  };
-
-  const handleSubmit = async (values: any) => {
-    try {
-      values.interestRate = +values.interestRate;
-      values.tenure = +values.tenure;
-      values.moratorium = +values.moratorium;
-      values.benchmarkRate = +values.benchmarkRate;
-      values.spread = +values.spread;
-      values.dop = String(values.dop);
-      values.upfrontFeeText = String(values.upfrontFeeText);
-      values.fiRate = +values.fiRate
-      if (await addFacilityDetails(values).unwrap()) {
-        if (actionVal === '01') {
-          setOpenSnackbar(true);
-          setSeverity("success");
-          setSnackMsg("Record saved successfully");
-          return false;
-        }
-        setActionVal(null);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error("Error saving facility details:", err);
-    }
-  };
-
-  const handleCloseSnackbar = (event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason == "clickaway") {
-      return
-    }
-    setOpenAlertSnackbar(false)
-  }
-
-  useEffect(() => {
-    if (textFieldRef.current) {
-      textFieldRef.current.focus();
-    }
-  }, []);
-
-  const [fundMaster, setFundMaster] = useState<any>([]);
-
-  const getFacilityMaster = async (schemeCode: any) => {
-    const data = await FacilityFormAPI.getFacilityApi(schemeCode);
-    setFundMaster(data?.data);
-  }
-
-  const getSchemeDetails = async (schemeCode: any) => {
-    const { data: schemeData } = await FacilityFormAPI.getSchemeDetails(schemeCode);
-    setMaxTenure(schemeData?.data?.schemeMaxTenure);
-    setMinTenure(schemeData?.data?.schemeMINTenure);
-    setMaxMoratorium(schemeData?.data?.schemeMAXMoratorium);
-    setMinMoratorium(schemeData?.data?.schemeMINMoratorium);
-  }
-
-  useEffect(() => {
-    if (facilityData?.scheme) {
-      getFacilityMaster(facilityData?.scheme);
-      getSchemeDetails(facilityData?.scheme);
-    }
-  }, [facilityData])
-
-  const validationSchema = Yup.object().shape({
-    loanAmtProposed: Yup.string().required("Loan Amount Proposed is required")
-      .test('positive', 'Amount must be greater than 0', val => val ? Number(val) > 0 : false),
-    tenure: Yup.string().required("Tenure is required")
-      .test('positive', 'Tenure must be greater than 0', val => val ? Number(val) > 0 : false),
-  });
-
-  const loginData: any = Cookies.get("user") ?? null;
-  const loginCookiesData: any = JSON.parse(loginData);
-
-  if (isLoading) return <FormLoader />;
-
-  return (
-    <div className="custome-form">
-      <Formik
-        initialValues={{ ...facilityData, applId }}
-        onSubmit={handleSubmit}
-        validationSchema={validationSchema}
-        validateOnChange={true}
-        validateOnBlur={true}
-        enableReinitialize={true}
-      >
-        {({ values, setFieldValue, handleChange }) => {
-
-          const handleRateNameChange = (e: any) => {
-            const scheme = e.target.value;
-            setFieldValue('scheme', scheme);
-            getFacilityMaster(scheme);
-            getSchemeDetails(scheme);
-          }
-          const handlePercentage = (percentageValue: number) => {
-            if (percentageValue) {
-              const percentageCalVal = Number(((facilityData?.loanAmtProposed * percentageValue) / 100) * 10000000);
-              setFieldValue('upfrontFeeText', percentageCalVal.toFixed(2));
-            } else {
-              setFieldValue('upfrontFeeText', 0)
-            }
-          }
-
-          const handleAbsolute = (absoluteValue: number) => {
-            if (absoluteValue) {
-              setFieldValue('upfrontFeeText', absoluteValue);
-            } else {
-              setFieldValue('upfrontFeeText', 0);
-            }
-          }
-
-          const handleCalTotalExposure = (currentVal: number) => {
-            if (Number(currentVal) > 10000) {
-              setFieldValue('loanAmtProposed', 10000);
-              setOpenSnackbar(true);
-              setSeverity("error");
-              setSnackMsg("Loan Amount Proposed can not be > 10000");
-              return;
-            }
-            const tentativeExposureVal = facilityData?.tentativeExposure === null ? 0 : facilityData?.tentativeExposure;
-            const totalExposureVal = Number(+currentVal + +tentativeExposureVal);
-            setFieldValue('totalExposure', totalExposureVal);
-
-            if (compExposureData?.connLendingFlag === 'N') {
-              if (totalExposureVal <= 300) {
-                setFieldValue('dop', 1);
-              } else if (totalExposureVal > 300 && totalExposureVal <= 750) {
-                setFieldValue('dop', 2);
-              } else if (totalExposureVal > 750) {
-                setFieldValue('dop', 3);
-              }
-            } else if (compExposureData?.connLendingFlag === 'Y') {
-              setFieldValue('dop', 3);
-            }
-          }
-
-          const handleCalFII = (currentVal: number) => {
-            setFieldValue('fiRate', currentVal);
-          }
-
-          const handleMoratoriumChecks = (moratorium: number) => {
-            if (Number(moratorium) < 0) {
-              setAlertMessage('Value cannot be less than 0.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-            else if (Number(moratorium) >= minMoratorium && Number(moratorium) <= maxMoratorium) {
-              setAlertMessage('Value is within the allowed range.');
-              setAlertSeverity('success');
-              setOpenAlertSnackbar(true);
-            } else if (Number(moratorium) > maxMoratorium) {
-              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxMoratorium + '.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-              setFieldValue('moratorium', maxMoratorium);
-            }
-          }
-
-          const handleTenureChecks = (tenure: number) => {
-            if (Number(tenure) < 0) {
-              setAlertMessage('Value cannot be less than 0.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-            else if (Number(tenure) >= minTenure && Number(tenure) <= maxTenure) {
-              setAlertMessage('Value is within the allowed range.');
-              setAlertSeverity('success');
-              setOpenAlertSnackbar(true);
-            } else if (Number(tenure) > maxTenure) {
-              setAlertMessage('Exceed Limit! Value must be between 0 and ' + maxTenure + '.');
-              setAlertSeverity('error');
-              setOpenAlertSnackbar(true);
-            }
-          }
-
-          const handleChangeBenchmark = async (rateId: any) => {
-            const benchData = await getBenchmarkRate(rateId).unwrap();
-            if (benchData) {
-              setFieldValue('benchmarkRate', benchData?.BPM_PLR);
-            }
-          }
-
-          return (
+        {!isLoadingProfile ? <Formik
+          initialValues={mfiProfileData || { ...profileInitialValues, applId }}
+          validationSchema={validationSchema}
+          onSubmit={profileHandleSubmit}
+          validateOnChange={true}
+          validateOnBlur={true}
+          enableReinitialize={true}
+        >
+          {({ values }) => (
             <Form>
               <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
                 || loginCookiesData?.regType === "Checker"}>
                 {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
                   && loginCookiesData?.regType === "Maker" &&
-                  <AutoSave debounceMs={5000} values={values} handleSubmit={handleSubmit} />
+                  <AutoSave debounceMs={5000} values={values} handleSubmit={profileHandleSubmit} />
                 }
-                <CalculatedFields />
-                <Grid spacing={2} padding={4} container className="form-grid">
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      type="number"
-                      name="loanAmtProposed"
-                      label="Loan Amount Proposed"
-                      value={values?.loanAmtProposed}
-                      onCustomChange={(currentVal: any) => handleCalTotalExposure(currentVal)}
-                      endAdornment={
-                        <InputAdornment position="end">
-                          (In ₹ crore)
-                        </InputAdornment>
-                      }
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceDatePickerField
-                      label="Validity period of sanction"
-                      name="drawlValidity"
-                      disablePast={true}
-                      onChange={(date: Date) => {
-                        setFieldValue('drawlValidity', moment(date).format("DD-MM-YYYY"));
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Scheme: *
-                      </InputLabel>
-                      <Select
-                        label="Scheme: *"
-                        name="scheme"
-                        onChange={(event) => handleRateNameChange(event)}
-                        value={values?.scheme}
-                      >
-                        {
-                          schemeValueData?.map((item: any, index: number) => (
-                            <MenuItem key={item?.schCd} value={item?.schCd}>{item?.schLongName}</MenuItem>
-                          ))
-                        }
-                      </Select>
-                    </FormControl>
+                <div className="wrap-inner-table mt-2">
+                  <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>
+                          <FormControl fullWidth>
+                            <TextBoxField
+                              label="Tagged Rating (for Previous Term Loan of SIDBI)"
+                              name="taggedRating" />
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <FormControl fullWidth>
+                            <TextBoxField
+                              label="Lowest Rating"
+                              name="lowestRating" />
+                          </FormControl>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Grid spacing={2} padding={4} container className='form-grid'>
+                  <Grid item xs={12} sm={6} lg={12}>
+                    <TextAreaField label="Rating Movement "
+                      name="ratingMovement" />
                   </Grid>
 
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Fund: *
-                      </InputLabel>
-                      <Select
-                        label="Fund: *"
-                        name="fund"
-                        value={values?.fund}
-                        onChange={handleChange}
-                        disabled={loginCookiesData?.regType !== "Maker"}
-                      >
-                        {
-                          fundMaster?.data?.map((item: any) => (
-                            <MenuItem key={item?.fundCode} value={item?.fundCode}>{item?.fundDesc}</MenuItem>
-                          ))
-                        }
-                      </Select>
-                    </FormControl>
+                  <Grid item xs={12} sm={6} lg={12}>
+                    <TextAreaField label="Summary of External Rating Report"
+                      name="ratingExtract" />
                   </Grid>
 
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      type="text"
-                      name="totalExposure"
-                      label="Total Exposure"
-                      value={values?.totalExposure}
-                      disabled
-                      endAdornment={
-                        <InputAdornment position="end">
-                          (In ₹ crore)
-                        </InputAdornment>
-                      }
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField
-                      name="tenure"
-                      label="Tenure (In months)"
-                      type="number"
-                      onCustomChange={(currentVal: any) => handleTenureChecks(currentVal)}
-                      disabled={loginCookiesData?.regType !== "Maker"}
-                    />
-                  </Grid>
-
-                  {+values?.tenure > maxTenure && (
-                    <Grid item xs={12} sm={12} md={12} lg={12}>
-                      <label>
-                        <Typography className='text-end-- text-warning-- mb-1 fw-bold' variant="body2">
-                          <Alert severity="info" style={{ fontSize: '12px', padding: '2px 10px' }}>
-                            <b>Note:</b> Comments if tenure does not fall under scheme parameters
-                          </Alert>
-                        </Typography>
-                      </label>
-
-                      <TextAreaField label="comments"
-                        name="tenureCommt" />
-                    </Grid>
-                  )
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <AdvanceTextBoxField label="Moratorium (In months)"
-                      name="moratorium" type="number" allowDecimal={false}
-                      onCustomChange={(currentVal: any) => handleMoratoriumChecks(currentVal)} />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Repayment frequency
-                      </InputLabel>
-                      <Select
-                        label="Repayment frequency"
-                        name="repaymentFrequency"
-                        value={values?.repaymentFrequency}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="M">Monthly</MenuItem>
-                        <MenuItem value="Q">Quarterly</MenuItem>
-                        <MenuItem value="H">Half-yearly</MenuItem>
-                        <MenuItem value="Y">Yearly</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Interest rate Type
-                      </InputLabel>
-                      <Select
-                        label="Interest rate Type"
-                        name="interestRateType"
-                        value={values?.interestRateType}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="fixed">Fixed</MenuItem>
-                        <MenuItem value="floating">Floating</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-
-                  {
-                    values?.interestRateType === "fixed" ? (<></>) : (
-                      <>
-                        <Grid item xs={12} sm={4} md={4} lg={4}>
-                          <EnhancedDropDown
-                            label="Benchmark"
-                            name="benchmark"
-                            domain="mstr/getBenchMark"
-                            disabled={values?.interestRateType === "fixed"}
-                            onChange={(currentVal: any) => handleChangeBenchmark(currentVal)}
-                          />
-
-                        </Grid>
-                        <Grid item xs={12} sm={4} md={4} lg={4}>
-                          <AdvanceTextBoxField
-                            className="disabled-inputs-lbl"
-                            label="Benchmark Rate"
-                            name="benchmarkRate"
-                            type="number"
-                            disabled={values?.interestRateType === "fixed"}
-                          />
-                        </Grid>
-                      </>
-                    )
-                  }
-
-                  {values?.interestRateType === "fixed" ? (<></>) : (
-                    <>
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Interest rate"
-                          name="interestRate"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Credit Spread"
-                          name="creditSpread"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Risk Premium"
-                          name="riskPremium"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Discretion"
-                          name="discretion"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <AdvanceTextBoxField
-                          label="Interest Premium"
-                          name="interestPremium"
-                          type="number"
-                        />
-
-                      </Grid>
-
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <TextBoxField
-                          label="Spread"
-                          name="spread"
-                          type="number"
-                          disabled={values?.interestRateType === "fixed"}
-                        />
-                      </Grid></>)
-
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextBoxField
-                      name="fiRate"
-                      label="FI Rate"
-                      type="number"
-                      disabled
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">Security</InputLabel>
-                      <Select
-                        label="Security"
-                        name="security"
-                        value={values?.security}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="exclusive">Exclusive</MenuItem>
-                        <MenuItem value="pari-Passu">Pari-Passu</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextField
-                      name="acr"
-                      label="ACR"
-                      value={values?.acr}
-                      size="small"
-                      type="number"
-                      fullWidth
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        handleChange(e);
-                        const acr = Number(e.target.value);
-                        if (acr < 0) {
-                          setAlertMessage('Value cannot be less than 0.');
-                          setAlertSeverity('error');
-                          setOpenAlertSnackbar(true);
-                        }
-                        else if (acr >= 0 && acr <= 2) {
-                          setAlertMessage('Value is within the allowed range.');
-                          setAlertSeverity('success');
-                          setOpenAlertSnackbar(true);
-                        } else if (acr > 2) {
-                          setAlertMessage('Exceed Limit! Value must be between 1 and 2.');
-                          setAlertSeverity('error');
-                          setOpenAlertSnackbar(true);
-                        }
-                      }}
-                      disabled={loginCookiesData?.regType !== "Maker"}
-                    />
-                  </Grid>
-
-                  {
-                    +(values?.acr) > 2 && (
-                      <Grid item xs={12} sm={4} md={4} lg={4}>
-                        <TextAreaField label="comments if ACR does not fall under parameters"
-                          name="acrCommt" />
-                      </Grid>
-                    )
-                  }
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Qualifying Assets
-                      </InputLabel>
-                      <Select
-                        label="Qualifying Assets"
-                        name="qualAssets"
-                        value={values?.qualAssets}
-                        onChange={handleChange}
-                      >
-                        <MenuItem value="secured">Secured</MenuItem>
-                        <MenuItem value="un-secured">Un-secured</MenuItem>
-                        <MenuItem value="secure_un-secured">
-                          Secured / Un-secured
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <TextBoxField label="Penal Charge"
-                      name="penalCharges" type="number" />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4} md={4} lg={4}>
-                    <FormControl fullWidth>
-                      <InputLabel className="select-label">
-                        Delegation of Power
-                      </InputLabel>
-                      <Select
-                        label="Delegation of Power"
-                        name="dop"
-                        value={values?.dop}
-                        onChange={handleChange}
-                        disabled
-                      >
-                        {
-                          committe && committe.length > 0 ? committe?.map((item: any, index: any) => (
-                            <MenuItem key={item?.commId} value={item.commId}>{item?.commName}</MenuItem>
-                          ))
-                            : null}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={6} sm={12}>
-                    <div style={{
-                      border: '1px solid #E0ECE4', marginTop: '10px', padding: '15px 20px',
-                      boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.05)', borderRadius: '10px'
-                    }}>
-
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} sm={1} className="mt-2 mb-0">
-                          <b>Upfront Fee</b>
-                        </Grid>
-                        <Grid item xs={12} sm={3} className="mt-2 mb-0">
-                          <OutlinedInput
-                            type="text"
-                            value={Number(values?.upfrontFeeText === null ? 0 : values?.upfrontFeeText === "null" ? 0 : values?.upfrontFeeText).toFixed(2)}
-                            disabled
-                            name="upfrontFeeText"
-                            sx={{ maxHeight: '25px' }}
-                            endAdornment={
-                              <InputAdornment position="end">
-                                (In ₹)
-                              </InputAdornment>
-                            }
-                          />
-                        </Grid>
-                        <Grid item xs={12} sm={1}></Grid>
-                        <Grid item xs={12} sm={3}>
-                          <FormControlLabel
-                            control={<Radio
-                              checked={values?.upfrontFlag === "percentage"}
-                              onChange={() => {
-                                setFieldValue('upfrontFlag', "percentage");
-                                setFieldValue('upfrontFee', '')
-                              }}
-                            />}
-                            label="Percentage" />
-
-                          {
-                            values?.upfrontFlag === "percentage" ?
-                              <AdvanceTextBoxField
-                                name="upfrontPercent"
-                                label="Percentage Fee"
-                                fullWidth
-                                type="number"
-                                onCustomChange={(currentVal: any) => handlePercentage(currentVal)}
-                                disabled={values?.upfrontFlag === "absolute"}
-                              />
-
-                              : <></>
-                          }
-                        </Grid>
-
-
-                        <Grid item xs={12} sm={3}>
-                          <FormControlLabel
-                            control={<Radio
-                              checked={values?.upfrontFlag === "absolute"}
-                              onChange={() => {
-                                setFieldValue('upfrontFlag', "absolute");
-                                setFieldValue('upfrontPercent', '')
-                              }}
-                            />}
-                            label="Absolute" />
-
-                          {
-                            values.upfrontFlag === "absolute" ?
-                              <AdvanceTextBoxField
-                                name="upfrontFee"
-                                label="Absolute Fee"
-                                fullWidth
-                                type="number"
-                                onCustomChange={(currentVal: any) => handleAbsolute(currentVal)}
-                                disabled={values?.upfrontFlag === "percentage"}
-                              />
-                              : <></>
-                          }
-
-                        </Grid>
-                      </Grid>
+                  <Grid item xs={12} sm={6} lg={12}>
+                    <label><b className="ht_text">External Credit Rating of Holding Company</b></label>
+                    <div className="wrap-richtext">
+                      <RichTextField label=""
+                        name="extRatHoldComp"
+                        disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                          || loginCookiesData?.regType === "Checker"} />
                     </div>
                   </Grid>
+                </Grid>
 
+                <Grid item xs={12} sm={6} md={3} lg={12} className="mt-2">
+                  <b className="ht_text">Business Prospects</b>
+                </Grid>
+                <div className="wrap-inner-table mt-1">
+                  <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell colSpan={2}><b>Strength</b></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell colSpan={2}>
+                          <div className="wrap-richtext">
+                            <RichTextField label=""
+                              name="strength"
+                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                || loginCookiesData?.regType === "Checker"} />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><b>Weakness</b></TableCell>
+                        <TableCell><b>Comments on Weaknesses</b></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>
+                          <div className="wrap-richtext">
+                            <RichTextField label=""
+                              name="weakness"
+                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                || loginCookiesData?.regType === "Checker"} />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="wrap-richtext">
+                            <RichTextField label=""
+                              name="weaknessComments"
+                              disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                || loginCookiesData?.regType === "Checker"} />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Grid spacing={2} padding={4} container className='form-grid pb-0'>
+                  <Grid item xs={12} sm={6} md={3} lg={12}>
+                    <b className="ht_text">Rating Sensitivity Factors</b>
+                  </Grid>
+                  <Grid item xs={12} sm={12} md={12} lg={12} className="pt-1">
+                    <div className="wrap-inner-table mt-0">
+                      <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell colSpan={2}><b>Upward Factors</b></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell colSpan={2}>
+                              <div className="wrap-richtext">
+                                <RichTextField label=""
+                                  name="upwardFactors"
+                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                    || loginCookiesData?.regType === "Checker"} />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+
+                        <TableHead>
+                          <TableRow>
+                            <TableCell><b>Downward Factors</b></TableCell>
+                            <TableCell><b>Comments on Downward Factors</b></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell>
+                              <div className="wrap-richtext">
+                                <RichTextField label=""
+                                  name="downwardFactors"
+                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                    || loginCookiesData?.regType === "Checker"} />
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="wrap-richtext">
+                                <RichTextField label=""
+                                  name="downFactorsComments"
+                                  disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB')
+                                    || loginCookiesData?.regType === "Checker"} />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </Grid>
                 </Grid>
                 {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB')
                   && loginCookiesData?.regType === "Maker" &&
-                  <Button className="sbmtBtn psn_btn mt-0 mb-2 ms-0" type='submit'
-                    onClick={() => handleClickSetAction('01')}
-                    variant="contained"> Save <CheckCircleOutlineIcon />
-                  </Button>
+                  <Grid item xs={12} sx={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
+                    <Button type="submit" size="small"
+                      onClick={() => handleClickSetAction('01')}
+                      className="sbmtBtn psn_btn ms-0 mt-0" variant="contained" >
+                      Save <CheckCircleOutlineIcon />
+                    </Button>
+                  </Grid>
                 }
               </fieldset>
             </Form>
-          )
-        }}
-      </Formik>
+          )}
+        </Formik> : <FormLoader />}
 
-      <Snackbar open={openAlertSnackbar} autoHideDuration={5000} onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: "right" }}>
-        <Alert onClose={handleCloseSnackbar} severity={alertSeverity} sx={{ width: "100%" }}>
-          {alertMessage}
-        </Alert>
-      </Snackbar>
-
-      <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
-        handleSnackClose={handleSnackClose} submitCall={false} />
-    </div>
-  );
-};
-
-export default FacilityDetails;
-
-import React from 'react';
-import Grid from "@mui/material/Grid";
-import { KeyValuePair } from "./KeyValuePair";
-import { getIn, useFormikContext } from "formik";
-import Typography from "@mui/material/Typography";
-import { removeRestrictedCharacters } from '../../utlis/input';
-import { InputAdornment, Tooltip, IconButton } from '@mui/material';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import RedditTextField from './RedditTextField';
-
-
-interface AdvanceTextBoxFieldProps {
-  id?: number;
-  label?: string;
-  name: string;
-  disabled?: boolean;
-  type?: string;
-  value?: string;
-  readonly?: boolean;
-  restrictedCharacters?: string;
-  placeholder?: string;
-  tooltip?: string;
-  required?: boolean;
-  maxLength?: number;
-  minLength?: number;
-  startAdornment?: React.ReactNode;
-  endAdornment?: React.ReactNode;
-  multiline?: boolean;
-  rows?: number;
-  maxRows?: number;
-  validation?: {
-    pattern?: RegExp;
-    customValidation?: (value: string) => string | undefined;
-  };
-  transformValue?: (value: string) => string;
-  onCustomChange?: any;
-  fullWidth?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-  InputProps?: any;
-  allowNegative?: boolean;
-  allowDecimal?: boolean;
-  decimalPlaces?: number;
+        <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
+          handleSnackClose={handleSnackClose} submitCall={false} />
+      </div>
+    </>
+  )
 }
 
-export const AdvanceTextBoxField: React.FC<AdvanceTextBoxFieldProps> = ({
-  label = "",
-  name,
-  disabled = false,
-  type = 'text',
-  readonly = false,
-  restrictedCharacters = "<>{}",
-  placeholder,
-  tooltip,
-  required = false,
-  maxLength,
-  minLength,
-  startAdornment,
-  endAdornment,
-  multiline = false,
-  rows,
-  maxRows,
-  validation,
-  transformValue,
-  onCustomChange,
-  fullWidth = true,
-  className,
-  style,
-  allowNegative = false,
-  allowDecimal = true,
-  decimalPlaces = 2,
-  ...props
-}) => {
-  const { handleChange, handleBlur, values, touched, errors, setFieldValue } =
-    useFormikContext<KeyValuePair>() || {};
-
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let { value } = event.target;
-
-    if (restrictedCharacters) {
-      value = removeRestrictedCharacters(value, restrictedCharacters);
-    }
-
-    if (transformValue) {
-      value = transformValue(value);
-    }
-
-    if (type === 'number') {
-      let regex = allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/;
-      if (!allowDecimal) {
-        regex = /^\d*$/;
-      }
-      if (allowNegative && !allowDecimal) {
-        regex = /^-?\d*$/;
-      }
-      if (!regex.test(value) && value !== '') {
-        return;
-      }
-      if (value !== '' && value !== '-' && allowDecimal && value.includes('.')) {
-        const parts = value.split('.');
-        if (parts[1] && parts[1].length > decimalPlaces) {
-          const rounded = Number(parseFloat(value).toFixed(decimalPlaces));
-          value = rounded.toString();
-        }
-      }
-    }
-
-    if (validation?.pattern && !validation.pattern.test(value)) {
-      return;
-    }
-    setFieldValue(name, value);
-    if (onCustomChange) {
-      onCustomChange(value);
-    }
-  };
-  const labelStyles = {
-    '& .MuiInputLabel-shrink': {
-      background: '#fff',
-      padding: '0 8px',
-    },
-  };
-
-  const getErrorMessage = () => {
-    if (getIn(touched, name) && getIn(errors, name)) {
-      return JSON.stringify(getIn(errors, name)).replaceAll('"', "");
-    }
-    return "";
-  };
-
-  return (
-    <Grid item xs={12} style={style}>
-      <Grid item xs={12}>
-        <RedditTextField
-          label={label}
-          className={`${name} ${className || ''}`}
-          onChange={handleInputChange}
-          onBlur={handleBlur}
-          value={getIn(values, name)}
-          name={name}
-          size="small"
-          disabled={disabled}
-          type={type}
-          placeholder={placeholder}
-          required={required}
-          sx={labelStyles}
-          inputProps={{
-            readOnly: readonly,
-            maxLength: maxLength,
-            minLength: minLength,
-            inputMode: type === 'number' ? 'decimal' : 'text',
-            pattern: type === 'number' ? undefined : undefined
-          }}
-          multiline={multiline}
-          rows={rows}
-          maxRows={maxRows}
-          fullWidth={fullWidth}
-          InputProps={{
-            startAdornment: startAdornment && (
-              <InputAdornment position="start">{startAdornment}</InputAdornment>
-            ),
-            endAdornment: (
-              <InputAdornment position="end">
-                {tooltip && (
-                  <Tooltip title={tooltip}>
-                    <IconButton size="small">
-                      <HelpOutlineIcon />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {endAdornment}
-              </InputAdornment>
-            ),
-          }}
-          {...props}
-        />
-      </Grid>
-      <Grid item xs={12}>
-        <Typography
-          color="error"
-          variant="subtitle2"
-          gutterBottom
-          component="span"
-          className="mybooking_error"
-        >
-          {getErrorMessage()}
-        </Typography>
-      </Grid>
-    </Grid>
-  );
-};
+export default ExternalRating;
 
 
+as i want DetailsPastAssistance Details of Facilities Rejected/Unavailed currently only get api is there but now there is change that will be save and get and add and delete row also so create new component and use new api already payload is shared and   useSaveOtherFacilityDetailsMutation,
+    useGetOtherFacilityDetailsQuery these are two new apis and take reference how i save add delete in external rating with formik and give me complete and proper code 
