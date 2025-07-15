@@ -1,3 +1,379 @@
+import { useState } from "react";
+import "../../../styles/appraisal.scss";
+import { Button, Grid, Table, TableBody, TableCell, TableHead, TableRow, IconButton } from "@mui/material";
+import {
+  useGetNbfcOtherAssistWithCodeQuery,
+  useGetNbfcPasstAssistWithNameQuery,
+  useGetOtherFacilityDetailsQuery,
+  useSaveOtherFacilityDetailsMutation
+} from "../../../features/appraisal/introAppraisalApi";
+import { Form, Formik, FieldArray } from "formik";
+import { TextAreaField } from "../../../components/framework/TextAreaAuto";
+import AutoSave from "../../../components/framework/AutoSave";
+import { initialValues, validationSchema } from '../../../models/appraisal/detailsPastAssistance';
+import {
+  useGetMfiProfileByIdQuery,
+  useSaveMfiProfileMutation
+} from "../../../features/appraisal/mfiProfileApi";
+import DummyTable from "../../../components/shared/DummyTable";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import Cookies from "js-cookie";
+import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
+import DeleteIcon from '@mui/icons-material/Delete';
+import { TextBoxField } from "../../../components/framework/TextBoxField";
+import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+
+const DetailsPastAssistance = ({ applId, currentModuleStatus }) => {
+  const { data: assistance } = useGetNbfcPasstAssistWithNameQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+
+  const { data: collectiveData } = useGetMfiProfileByIdQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+
+  const { data: otherAssistance } = useGetNbfcOtherAssistWithCodeQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+
+  const { data: facilities } = useGetOtherFacilityDetailsQuery(applId, {
+    skip: !applId, refetchOnMountOrArgChange: true
+  });
+
+  const [updateMfiProfile] = useSaveMfiProfileMutation();
+  const [updateOtherFacilityDetails] = useSaveOtherFacilityDetailsMutation();
+
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState("success");
+  const [actionVal, setActionVal] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSnackClose = () => {
+    setOpenSnackbar(false);
+  };
+
+  const handleClickSetAction = (action) => {
+    setActionVal(action);
+  };
+
+  const handleSubmit = async (values) => {
+    try {
+      setIsSaving(true);
+      const finalData = { ...collectiveData, applId, ...values };
+      if (await updateMfiProfile(finalData).unwrap()) {
+        if (actionVal === '01') {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("Record saved successfully");
+          setActionVal(null);
+          setIsSaving(false);
+          return false;
+        }
+        setIsSaving(false);
+        setActionVal(null);
+        return true;
+      }
+      setIsSaving(false);
+      setActionVal(null);
+    } catch (err) {
+      setIsSaving(false);
+      console.error("Error saving data:", err);
+    }
+  };
+
+  const handleFacilitiesSubmit = async (values) => {
+    try {
+      const finalData = values.facilities.map(facility => ({
+        ...facility,
+        applId,
+        slNo: facility.slNo || 0, // Default slNo if not present
+        cifName: facility.cifName || "", // Default to empty string if not present
+        panNo: facility.panNo || "" // Default to empty string if not present
+      }));
+      if (await updateOtherFacilityDetails(finalData).unwrap()) {
+        if (actionVal === '01') {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("Facilities saved successfully");
+          setActionVal(null);
+        }
+        return true;
+      }
+    } catch (err) {
+      console.error("Error saving facilities:", err);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to save facilities");
+    }
+  };
+
+  const loginData = Cookies.get("user") ?? null;
+  const loginCookiesData = JSON.parse(loginData || "{}");
+
+  let totalSanctionAmt = assistance?.reduce((acc, obj) => acc + obj.sanctionAmount, 0);
+  let totalDisbureAmt = assistance?.reduce((acc, obj) => acc + obj.disbursedAmount, 0);
+  let totalOutStandAmt = assistance?.reduce((acc, obj) => acc + obj.outstandinAmount, 0);
+
+  return (
+    <div className="custome-form">
+      <div className="wrap-inner-table mt-0 mb-0 table-responsive">
+        <Table sx={{ minWidth: '1250px' }} aria-label="simple table" className="table">
+          <TableHead>
+            <TableRow>
+              <TableCell style={{ maxWidth: '70px' }}><b>Sr. No.</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Account No</b></TableCell>
+              <TableCell style={{ maxWidth: '180px' }}><b>Scheme Name</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned authority</b></TableCell>
+              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Sanction Date</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned amount (in ₹)</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Disbursement amount (in ₹)</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>ACR</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Present o/s</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Asset Classification</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Security pari-passu</b></TableCell>
+              <TableCell style={{ maxWidth: '120px' }}><b>Interest Rate(%)</b></TableCell>
+              <TableCell style={{ maxWidth: '250px' }}><b>Interest Type (Fixed/Floating) - Benchmark</b></TableCell>
+              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Terminal Date</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {assistance?.length === 0 ? <DummyTable /> : assistance?.map((value, index) => (
+              <TableRow key={index + 1}>
+                <TableCell style={{ maxWidth: '70px' }}>{index + 1}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.accountNo}</TableCell>
+                <TableCell style={{ maxWidth: '180px' }}>{value.schemeName}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.sancAuth}</TableCell>
+                <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.sanctionDt}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.sanctionAmount}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.disbursedAmount}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.acr}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.outstandinAmount}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.assetClassification}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value?.securityPariPassu}</TableCell>
+                <TableCell style={{ maxWidth: '120px' }}>{value.interesetRate}</TableCell>
+                <TableCell style={{ maxWidth: '250px' }}>
+                  {value.interestRateType} {value.interestRateType !== 'FIXED' ? '-' : ''} {value.benchmark}
+                </TableCell>
+                <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.terminalDt}</TableCell>
+              </TableRow>
+            ))}
+            <TableRow>
+              <TableCell><b>Total</b></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell>{totalSanctionAmt}</TableCell>
+              <TableCell>{totalDisbureAmt}</TableCell>
+              <TableCell></TableCell>
+              <TableCell>{totalOutStandAmt}</TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+      <Grid spacing={2} padding={4} container className='form-grid'>
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <b className="mb-0">Exposure Under Any Other Products</b>
+        </Grid>
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <div className="wrap-inner-table mt-0">
+            <Table aria-label="simple table">
+              <TableHead>
+                <TableRow>
+                  <TableCell><b>CIF Code</b></TableCell>
+                  <TableCell><b>CIF Name</b></TableCell>
+                  <TableCell><b>Assist Type</b></TableCell>
+                  <TableCell><b>Outstanding Amount</b></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {otherAssistance?.length === 0 ? <DummyTable /> : (
+                  <TableRow>
+                    <TableCell>{otherAssistance?.[0]?.cifCode}</TableCell>
+                    <TableCell>{otherAssistance?.[0]?.cifName}</TableCell>
+                    <TableCell>{otherAssistance?.[0]?.assistType}</TableCell>
+                    <TableCell>{otherAssistance?.[0]?.outstandingAmount}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={12} className="pt-3">
+          <Formik
+            initialValues={collectiveData || { ...initialValues, applId }}
+            onSubmit={() => {}}
+            enableReinitialize={true}
+            validationSchema={validationSchema}
+            validateOnChange={true}
+            validateOnBlur={true}
+          >
+            {({ values }) => (
+              <Form>
+                <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB') || loginCookiesData?.regType === "Checker"}>
+                  {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                    <AutoSave debounceMs={1000} values={values} handleSubmit={handleSubmit} />
+                  )}
+                  <Grid spacing={2} padding={4} container className='form-grid pb-0'>
+                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
+                      <div className="wrap-richtext">
+                        <TextAreaField
+                          label="Pending major compliances, if any"
+                          name="pendingComl"
+                          disabled={loginCookiesData?.regType === "Maker" ? false : true}
+                        />
+                      </div>
+                    </Grid>
+                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
+                      <div className="wrap-richtext">
+                        <TextAreaField
+                          label="Details of Any Covenents Breach in the past, If any"
+                          name="covenantBreach"
+                          disabled={loginCookiesData?.regType === "Maker" ? false : true}
+                        />
+                      </div>
+                    </Grid>
+                  </Grid>
+                </fieldset>
+                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                  <Button
+                    type="submit"
+                    size='small'
+                    className='text-capitalize sbmtBtn ms-0 m-3 mt-0'
+                    variant="contained"
+                    color="primary"
+                    style={{ "float": "left" }}
+                    onClick={() => handleClickSetAction('01')}
+                  >
+                    Save <CheckCircleOutlineIcon />
+                  </Button>
+                )}
+              </Form>
+            )}
+          </Formik>
+          <NbfcSnackbar
+            open={openSnackbar}
+            msg={snackMsg}
+            severity={severity}
+            handleSnackClose={handleSnackClose}
+            submitCall={false}
+          />
+        </Grid>
+        <Grid item xs={12} sm={12} md={12} lg={12}>
+          <b>Details of Facilities Rejected/Unavailed</b>
+        </Grid>
+      </Grid>
+      <div className="wrap-inner-table mt-0">
+        <Formik
+          initialValues={{ facilities: facilities || [] }}
+          onSubmit={handleFacilitiesSubmit}
+          enableReinitialize={true}
+        >
+          {({ values }) => (
+            <Form>
+              <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB') || loginCookiesData?.regType === "Checker"}>
+                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                  <AutoSave debounceMs={1000} values={values} handleSubmit={handleFacilitiesSubmit} />
+                )}
+                <FieldArray name="facilities">
+                  {({ push, remove }) => (
+                    <>
+                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                        <Button
+                          type="button"
+                          onClick={() => push({
+                            applId,
+                            acctNumber: "",
+                            acctDate: null,
+                            assistType: "",
+                            outstandingAmount: 0,
+                            rejectionReason: "",
+                            slNo: 0,
+                            cifName: "",
+                            panNo: ""
+                          })}
+                        >
+                          Add
+                        </Button>
+                      )}
+                      <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                        <TableHead>
+                          <TableRow>
+                            {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                              <TableCell><b>Action</b></TableCell>
+                            )}
+                            <TableCell><b>Application No</b></TableCell>
+                            <TableCell><b>Application Date</b></TableCell>
+                            <TableCell><b>Facility Requested</b></TableCell>
+                            <TableCell><b>Amount Requested</b></TableCell>
+                            <TableCell><b>Reason for Rejection</b></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {values.facilities.map((facility, index) => (
+                            <TableRow key={index}>
+                              {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                                <TableCell>
+                                  <IconButton onClick={() => remove(index)}>
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </TableCell>
+                              )}
+                              <TableCell>
+                                <TextBoxField name={`facilities.${index}.acctNumber`} />
+                              </TableCell>
+                              <TableCell>
+                                <AdvanceDatePickerField name={`facilities.${index}.acctDate`} />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField name={`facilities.${index}.assistType`} />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField name={`facilities.${index}.outstandingAmount`} type="number" />
+                              </TableCell>
+                              <TableCell>
+                                <TextBoxField name={`facilities.${index}.rejectionReason`} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
+                        <Button
+                          type="submit"
+                          onClick={() => handleClickSetAction('01')}
+                        >
+                          Save
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </FieldArray>
+              </fieldset>
+            </Form>
+          )}
+        </Formik>
+      </div>
+    </div>
+  );
+};
+
+export default DetailsPastAssistance;
+
+
+
+
+
+
+
+
+
 import React from 'react';
 import { useField } from 'formik';
 import ReactQuill from 'react-quill';
