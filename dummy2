@@ -1,3 +1,51 @@
+export const masterApi = createApi({
+  reducerPath: path,
+  baseQuery: customBaseQuery(),
+  tagTypes: ['Master'],
+  endpoints: (builder) => ({
+    getMater: builder.query<any, string>({
+      query: (searchReqeust) => `/${searchReqeust}`,
+      providesTags: (result, error, arg) => [{ type: 'Master', id: arg }],
+      // Cache for 5 minutes
+      keepUnusedDataFor: 300,
+    }),
+  }),
+});
+
+
+// Add bank master data fetch at the top level
+const { 
+  data: bankMasterData, 
+  isLoading: isBankMasterLoading
+} = useGetMaterQuery(`refapi/mstr/getBankMasters`, {
+  refetchOnMountOrArgChange: true
+});
+
+// Transform bank options
+const bankOptions = React.useMemo(() => {
+  if (!bankMasterData) return [];
+  return modify("mstr/getBankMasters", bankMasterData)?.map((item: any) => ({
+    key: item.key,
+    value: item.key,
+    label: item.value
+  })) || [];
+}, [bankMasterData]);
+
+// Pass options to MultipleDropDownField
+<MultipleDropDownField
+  label=""
+  name={`data.${index}.lenderName`}
+  domain="mstr/getBankMasters"
+  disabled={tlData.saveStatus === '02'}
+  options={bankOptions}
+  isLoading={isBankMasterLoading}
+/>
+
+
+
+
+
+
 import { FieldArray, Form, Formik } from "formik";
 import { useEffect, useState } from "react";
 import { Alert, Button, Grid, IconButton, Snackbar, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
