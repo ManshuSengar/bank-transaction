@@ -1,3 +1,139 @@
+import React, { useMemo } from "react";
+import { KeyValuePair } from "../../../components/framework/KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import { Autocomplete, TextField, Grid } from "@mui/material";
+import { useGetMaterQuery } from "../../../features/master/api";
+import { modify } from "../../../utlis/helpers";
+import { useGetMirQuery } from "../../../features/mir/api";
+
+export const MultipleDropDownField = (props: {
+  label?: string;
+  name: string;
+  domain: string;
+  disabled?: boolean;
+  options?: any[];   // New prop for pre-fetched options
+  isLoading?: boolean; // New prop for external loading state
+}) => {
+  const {
+    handleBlur,
+    values,
+    touched,
+    errors,
+    setFieldValue
+  } = useFormikContext<KeyValuePair>() || {};
+
+  // Use external options if provided, otherwise fetch internally
+  const {
+    data: masterData,
+    isLoading: isMasterLoadingInternal,
+    error: masterError,
+  } = props.options ? 
+    { data: props.options, isLoading: false, error: null } : 
+    useGetMaterQuery(`refapi/${props.domain}`, {
+      refetchOnMountOrArgChange: true
+    });
+
+  const {
+    data: infoData,
+    isLoading: infoLoading,
+    error: infoError
+  } = useGetMirQuery(getIn(values, props.name), {
+    skip: !getIn(values, props.name)
+  });
+
+  const options = useMemo(() => {
+    // Use directly if options prop provided
+    if (props.options) return props.options;
+    
+    // Otherwise transform API data
+    return modify(props.domain, masterData)?.map((item: any) => ({
+      key: item.key,
+      value: props.domain !== "mir/getMirPnfList" ? item.value : item.key,
+      label: item.label || item.value
+    })) || [];
+  }, [masterData, props.domain, props.options]);
+
+  React.useEffect(() => {
+    if (infoData) {
+      setFieldValue("custDetails", infoData?.customerDetails);
+      setFieldValue("customerName", infoData?.nbfcName);
+      setFieldValue("authBehalf", infoData?.nbfcName);
+      setFieldValue("businessNature", infoData?.businessNature);
+      setFieldValue("loanPurpose", infoData?.loanPurpose);
+      setFieldValue("pan", infoData?.panNo);
+      setFieldValue("nbfcId", infoData?.nbfcId);
+      setFieldValue("cifCd", infoData?.cifCd);
+    }
+  }, [infoData, setFieldValue]);
+
+  const currentValue = useMemo(() => {
+    return options.find(
+      (option: any) => option.value == getIn(values, props.name)
+    ) || null;
+  }, [options, values, props.name]);
+
+  // Determine loading state: external prop takes precedence
+  const isLoading = props.isLoading !== undefined ? 
+    props.isLoading : 
+    isMasterLoadingInternal;
+
+  return (
+    <Grid item xs={12}>
+      <Autocomplete
+        sx={{
+          "& .MuiOutlinedInput-root": {
+            paddingRight: "20px!important",
+            paddingLeft: "0px!important",
+          },
+        }}
+        fullWidth
+        options={options}
+        value={currentValue}
+        disabled={props?.disabled}
+        loading={isLoading}
+        onChange={(_, newValue) => {
+          setFieldValue(props.name, newValue ? newValue.value : null);
+        }}
+        onBlur={handleBlur}
+        getOptionLabel={(option) => option.label}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            name={props.name}
+            label={props.label}
+            variant="outlined"
+          />
+        )}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        filterOptions={(options, { inputValue }) =>
+          options.filter(option =>
+            option.label.toLowerCase().includes(inputValue.toLowerCase())
+          )
+        }
+      />
+      <Grid item xs={12}>
+        <Typography
+          color="error"
+          variant="subtitle2"
+          gutterBottom
+          component="span"
+          className="mybooking_error"
+        >
+          {getIn(errors, props.name) &&
+            JSON.stringify(getIn(errors, props.name)).replaceAll('"', "")
+          }
+        </Typography>
+      </Grid>
+    </Grid>
+  );
+};
+
+
+
+
+
+
 export const MultipleDropDownField = (props: {
   label?: string;
   name: string;
