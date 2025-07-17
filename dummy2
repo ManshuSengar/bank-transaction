@@ -1,3 +1,30 @@
+export const MultipleDropDownField = (props: {
+  label?: string;
+  name: string;
+  domain: string;
+  disabled?: boolean;
+  options?: any[];   // New prop
+  isLoading?: boolean; // New prop
+}) => {
+  // ... existing formik context
+
+  // Use options from props if available
+  const options = props.options || [];
+
+  // ... rest of the component remains same
+
+  return (
+    <Autocomplete
+      options={options}
+      loading={props.isLoading || false}
+      // ... other props
+    />
+  );
+};
+
+
+
+
 export const masterApi = createApi({
   reducerPath: path,
   baseQuery: customBaseQuery(),
