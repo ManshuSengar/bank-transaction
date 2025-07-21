@@ -1,3 +1,541 @@
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Table, TableCell, TableHead, TableRow, TableBody, Button, CircularProgress } from '@mui/material';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { debounce } from 'lodash';
+import dayjs from "dayjs";
+import * as XLSX from 'xlsx';
+import { useGetFinancialDetailsQuery, useSaveFinancialDetailsFormTermsMutation } from "../../../features/application-form/applicationForm";
+import { useAppSelector } from "../../../app/hooks";
+import ErrorMessageGlobal from "../../../components/framework/ErrorMessageGlobal";
+import FormLoader from "../../../loader/FormLoader";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import ConfirmationAlertDialog from '../../../models/application-form/ConfirmationAlertDialog';
+import { DocumentAPI } from "../../../features/application-form/documentUpload";
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UPLOADINGTEXT } from "../../../utlis/constants";
+import FullScreenLoader from "../../../components/common/FullScreenLoader";
+import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
+
+const FinancialDetailsComponent = () => {
+    const [addFinancialdetails] = useSaveFinancialDetailsFormTermsMutation();
+    const { applId, transactionData } = useAppSelector((state: any) => state.userStore);
+    const { data: financialDetails, isLoading, isError } = useGetFinancialDetailsQuery(applId);
+    const [formData, setFormData] = useState<any[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaveTime, setLastSaveTime] = useState<string | null>(null);
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [actionVal, setActionVal] = useState<any>("");
+    const [formDisabled, setFormDisabled] = useState(false);
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const debouncedSave = useRef<any>();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
+
+    const calculateSums = useCallback((data: any[]) => {
+        return data.map(item => {
+            const newItem = { ...item };
+            const columns = ['valAsonTMinus2', 'valAsonTMinus1', 'valAsonT', 'qtrVal', 'tplus1Val', 'tplus2Val'];
+
+            // Calculate Total Investments (sum of Investments in group cos., SRs/securitization, liquid assets)
+            if (item.particulars === "Total Investments (in ₹ crore)") {
+                console.log("Calculating for Total Investments", item.particulars);
+                const investmentRows = data.filter(row =>
+                    [
+                        "-Investments in group cos.",
+                        "- Investments in SRs/securitization",
+                        "-Investments in liquid assets"
+                    ].includes(row.particulars)
+                );
+                columns.forEach((column: any) => {
+                    newItem[column] = investmentRows
+                        .reduce((acc, curr) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
+
+            // Calculate Total AUM (sum of On-Book AUM and Off-Book AUM)
+            if (item.particulars === "Total AUM (on-book+ off-book) (in ₹ crore)") {
+                console.log("Calculating for Total AUM", item.particulars);
+                const aumRows = data.filter(row =>
+                    [
+                        "On-Book AUM (in ₹ crore)",
+                        "Off-Book AUM (in ₹ crore)"
+                    ].includes(row.particulars)
+                );
+                columns.forEach((column: any) => {
+                    newItem[column] = aumRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
+
+            // Calculate Total Income (sum of Interest Income, Fee Income, Other Income)
+            if (item.particulars === "Total Income (in ₹ crore)") {
+                console.log("Calculating for Total Income", item.particulars);
+                const incomeRows = data.filter(row =>
+                    [
+                        "Interest Income (in ₹ crore)",
+                        "Fee Income (in ₹ crore)",
+                        "Other Income (in ₹ crore)"
+                    ].includes(row.particulars)
+                );
+                columns.forEach(column => {
+                    newItem[column] = incomeRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
+
+            // Calculate Operating Expenses (sum of Employee Cost, Marketing Cost, IT Expenses, Other Operating Expenses)
+            if (item.particulars === "Operating Expenses (in ₹ crore)") {
+                console.log("Calculating for Operating Expenses", item.particulars);
+                const expenseRows = data.filter(row =>
+                    [
+                        "-Employee Cost (in ₹ crore)",
+                        "-Marketing Cost (in ₹ crore)",
+                        "-IT Expenses (in ₹ crore)",
+                        "-Other Operating Expenses (in ₹ crore)"
+                    ].includes(row.particulars)
+                );
+                columns.forEach(column => {
+                    newItem[column] = expenseRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
+
+            return newItem;
+        });
+    }, []);
+
+    useEffect(() => {
+        if (financialDetails) {
+            const dataWithApplId = financialDetails.map((item: any) => ({
+                ...item,
+                applId
+            }));
+            setFormData(dataWithApplId);
+            const isSubmitted = dataWithApplId.some((item: any) => item.saveStatus === '02');
+            setFormDisabled(isSubmitted);
+        }
+    }, [financialDetails, applId]);
+
+    const saveFormData = async (dataToSave: any[], status = '01') => {
+        setIsSaving(true);
+        setIsUploading(true);
+        try {
+            const dataWithStatus = dataToSave.map(item => ({
+                ...item,
+                saveStatus: status
+            }));
+            if (await addFinancialdetails(dataWithStatus).unwrap()) {
+                setLastSaveTime(dayjs().format('YYYY-MM-DD HH:mm:ss'));
+                setOpenSnackbar(true);
+                setIsUploading(false);
+                setSeverity("success");
+                setSnackMsg(status === '02' ? "Section submitted successfully" : "Record saved successfully");
+                if (status === '02') {
+                    setFormDisabled(true);
+                }
+            }
+        } catch (error) {
+            console.error("Error saving data:", error);
+            setOpenSnackbar(true);
+            setIsUploading(false);
+            setSeverity("error");
+            setSnackMsg("Failed to save");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    useEffect(() => {
+        debouncedSave.current = debounce((dataToSave: any[]) => {
+            saveFormData(dataToSave);
+        }, 5000);
+
+        return () => {
+            debouncedSave.current?.cancel();
+        };
+    }, []);
+
+    const handleExternalDownload = async () => {
+        try {
+            const response = await DocumentAPI.downloadExternalTemplate('04');
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(new Blob([response.data]));
+            downloadLink.download = 'Financial details_upload template.xlsx';
+            downloadLink.target = '_blank';
+            downloadLink.click();
+        } catch (error: any) {
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg('Failed to download template document.');
+        }
+    };
+
+    const handleInputChange = (
+        index: number,
+        column: string,
+        value: string,
+        allowNegative: boolean = false
+    ) => {
+        if (formDisabled) return;
+
+        const newData = [...formData];
+
+        // Regex: allow negative numbers only for "Reserves"
+        const regex = allowNegative
+            ? /^-?\d{0,10}(\.\d{0,2})?$/
+            : /^\d{0,10}(\.\d{0,2})?$/;
+
+        if (regex.test(value)) {
+            const numericValue = parseFloat(value);
+
+            // Extra safeguard: prevent negative values if not allowed
+            if (!allowNegative && numericValue < 0) return;
+
+            newData[index][column] = value;
+            const calculatedData = calculateSums(newData);
+            setFormData(calculatedData);
+            debouncedSave.current(calculatedData);
+        }
+    };
+
+    const handleSubmit = async () => {
+        saveFormData(formData);
+    };
+
+    const handleClickSetAction = (action: string) => {
+        setActionVal(action);
+        if (action === '02') {
+            setOpenConfirmation(true);
+        }
+    };
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = () => {
+        setOpenConfirmation(false);
+        saveFormData(formData, '02');
+    };
+
+    const isCalculatedField = useCallback((particulars: string) => {
+        return [
+            "Total Investments (in ₹ crore)",
+            "Total AUM (on-book+ off-book) (in ₹ crore)",
+            "Total Income (in ₹ crore)",
+            "Operating Expenses (in ₹ crore)"
+        ].includes(particulars);
+    }, []);
+
+    const handleClose = () => {
+        setOpenSnackbar(false);
+    };
+
+    const showQuarterColumn = transactionData?.lstAudQ !== "Not Applicable";
+
+    const getTableColumns = () => {
+        const baseColumns = [
+            { key: 'particulars', label: 'Particulars' },
+            { key: 'valAsonTMinus2', label: transactionData?.lstAudYrTm2, subLabel: 'Audited' },
+            { key: 'valAsonTMinus1', label: transactionData?.lstAudYrTm1, subLabel: 'Audited' },
+            { key: 'valAsonT', label: transactionData?.lstAudYrT, subLabel: 'Audited' },
+        ];
+
+        if (showQuarterColumn) {
+            baseColumns.push({ key: 'qtrVal', label: transactionData?.lstAudQ, subLabel: 'Unaudited' });
+        }
+
+        return [
+            ...baseColumns,
+            { key: 'tplus1Val', label: transactionData?.lstAudYrTp1, subLabel: 'Projections' },
+            { key: 'tplus2Val', label: transactionData?.lstAudYrTp2, subLabel: 'Projections' },
+        ];
+    };
+
+    const columns = getTableColumns();
+    const columnMappings = {
+        'T-2': 'valAsonTMinus2',
+        'T-1': 'valAsonTMinus1',
+        'Latest audited FY (T)': 'valAsonT',
+        'Latest unaudited quarter/half year/9M': 'qtrVal',
+        'T+1': 'tplus1Val',
+        'T+2': 'tplus2Val'
+    };
+
+    const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            return;
+        }
+        // Check file size
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            return;
+        }
+
+        try {
+            setIsUploading(true);
+
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, {
+                type: 'array',
+                raw: true,
+                cellDates: true,
+                cellNF: true
+            });
+
+            const firstSheetName = workbook.SheetNames[1];
+            const worksheet = workbook.Sheets[firstSheetName];
+
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                header: 1,
+                defval: '',
+                raw: false
+            });
+
+            const headerRowIndex = jsonData.findIndex((row: any) =>
+                row.includes('Particulars-IGAAP/IND-AS') || row.includes('Particulars'));
+
+            if (headerRowIndex === -1) {
+                throw new Error('Invalid Excel format: Header row not found');
+            }
+
+            const headerRow: any = jsonData[headerRowIndex];
+
+            const columnIndices: any = {};
+            headerRow.forEach((header: string, index: number) => {
+                const mappedColumn = columnMappings[header as keyof typeof columnMappings];
+                if (mappedColumn) {
+                    columnIndices[index] = mappedColumn;
+                }
+            });
+
+            const newFormData = [...formData];
+
+            jsonData.slice(headerRowIndex + 2).forEach((row: any, rowIndex: number) => {
+                if (!row[0] || typeof row[0] !== 'string') return;
+
+                const particulars = row[0].trim();
+                const existingRowIndex = newFormData.findIndex(
+                    item => item.particulars.trim() === particulars
+                );
+
+                if (existingRowIndex !== -1) {
+                    Object.entries(columnIndices).forEach(([excelIndex, formField]: any) => {
+                        let cellValue = row[excelIndex];
+
+                        // Handle different types of cell values
+                        if (cellValue !== undefined && cellValue !== '') {
+                            // If it's a cell object with w property (formatted text)
+                            if (typeof cellValue === 'object' && cellValue.w) {
+                                cellValue = cellValue.w;
+                            }
+
+                            // Convert to number and format
+                            const numValue = typeof cellValue === 'number' ?
+                                cellValue :
+                                parseFloat(cellValue.toString().replace(/[^\d.-]/g, ''));
+
+                            newFormData[existingRowIndex][formField] =
+                                !isNaN(numValue) ? numValue.toFixed(2) : '0.00';
+                        } else {
+                            newFormData[existingRowIndex][formField] = '0.00';
+                        }
+                    });
+                }
+            });
+
+            const calculatedData = calculateSums(newFormData);
+            setFormData(calculatedData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Excel data imported successfully");
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+            debouncedSave.current(calculatedData);
+
+        } catch (error) {
+            console.error('Error processing Excel file:', error);
+            setOpenSnackbar(true);
+            setIsUploading(false);
+            setSeverity("error");
+            setSnackMsg("Error processing Excel file. Please check the format.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    if (isLoading) return <FormLoader />;
+    if (isError) return <ErrorMessageGlobal status={isError} />;
+    if (isUploading) return <FullScreenLoader open={isUploading} setOpenModal={setIsUploading} text={UPLOADINGTEXT} />;
+
+    return (
+        <div className="custome-form">
+            {!formDisabled && (
+                <div className="up_btns">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".xlsx,.xls"
+                        onChange={handleExcelUpload}
+                        style={{ display: 'none' }}
+                    />
+
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        component="span"
+                        onClick={handleUploadClick}
+                        disabled={isUploading}
+                        style={{ marginLeft: '0px', padding: '4px 10px', textTransform: 'capitalize' }}
+                        startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <UploadFileIcon style={{ fontSize: '20px' }} />}
+                    >
+                        {isUploading ? "Uploading..." : "Upload Excel"}
+                    </Button>
+
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleExternalDownload}
+                        className="sbmtBtn dwldBtn"
+                    >
+                        Download template <CloudDownloadIcon />
+                    </Button>
+                </div>
+            )}
+            {excelUploadError && (
+                <div className="error-message mt-1 text-danger">
+                    {excelUploadError}
+                </div>
+            )}
+            <ConfirmationAlertDialog
+                id={applId}
+                type={4}
+                open={openConfirmation}
+                handleClose={handleCloseConfirmation}
+                handleDelete={handleSubmitConfirmation}
+                values={formData}
+            />
+            {lastSaveTime && (
+                <div className="text-muted text-right">
+                    <p className="autoSv" style={{ marginLeft: '0px' }}>
+                        <span><b><CheckCircleOutlineIcon /> Last saved at:</b> {lastSaveTime}</span>
+                    </p>
+                </div>
+            )}
+            <div className="wrap-inner-table mt-0">
+                <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                    <TableHead>
+                        <TableRow>
+                            {columns.map((col: any, index: any) => (
+                                <TableCell key={index}>
+                                    <b>{col.label}</b>
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                        <TableRow>
+                            <TableCell><b>(All amount is In ₹ crore)</b></TableCell>
+                            {columns.slice(1).map((col: any, index: any) => (
+                                <TableCell key={index}>
+                                    <b>{col.subLabel}</b>
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    </TableHead>
+                    <TableBody style={{ background: '#fff' }}>
+                        {formData.map((item: any, index: number) => (
+                            <TableRow key={index}>
+                                <TableCell>
+                                    <p>{item?.particulars}</p>
+                                </TableCell>
+                                {columns.slice(1).map((col: any) => (
+                                    <TableCell key={col.key}>
+                                        <input
+                                            type={item?.particulars === "Reserves" ? "text" : "number"}
+                                            value={item[col.key]}
+                                            disabled={isCalculatedField(item.particulars) || formDisabled}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                const allowNegative = item?.particulars === "Reserves";
+                                                handleInputChange(index, col.key, value, allowNegative);
+                                            }}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                border: '1px solid #b3b3b3',
+                                                borderRadius: '4px'
+                                            }}
+                                        />
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+
+                {!formDisabled && (
+                    <div>
+                        <Button
+                            variant="contained"
+                            className="sbmtBtn m-3"
+                            color="primary"
+                            onClick={handleSubmit}
+                            disabled={isSaving}
+                        >
+                            Save <CheckCircleOutlineIcon />
+                        </Button>
+                        <Button
+                            variant="contained"
+                            className="sbmtBtn sbmtBtn_scn m-0"
+                            color="primary"
+                            onClick={() => handleClickSetAction('02')}
+                            disabled={isSaving}
+                        >
+                            Submit <SaveAsIcon />
+                        </Button>
+                    </div>
+                )}
+            </div>
+            <OnlineSnackbar
+                open={openSnackbar}
+                msg={snackMsg}
+                severity={severity}
+                handleSnackClose={handleClose}
+            />
+        </div>
+    );
+};
+
+export default FinancialDetailsComponent;
+
+
+
+
+
+
+
+
+
+
 {
     "data": [
         {
