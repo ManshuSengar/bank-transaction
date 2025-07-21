@@ -1,430 +1,983 @@
-import { useState } from "react";
-import "../../../styles/appraisal.scss";
-import { Button, Grid, Table, TableBody, TableCell, TableHead, TableRow, IconButton } from "@mui/material";
-import {
-  useGetNbfcOtherAssistWithCodeQuery,
-  useGetNbfcPasstAssistWithNameQuery,
-  useGetOtherFacilityDetailsQuery,
-  useSaveOtherFacilityDetailsMutation
-} from "../../../features/appraisal/introAppraisalApi";
-import { Form, Formik, FieldArray } from "formik";
-import { TextAreaField } from "../../../components/framework/TextAreaAuto";
-import AutoSave from "../../../components/framework/AutoSave";
-import { initialValues, validationSchema } from '../../../models/appraisal/detailsPastAssistance';
-import {
-  useGetMfiProfileByIdQuery,
-  useSaveMfiProfileMutation
-} from "../../../features/appraisal/mfiProfileApi";
-import DummyTable from "../../../components/shared/DummyTable";
+{
+    "data": [
+        {
+            "applId": null,
+            "particulars": "Equity Capital (in ₹ crore)",
+            "slNo": 1,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Reserves",
+            "slNo": 2,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Preference Shares/CCPS/Share warrants (in ₹ crore)",
+            "slNo": 3,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Tangible Net-worth (in ₹ crore)",
+            "slNo": 4,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total Borrowings (in ₹ crore)",
+            "slNo": 5,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total Outside Liabilities (in ₹ crore)",
+            "slNo": 6,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total Investments (in ₹ crore)",
+            "slNo": 7,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-Investments in group cos.",
+            "slNo": 8,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "- Investments in SRs/securitization",
+            "slNo": 9,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-Investments in liquid assets ",
+            "slNo": 10,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total AUM (on-book+ off-book) (in ₹ crore)",
+            "slNo": 11,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "On-Book AUM (in ₹ crore)",
+            "slNo": 12,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Off-Book AUM (in ₹ crore)",
+            "slNo": 13,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Gross portfolio",
+            "slNo": 14,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total Assets (in ₹ crore)",
+            "slNo": 15,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Interest Income (in ₹ crore)",
+            "slNo": 16,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Fee Income (in ₹ crore)",
+            "slNo": 17,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Other Income (in ₹ crore)",
+            "slNo": 18,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Total Income (in ₹ crore)",
+            "slNo": 19,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Interest Expense (in ₹ crore)",
+            "slNo": 20,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Operating Expenses (in ₹ crore)",
+            "slNo": 21,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-Employee Cost (in ₹ crore)",
+            "slNo": 22,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-Marketing Cost (in ₹ crore)",
+            "slNo": 23,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-IT Expenses (in ₹ crore)",
+            "slNo": 24,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "-Other Operating Expenses (in ₹ crore)",
+            "slNo": 25,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Impairment/Provisioning (in ₹ crore)",
+            "slNo": 26,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Tax (in ₹ crore)",
+            "slNo": 27,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Exceptional and Extraordinary income and (losses)",
+            "slNo": 28,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "GS III (%)/GNPA (%) (owned)",
+            "slNo": 29,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "GNPA (%) (AUM)",
+            "slNo": 30,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "PAR > 90 days (% of On and Off-BS)",
+            "slNo": 31,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "PAR > 90 days (% of On-BS)",
+            "slNo": 32,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Net NPA (%)",
+            "slNo": 33,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Tier I (%)",
+            "slNo": 34,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "CRAR (%)",
+            "slNo": 35,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        },
+        {
+            "applId": null,
+            "particulars": "Unhedged foreign currency exposure",
+            "slNo": 36,
+            "valAsonTMinus1": null,
+            "valAsonTMinus2": null,
+            "lastAuditedFyT": null,
+            "valAsonT": null,
+            "qtrVal": null,
+            "saveStatus": null,
+            "tplus1Val": null,
+            "tplus2Val": null
+        }
+    ],
+    "message": "Success",
+    "status": 200
+}
+
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Table, TableCell, TableHead, TableRow, TableBody, Button, CircularProgress } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import Cookies from "js-cookie";
-import NbfcSnackbar from "../../../components/shared/NbfcSnackbar";
-import DeleteIcon from '@mui/icons-material/Delete';
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { debounce } from 'lodash';
+import dayjs from "dayjs";
+import * as XLSX from 'xlsx';
+import { useGetFinancialDetailsQuery, useSaveFinancialDetailsFormTermsMutation } from "../../../features/application-form/applicationForm";
+import { useAppSelector } from "../../../app/hooks";
+import ErrorMessageGlobal from "../../../components/framework/ErrorMessageGlobal";
+import FormLoader from "../../../loader/FormLoader";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import ConfirmationAlertDialog from '../../../models/application-form/ConfirmationAlertDialog';
+import { DocumentAPI } from "../../../features/application-form/documentUpload";
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UPLOADINGTEXT } from "../../../utlis/constants";
+import FullScreenLoader from "../../../components/common/FullScreenLoader";
+import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
 
-const DetailsPastAssistance = ({ applId, currentModuleStatus }) => {
-  const { data: assistance } = useGetNbfcPasstAssistWithNameQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-  });
+const FinancialDetailsComponent = () => {
+    const [addFinancialdetails] = useSaveFinancialDetailsFormTermsMutation();
+    const { applId, transactionData } = useAppSelector((state: any) => state.userStore);
+    const { data: financialDetails, isLoading, isError } = useGetFinancialDetailsQuery(applId);
+    const [formData, setFormData] = useState<any[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaveTime, setLastSaveTime] = useState<string | null>(null);
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [actionVal, setActionVal] = useState<any>("");
+    const [formDisabled, setFormDisabled] = useState(false);
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const debouncedSave = useRef<any>();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
 
-  const { data: collectiveData } = useGetMfiProfileByIdQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-  });
 
-  const { data: otherAssistance } = useGetNbfcOtherAssistWithCodeQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-  });
+    const calculateSums = useCallback((data: any[]) => {
+        return data.map(item => {
+            const newItem = { ...item };
+            const columns = ['valAsonTMinus2', 'valAsonTMinus1', 'valAsonT', 'qtrVal', 'tplus1Val', 'tplus2Val'];
 
-  const { data: facilities } = useGetOtherFacilityDetailsQuery(applId, {
-    skip: !applId, refetchOnMountOrArgChange: true
-  });
+            if (item.slNo === 7) {
+                console.log("item 11 slno",item.slNo);
+                const aumRows = data.filter(row => [8, 9, 10].includes(row.slNo));
+                columns.forEach((column: any) => {
+                    newItem[column] = aumRows
+                        .reduce((acc, curr) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
 
-  const [updateMfiProfile] = useSaveMfiProfileMutation();
-  const [updateOtherFacilityDetails] = useSaveOtherFacilityDetailsMutation();
+            if (item.slNo === 11) {
+                console.log("item 11 slno",item.slNo);
+                const aumRows = data.filter(row => [12, 13].includes(row.slNo));
+                columns.forEach((column: any) => {
+                    newItem[column] = aumRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
 
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState("success");
-  const [actionVal, setActionVal] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+            if (item.slNo === 19) {
+                console.log("item 19 slno",item.slNo);
+                const incomeRows = data.filter(row => [16, 17, 18].includes(row.slNo));
+                columns.forEach(column => {
+                    newItem[column] = incomeRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
 
-  const handleSnackClose = () => {
-    setOpenSnackbar(false);
-  };
+            if (item.slNo === 21) {
+                console.log("item 21 slno",item.slNo);
+                const incomeRows = data.filter(row => [22, 23, 24, 25].includes(row.slNo));
+                columns.forEach(column => {
+                    newItem[column] = incomeRows
+                        .reduce((acc: any, curr: any) => acc + (parseFloat(curr[column]) || 0), 0)
+                        .toFixed(2);
+                });
+            }
 
-  const handleClickSetAction = (action) => {
-    setActionVal(action);
-  };
+            return newItem;
+        });
+    }, []);
 
-  const handleSubmit = async (values) => {
-    try {
-      setIsSaving(true);
-      const finalData = { ...collectiveData, applId, ...values };
-      if (await updateMfiProfile(finalData).unwrap()) {
-        if (actionVal === '01') {
-          setOpenSnackbar(true);
-          setSeverity("success");
-          setSnackMsg("Record saved successfully");
-          setActionVal(null);
-          setIsSaving(false);
-          return false;
+    useEffect(() => {
+        if (financialDetails) {
+            const dataWithApplId = financialDetails.map((item: any) => ({
+                ...item,
+                applId
+            }));
+            setFormData(dataWithApplId);
+            const isSubmitted = dataWithApplId.some((item: any) => item.saveStatus === '02');
+            setFormDisabled(isSubmitted);
         }
-        setIsSaving(false);
-        setActionVal(null);
-        return true;
-      }
-      setIsSaving(false);
-      setActionVal(null);
-    } catch (err) {
-      setIsSaving(false);
-      console.error("Error saving data:", err);
-    }
-  };
+    }, [financialDetails, applId]);
 
-  const handleFacilitiesSubmit = async (values) => {
-    try {
-      const finalData = values.facilities.map(facility => ({
-        ...facility,
-        applId,
-        slNo: facility.slNo || 0, // Default slNo if not present
-        cifName: facility.cifName || "", // Default to empty string if not present
-        panNo: facility.panNo || "" // Default to empty string if not present
-      }));
-      if (await updateOtherFacilityDetails(finalData).unwrap()) {
-        if (actionVal === '01') {
-          setOpenSnackbar(true);
-          setSeverity("success");
-          setSnackMsg("Facilities saved successfully");
-          setActionVal(null);
+    const saveFormData = async (dataToSave: any[], status = '01') => {
+        setIsSaving(true);
+        setIsUploading(true);
+        try {
+            const dataWithStatus = dataToSave.map(item => ({
+                ...item,
+                saveStatus: status
+            }));
+            if (await addFinancialdetails(dataWithStatus).unwrap()) {
+                setLastSaveTime(dayjs().format('YYYY-MM-DD HH:mm:ss'));
+                setOpenSnackbar(true);
+                setIsUploading(false);
+                setSeverity("success");
+                setSnackMsg(status === '02' ? "Section submitted successfully" : "Record saved successfully");
+                if (status === '02') {
+                    setFormDisabled(true);
+                }
+            }
+        } catch (error) {
+            console.error("Error saving data:", error);
+            setOpenSnackbar(true);
+            setIsUploading(false);
+            setSeverity("error");
+            setSnackMsg("Failed to save");
+        } finally {
+            setIsSaving(false);
         }
-        return true;
-      }
-    } catch (err) {
-      console.error("Error saving facilities:", err);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to save facilities");
-    }
-  };
-
-  const loginData = Cookies.get("user") ?? null;
-  const loginCookiesData = JSON.parse(loginData || "{}");
-
-  let totalSanctionAmt = assistance?.reduce((acc, obj) => acc + obj.sanctionAmount, 0);
-  let totalDisbureAmt = assistance?.reduce((acc, obj) => acc + obj.disbursedAmount, 0);
-  let totalOutStandAmt = assistance?.reduce((acc, obj) => acc + obj.outstandinAmount, 0);
-
-  return (
-    <div className="custome-form">
-      <div className="wrap-inner-table mt-0 mb-0 table-responsive">
-        <Table sx={{ minWidth: '1250px' }} aria-label="simple table" className="table">
-          <TableHead>
-            <TableRow>
-              <TableCell style={{ maxWidth: '70px' }}><b>Sr. No.</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Account No</b></TableCell>
-              <TableCell style={{ maxWidth: '180px' }}><b>Scheme Name</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned authority</b></TableCell>
-              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Sanction Date</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Sanctioned amount (in ₹)</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Disbursement amount (in ₹)</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>ACR</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Present o/s</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Asset Classification</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Security pari-passu</b></TableCell>
-              <TableCell style={{ maxWidth: '120px' }}><b>Interest Rate(%)</b></TableCell>
-              <TableCell style={{ maxWidth: '250px' }}><b>Interest Type (Fixed/Floating) - Benchmark</b></TableCell>
-              <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}><b>Terminal Date</b></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {assistance?.length === 0 ? <DummyTable /> : assistance?.map((value, index) => (
-              <TableRow key={index + 1}>
-                <TableCell style={{ maxWidth: '70px' }}>{index + 1}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.accountNo}</TableCell>
-                <TableCell style={{ maxWidth: '180px' }}>{value.schemeName}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.sancAuth}</TableCell>
-                <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.sanctionDt}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.sanctionAmount}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.disbursedAmount}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.acr}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.outstandinAmount}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.assetClassification}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value?.securityPariPassu}</TableCell>
-                <TableCell style={{ maxWidth: '120px' }}>{value.interesetRate}</TableCell>
-                <TableCell style={{ maxWidth: '250px' }}>
-                  {value.interestRateType} {value.interestRateType !== 'FIXED' ? '-' : ''} {value.benchmark}
-                </TableCell>
-                <TableCell style={{ maxWidth: '220px', minWidth: '100px' }}>{value.terminalDt}</TableCell>
-              </TableRow>
-            ))}
-            <TableRow>
-              <TableCell><b>Total</b></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell>{totalSanctionAmt}</TableCell>
-              <TableCell>{totalDisbureAmt}</TableCell>
-              <TableCell></TableCell>
-              <TableCell>{totalOutStandAmt}</TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-              <TableCell></TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
-      <Grid spacing={2} padding={4} container className='form-grid'>
-        <Grid item xs={12} sm={12} md={12} lg={12}>
-          <b className="mb-0">Exposure Under Any Other Products</b>
-        </Grid>
-        <Grid item xs={12} sm={12} md={12} lg={12}>
-          <div className="wrap-inner-table mt-0">
-            <Table aria-label="simple table">
-              <TableHead>
-                <TableRow>
-                  <TableCell><b>CIF Code</b></TableCell>
-                  <TableCell><b>CIF Name</b></TableCell>
-                  <TableCell><b>Assist Type</b></TableCell>
-                  <TableCell><b>Outstanding Amount</b></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {otherAssistance?.length === 0 ? <DummyTable /> : (
-                  <TableRow>
-                    <TableCell>{otherAssistance?.[0]?.cifCode}</TableCell>
-                    <TableCell>{otherAssistance?.[0]?.cifName}</TableCell>
-                    <TableCell>{otherAssistance?.[0]?.assistType}</TableCell>
-                    <TableCell>{otherAssistance?.[0]?.outstandingAmount}</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </Grid>
-        <Grid item xs={12} sm={6} lg={12} className="pt-3">
-          <Formik
-            initialValues={collectiveData || { ...initialValues, applId }}
-            onSubmit={() => {}}
-            enableReinitialize={true}
-            validationSchema={validationSchema}
-            validateOnChange={true}
-            validateOnBlur={true}
-          >
-            {({ values }) => (
-              <Form>
-                <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB') || loginCookiesData?.regType === "Checker"}>
-                  {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                    <AutoSave debounceMs={1000} values={values} handleSubmit={handleSubmit} />
-                  )}
-                  <Grid spacing={2} padding={4} container className='form-grid pb-0'>
-                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
-                      <div className="wrap-richtext">
-                        <TextAreaField
-                          label="Pending major compliances, if any"
-                          name="pendingComl"
-                          disabled={loginCookiesData?.regType === "Maker" ? false : true}
-                        />
-                      </div>
-                    </Grid>
-                    <Grid item className="pt-0" xs={12} sm={12} md={12} lg={12}>
-                      <div className="wrap-richtext">
-                        <TextAreaField
-                          label="Details of Any Covenents Breach in the past, If any"
-                          name="covenantBreach"
-                          disabled={loginCookiesData?.regType === "Maker" ? false : true}
-                        />
-                      </div>
-                    </Grid>
-                  </Grid>
-                </fieldset>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                  <Button
-                    type="submit"
-                    size='small'
-                    className='text-capitalize sbmtBtn ms-0 m-3 mt-0'
-                    variant="contained"
-                    color="primary"
-                    style={{ "float": "left" }}
-                    onClick={() => handleClickSetAction('01')}
-                  >
-                    Save <CheckCircleOutlineIcon />
-                  </Button>
-                )}
-              </Form>
-            )}
-          </Formik>
-          <NbfcSnackbar
-            open={openSnackbar}
-            msg={snackMsg}
-            severity={severity}
-            handleSnackClose={handleSnackClose}
-            submitCall={false}
-          />
-        </Grid>
-        <Grid item xs={12} sm={12} md={12} lg={12}>
-          <b>Details of Facilities Rejected/Unavailed</b>
-        </Grid>
-      </Grid>
-      <div className="wrap-inner-table mt-0">
-        <Formik
-          initialValues={{ facilities: facilities || [] }}
-          onSubmit={handleFacilitiesSubmit}
-          enableReinitialize={true}
-        >
-          {({ values }) => (
-            <Form>
-              <fieldset disabled={(currentModuleStatus?.appStatus !== 'NW' && currentModuleStatus?.appStatus !== 'SB') || loginCookiesData?.regType === "Checker"}>
-                {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                  <AutoSave debounceMs={1000} values={values} handleSubmit={handleFacilitiesSubmit} />
-                )}
-                <FieldArray name="facilities">
-                  {({ push, remove }) => (
-                    <>
-                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                        <Button
-                          type="button"
-                          onClick={() => push({
-                            applId,
-                            acctNumber: "",
-                            acctDate: null,
-                            assistType: "",
-                            outstandingAmount: 0,
-                            rejectionReason: "",
-                            slNo: 0,
-                            cifName: "",
-                            panNo: ""
-                          })}
-                        >
-                          Add
-                        </Button>
-                      )}
-                      <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                        <TableHead>
-                          <TableRow>
-                            {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                              <TableCell><b>Action</b></TableCell>
-                            )}
-                            <TableCell><b>Application No</b></TableCell>
-                            <TableCell><b>Application Date</b></TableCell>
-                            <TableCell><b>Facility Requested</b></TableCell>
-                            <TableCell><b>Amount Requested</b></TableCell>
-                            <TableCell><b>Reason for Rejection</b></TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {values.facilities.map((facility, index) => (
-                            <TableRow key={index}>
-                              {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                                <TableCell>
-                                  <IconButton onClick={() => remove(index)}>
-                                    <DeleteIcon />
-                                  </IconButton>
-                                </TableCell>
-                              )}
-                              <TableCell>
-                                <TextBoxField name={`facilities.${index}.acctNumber`} />
-                              </TableCell>
-                              <TableCell>
-                                <AdvanceDatePickerField name={`facilities.${index}.acctDate`} />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField name={`facilities.${index}.assistType`} />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField name={`facilities.${index}.outstandingAmount`} type="number" />
-                              </TableCell>
-                              <TableCell>
-                                <TextBoxField name={`facilities.${index}.rejectionReason`} />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      {(currentModuleStatus?.appStatus === 'NW' || currentModuleStatus?.appStatus === 'SB') && loginCookiesData?.regType === "Maker" && (
-                        <Button
-                          type="submit"
-                          onClick={() => handleClickSetAction('01')}
-                        >
-                          Save
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </FieldArray>
-              </fieldset>
-            </Form>
-          )}
-        </Formik>
-      </div>
-    </div>
-  );
-};
-
-export default DetailsPastAssistance;
-
-
-
-
-
-
-
-
-
-import React from 'react';
-import { useField } from 'formik';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
-import Grid from "@mui/material/Grid";
-import Typography from "@mui/material/Typography";
-import { removeRestrictedCharacters } from '../../utlis/input';
-
-export const RichTextField: React.FC<{
-    label?: string;
-    name: string;
-    disabled?: boolean;
-    className?:string;
-    restrictedCharacters?: string; 
-}> = ({ label, name, disabled, className, restrictedCharacters }) => {
-    const [field, meta, helpers] = useField(name);
-
-    const handleChange = (content: string) => {
-        let newContent = content;
-        
-        if (restrictedCharacters) {
-            newContent = removeRestrictedCharacters(content, restrictedCharacters);
-        }
-        
-        helpers?.setValue(newContent);
     };
 
+    useEffect(() => {
+        debouncedSave.current = debounce((dataToSave: any[]) => {
+            saveFormData(dataToSave)
+        }, 5000)
+
+        return () => {
+            debouncedSave.current?.cancel()
+        }
+    }, []);
+
+
+    const handleExternalDownload = async () => {
+        try {
+            const response = await DocumentAPI.downloadExternalTemplate('04');
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(new Blob([response.data]));
+            downloadLink.download = 'Financial details_upload template.xlsx';
+            downloadLink.target = '_blank';
+            downloadLink.click();
+        } catch (error: any) {
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg('Failed to download template document. ');
+        }
+    };
+
+    const handleInputChange = (
+        index: number,
+        column: string,
+        value: string,
+        allowNegative: boolean = false
+    ) => {
+        if (formDisabled) return;
+
+        const newData = [...formData];
+
+        // Regex: allow negative numbers only for "Reserves"
+        const regex = allowNegative
+            ? /^-?\d{0,10}(\.\d{0,2})?$/
+            : /^\d{0,10}(\.\d{0,2})?$/;
+
+        if (regex.test(value)) {
+            const numericValue = parseFloat(value);
+
+            // Extra safeguard: prevent negative values if not allowed
+            if (!allowNegative && numericValue < 0) return;
+
+            newData[index][column] = value;
+            const calculatedData = calculateSums(newData);
+            setFormData(calculatedData);
+            debouncedSave.current(calculatedData);
+        }
+    };
+
+
+
+    const handleSubmit = async () => {
+        saveFormData(formData);
+    };
+
+    const handleClickSetAction = (action: string) => {
+        setActionVal(action);
+        if (action === '02') {
+            setOpenConfirmation(true);
+        }
+    };
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = () => {
+        setOpenConfirmation(false);
+        saveFormData(formData, '02');
+    };
+
+    const isCalculatedField = useCallback((slNo: number) => {
+        return [7, 11, 19, 21].includes(slNo);
+    }, []);
+
+
+
+    const handleClose = () => {
+        setOpenSnackbar(false);
+    };
+
+
+
+
+    const showQuarterColumn = transactionData?.lstAudQ !== "Not Applicable";
+
+    const getTableColumns = () => {
+        const baseColumns = [
+            { key: 'particulars', label: 'Particulars' },
+            { key: 'valAsonTMinus2', label: transactionData?.lstAudYrTm2, subLabel: 'Audited' },
+            { key: 'valAsonTMinus1', label: transactionData?.lstAudYrTm1, subLabel: 'Audited' },
+            { key: 'valAsonT', label: transactionData?.lstAudYrT, subLabel: 'Audited' },
+        ];
+
+        if (showQuarterColumn) {
+            baseColumns.push({ key: 'qtrVal', label: transactionData?.lstAudQ, subLabel: 'Unaudited' });
+        }
+
+        return [
+            ...baseColumns,
+            { key: 'tplus1Val', label: transactionData?.lstAudYrTp1, subLabel: 'Projections' },
+            { key: 'tplus2Val', label: transactionData?.lstAudYrTp2, subLabel: 'Projections' },
+        ];
+    };
+
+    const columns = getTableColumns();
+    const columnMappings = {
+        'T-2': 'valAsonTMinus2',
+        'T-1': 'valAsonTMinus1',
+        'Latest audited FY (T)': 'valAsonT',
+        'Latest unaudited quarter/half year/9M': 'qtrVal',
+        'T+1': 'tplus1Val',
+        'T+2': 'tplus2Val'
+    };
+
+    const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            return;
+        }
+        //Check file size
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            return;
+        }
+
+        try {
+            setIsUploading(true);
+
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, {
+                type: 'array',
+                raw: true,
+                cellDates: true,
+                cellNF: true
+            });
+
+            const firstSheetName = workbook.SheetNames[1];
+            const worksheet = workbook.Sheets[firstSheetName];
+
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                header: 1,
+                defval: '',
+                raw: false
+            });
+
+
+            const headerRowIndex = jsonData.findIndex((row: any) =>
+                row.includes('Particulars-IGAAP/IND-AS') || row.includes('Particulars'));
+
+            if (headerRowIndex === -1) {
+                throw new Error('Invalid Excel format: Header row not found');
+            }
+
+            const headerRow: any = jsonData[headerRowIndex];
+
+            const columnIndices: any = {};
+            headerRow.forEach((header: string, index: number) => {
+                const mappedColumn = columnMappings[header as keyof typeof columnMappings];
+                if (mappedColumn) {
+                    columnIndices[index] = mappedColumn;
+                }
+            });
+
+            const newFormData = [...formData];
+
+            jsonData.slice(headerRowIndex + 2).forEach((row: any, rowIndex: number) => {
+                if (!row[0] || typeof row[0] !== 'string') return;
+
+                const particulars = row[0].trim();
+                const existingRowIndex = newFormData.findIndex(
+                    item => item.particulars.trim() === particulars
+                );
+
+                if (existingRowIndex !== -1) {
+                    Object.entries(columnIndices).forEach(([excelIndex, formField]: any) => {
+                        let cellValue = row[excelIndex];
+
+                        // Handle different types of cell values
+                        if (cellValue !== undefined && cellValue !== '') {
+                            // If it's a cell object with w property (formatted text)
+                            if (typeof cellValue === 'object' && cellValue.w) {
+                                cellValue = cellValue.w;
+                            }
+
+                            // Convert to number and format
+                            const numValue = typeof cellValue === 'number' ?
+                                cellValue :
+                                parseFloat(cellValue.toString().replace(/[^\d.-]/g, ''));
+
+                            newFormData[existingRowIndex][formField] =
+                                !isNaN(numValue) ? numValue.toFixed(2) : '0.00';
+                        } else {
+                            newFormData[existingRowIndex][formField] = '0.00';
+                        }
+                    });
+                }
+            });
+
+            const calculatedData = calculateSums(newFormData);
+            setFormData(calculatedData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Excel data imported successfully");
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+            debouncedSave.current(calculatedData);
+
+        } catch (error) {
+            console.error('Error processing Excel file:', error);
+            setOpenSnackbar(true);
+            setIsUploading(false);
+            setSeverity("error");
+            setSnackMsg("Error processing Excel file. Please check the format.");
+        }
+        finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+    if (isLoading) return <FormLoader />;
+    if (isError) return <ErrorMessageGlobal status={isError} />;
+    if (isUploading) return <FullScreenLoader open={isUploading} setOpenModal={setIsUploading} text={UPLOADINGTEXT} />;
+
     return (
-        <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom>
-                {label}
-            </Typography>
-            <ReactQuill
-            className={className}
-                readOnly={disabled}
-                theme="snow"
-                value={field?.value || ''}
-                onChange={handleChange}
-                modules={{
-                    toolbar: [
-                        ['bold', 'italic', 'underline'],
-                        [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
-                        ['link'],
-                    ],
-                }}
+        <div className="custome-form">
+            {!formDisabled && (
+                <div className="up_btns">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".xlsx,.xls"
+                        onChange={handleExcelUpload}
+                        style={{ display: 'none' }}
+                    />
+
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        component="span"
+                        onClick={handleUploadClick}
+                        disabled={isUploading} // <-- Disable button while uploading
+                        style={{ marginLeft: '0px', padding: '4px 10px', textTransform: 'capitalize' }}
+                        startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <UploadFileIcon style={{ fontSize: '20px' }} />}
+                    >
+                        {isUploading ? "Uploading..." : "Upload Excel"}
+                    </Button>
+
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleExternalDownload}
+                        className="sbmtBtn dwldBtn"
+                    >
+                        Download template  <CloudDownloadIcon />
+                    </Button>
+                </div>
+            )}
+            {excelUploadError && (
+                <div className="error-message mt-1 text-danger">
+                    {excelUploadError}
+                </div>
+            )}
+            <ConfirmationAlertDialog
+                id={applId}
+                type={4}
+                open={openConfirmation}
+                handleClose={handleCloseConfirmation}
+                handleDelete={handleSubmitConfirmation}
+                values={formData}
             />
-            {meta.touched && meta.error ? (
-                <Typography color="error" variant="subtitle2" gutterBottom>
-                    {meta?.error}
-                </Typography>
-            ) : null}
-        </Grid>
+            {lastSaveTime && (
+                <div className="text-muted text-right">
+                    <p className="autoSv" style={{ marginLeft: '0px' }}>
+                        <span><b><CheckCircleOutlineIcon /> Last saved at:</b> {lastSaveTime}</span>
+                    </p>
+                </div>
+            )}
+            <div className="wrap-inner-table mt-0">
+                <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                    <TableHead>
+                        <TableRow>
+                            {columns.map((col: any, index: any) => (
+                                <TableCell key={index}>
+                                    <b>{col.label}</b>
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                        <TableRow>
+                            <TableCell><b>(All amount is In ₹ crore)</b></TableCell>
+                            {columns.slice(1).map((col: any, index: any) => (
+                                <TableCell key={index}>
+                                    <b>{col.subLabel}</b>
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    </TableHead>
+                    <TableBody style={{ background: '#fff' }}>
+                        {formData.map((item: any, index: number) => (
+                            <TableRow key={index}>
+                                <TableCell>
+                                    <p>{item?.particulars}</p>
+                                </TableCell>
+                                {columns.slice(1).map((col: any) => (
+                                    <TableCell key={col.key}>
+                                        <input
+                                            type={item?.particulars === "Reserves" ? "text" : "number"}
+                                            value={item[col.key]}
+                                            disabled={isCalculatedField(item.slNo) || formDisabled}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                const allowNegative = item?.particulars === "Reserves";
+                                                handleInputChange(index, col.key, value, allowNegative);
+                                            }}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                border: '1px solid #b3b3b3',
+                                                borderRadius: '4px'
+                                            }}
+                                        />
+
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+
+                {!formDisabled && (
+                    <div>
+                        <Button
+                            variant="contained"
+                            className="sbmtBtn m-3"
+                            color="primary"
+                            onClick={handleSubmit}
+                            disabled={isSaving}
+                        >
+                            Save <CheckCircleOutlineIcon />
+                        </Button>
+                        <Button
+                            variant="contained"
+                            className="sbmtBtn sbmtBtn_scn m-0"
+                            color="primary"
+                            onClick={() => handleClickSetAction('02')}
+                            disabled={isSaving}
+                        >
+                            Submit <SaveAsIcon />
+                        </Button>
+                    </div>
+                )}
+            </div>
+            <OnlineSnackbar
+                open={openSnackbar}
+                msg={snackMsg}
+                severity={severity}
+                handleSnackClose={handleClose}
+            />
+        </div>
     );
 };
+
+export default FinancialDetailsComponent;
+
+before that caluction are based on index but now i want put a check of particular not index 
