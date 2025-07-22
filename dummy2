@@ -1,3 +1,9 @@
+As when we are uploading 400-500 record using Excel data my page is unresponsive i don't want that and make it more faster and my getbankmaster api also taking 2-3 sec to get data and apart from this I want little bit fast and make proper loader now already there is loader but not working as formik taking time to set that data and making row in between I'm getting unresponsive in my browser so fix these issue and give me complete and proper code
+
+
+
+
+
 import { FieldArray, Form, Formik } from "formik";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { 
