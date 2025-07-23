@@ -1,624 +1,564 @@
-
 import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { Alert, Button, IconButton, Snackbar, Table, TableCell, TableHead, TableRow } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Alert, Button, FormControl, Grid, IconButton, InputLabel, MenuItem, Select, Snackbar, Table, TableBody, TableCell, TableHead, TableRow }
+    from "@mui/material";
+
 import { Delete } from '@mui/icons-material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { FixedSizeList } from 'react-window';
-import { connect } from 'react-redux';
-import { useDeleteLenderTermLoanByIdMutation, useGetLenderTermLoanFormDataQuery, useSaveLenderTermLoanFormDataMutation } from "../../../features/application-form/capitalResourceForm";
+
+import { connect } from 'react-redux'
+import { useDeleteLenderLimitByIdMutation, useGetLenderLimitFormDataQuery, useSaveLenderLimitFormDataMutation }
+    from "../../../features/application-form/capitalResourceForm";
 import AutoSave from "../../../components/framework/AutoSave";
 import { TextBoxField } from "../../../components/framework/TextBoxField";
 import FormLoader from "../../../loader/FormLoader";
 import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import { useAppSelector } from "../../../app/hooks";
 import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
 import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
-import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
+import { MultipleDropDownField } from "../../pnf/components/MultiplePnfDropDown";
 import * as Yup from 'yup';
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
 
-interface LenderRow {
-  lenderName: string;
-  lenderType: string | null;
-  sancDt: string | null;
-  sancAmt: number | null;
-  disbDt: string | null;
-  disbAmt: number | null;
-  undrawnSanc: number | null;
-  outstandingAmt: number | null;
-  totalExposure: number | null;
-  intRate: number | null;
-  tenure: number | null;
-  contactDetails: string | null;
-  acr: number | null;
-  security: string;
-  corpGuarantee: string;
-  persGuarantee: string;
-  collSecurity: string;
-  majorCovenants: string;
-  slNo: number | null;
-  saveStatus: string;
-  applId: string;
-}
+const LenderLimitOdForm = ({ applId, excelData }: any) => {
+    const [addLimitDetails] = useSaveLenderLimitFormDataMutation();
+    const { data: LimitData, isLoading } = useGetLenderLimitFormDataQuery(applId);
+    const [deleteLimitDetails] = useDeleteLenderLimitByIdMutation();
+    const [open, setOpen] = useState(false);
+    const [index, setIndex] = useState(0);
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [snackMsgList, setSnackMsgList] = useState<any>("");
+    const [snackOpen, setSnackOpen] = useState(false);
+    const [snackSeverityList, setSnackSeverityList] = useState<string | any>("success");
+    const [snackMessages, setSnackMessages] = useState<any>([]);
 
-interface FormValues {
-  data: LenderRow[];
-}
+    const { transactionData } = useAppSelector((state) => state.userStore);
 
-interface Props {
-  applId: string;
-  excelData: any[];
-}
+    const [initialValues, setInitialValues] = useState<any>({ data: [] });
 
-const LenderTermLoanForm = ({ applId, excelData }: Props) => {
-  const [addLimitTlDetails] = useSaveLenderTermLoanFormDataMutation();
-  const [deleteLimitTlDetails] = useDeleteLenderTermLoanByIdMutation();
-  const { data: LimitTlData, isLoading } = useGetLenderTermLoanFormDataQuery(applId);
-  const [open, setOpen] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
-  const [openConfirmation, setOpenConfirmation] = useState(false);
-  const [formData, setFormData] = useState<LenderRow[] | null>(null);
-  const [actionVal, setActionVal] = useState<string | null>(null);
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
-  const [isUploading, setIsUploading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [snackOpen, setSnackOpen] = useState(false);
-  const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
-  const [snackMessages, setSnackMessages] = useState<string[]>([]);
+    useEffect(() => {
+        if (LimitData) {
+            const dataWithApplId = LimitData.map((item: any) => ({
+                ...item,
+                applId
 
-  const columnWidths = [40, 50, 250, 150, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 350, 350, 350, 350];
+            }))
+            setInitialValues({ data: dataWithApplId })
+        }
+    }, [LimitData, applId])
 
-  const formatDate = (str: string | null): string => {
-    if (!str) return "";
-    if (typeof str === "string") return str;
-    const date = new Date(str);
-    const mnth = ("0" + (date.getMonth() + 1)).slice(-2);
-    const day = ("0" + date.getDate()).slice(-2);
-    return [day, mnth, date.getFullYear()].join("-");
-  };
+    useEffect(() => {
+        if (excelData && excelData.length > 0) {
+            const lenderRows = excelData.filter((row: any) => {
+                return row[2] && row[2] !== 'Total'
+            });
+            const newData: any = [];
+            lenderRows.forEach((excelRow: any) => {
+                const rowData = {
+                    lenderName: excelRow[2]?.toString().trim(),
+                    lenderType: excelRow[3]?.toString().trim(),
+                    limitType: excelRow[4]?.toString().trim(),
+                    sanctionedLimit: parseExcelValue(excelRow[5]),
+                    fundingAmtTMinus2: parseExcelValue(excelRow[6]),
+                    fundingAmtTMinus1: parseExcelValue(excelRow[7]),
+                    fundingAmtT: parseExcelValue(excelRow[8]),
+                    avgIntRate: parseExcelValue(excelRow[9]),
+                    latestIntRate: parseExcelValue(excelRow[10]),
+                    contactDetails: excelRow[11]?.toString().trim(),
+                    ncdOs: excelRow[12]?.toString().trim(),
+                    security: excelRow[13]?.toString().trim(),
+                    slNo: null,
+                    saveStatus: '01',
+                };
+                newData.push(rowData);
+            });
+            setInitialValues({ data: newData });
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Lender data imported successfully");
+        }
+    }, [excelData]);
 
-  useEffect(() => {
-    if (LimitTlData) {
-      const dataWithApplId: LenderRow[] = LimitTlData.map((item: any) => ({ ...item, applId }));
-      setInitialValues({ data: dataWithApplId });
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '') return 0;
+        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
+        return parseFloat(value) || 0;
+    };
+
+    const extractErrorMessages = (errorResponse: Record<string, string>) => {
+        const allMessages = Object.values(errorResponse)
+            .flatMap(msg => msg.split(',').map(m => m.trim()));
+        return allMessages;
+    };
+
+
+
+    const handleSubmitApis = async (values: any) => {
+
+        try {
+            let requestBody = values.data;
+            if (!requestBody) {
+                requestBody = values;
+            }
+            setIsUploading(true);
+
+            if (await addLimitDetails(requestBody).unwrap()) {
+                if (requestBody?.[0]?.saveStatus === '02' || requestBody?.[0]?.saveStatus === '01') {
+                    setOpenSnackbar(true);
+                    setIsUploading(false);
+
+                    setSeverity("success");
+                    if (requestBody?.[0]?.saveStatus === '02') {
+                        setSnackMsg("Section submitted successfully");
+                    } else if (requestBody?.[0]?.saveStatus === '01') {
+                        setSnackMsg("Record saved successfully");
+                    }
+                }
+                setActionVal(null);
+                return true;
+            }
+            return false;
+        } catch (err: any) {
+            console.error(err);
+            setIsUploading(false);
+
+            if (err.status == 400 && err.message === "Invalid") {
+                const errorMessages = extractErrorMessages(err.customCode);
+                setSnackMsgList(errorMessages.length > 0 ? errorMessages : "Validation failed.");
+                setSnackMessages(errorMessages.length > 0 ? errorMessages : "Validation failed.");
+                setSnackSeverityList('error');
+                setSnackOpen(true);
+            }
+            else {
+                console.error(err);
+                // setOpenSnackbar(true);
+                // setSeverity("error");
+                // setSnackMsg("failed to save : " + err?.message);
+            }
+
+            return false;
+        }
+    };
+
+
+    const handleClosePop = () => {
+        setOpenSnackbar(false);
+    };
+
+    const handleDelete = async (applId: any, index: number) => {
+        handleClose();
+        try {
+            if (await deleteLimitDetails({ applId, index }).unwrap()) {
+                setOpenSnackbar(true);
+                setSeverity("success");
+                setSnackMsg("Record Deleted successfully");
+                return true;
+            }
+            return false;
+        } catch (error: any) {
+            console.error("Error saving compliance position:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("failed to save : " + error?.message);
+            return false;
+        }
     }
-  }, [LimitTlData, applId]);
 
-  useEffect(() => {
-    if (excelData && excelData.length > 0) {
-      setIsProcessing(true);
-      const lenderRows = excelData.filter((row: any) => row[2] && row[2] !== 'Total');
-      const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
-        lenderName: excelRow[2]?.toString().trim() || "",
-        lenderType: excelRow[3]?.toString().trim() || null,
-        sancDt: formatDate(excelRow[4]),
-        sancAmt: parseExcelValue(excelRow[5]),
-        disbDt: formatDate(excelRow[6]),
-        disbAmt: parseExcelValue(excelRow[7]),
-        undrawnSanc: parseExcelValue(excelRow[8]),
-        outstandingAmt: parseExcelValue(excelRow[9]),
-        totalExposure: calculateTotalExposure(parseExcelValue(excelRow[8]), parseExcelValue(excelRow[9])),
-        intRate: parseExcelValue(excelRow[11]),
-        tenure: parseExcelValue(excelRow[12]),
-        contactDetails: excelRow[13]?.toString().trim() || null,
-        acr: parseExcelValue(excelRow[14]),
-        security: excelRow[15]?.toString().trim() || "",
-        corpGuarantee: excelRow[16]?.toString().trim() || "",
-        persGuarantee: excelRow[17]?.toString().trim() || "",
-        collSecurity: excelRow[18]?.toString().trim() || "",
-        majorCovenants: excelRow[19]?.toString().trim() || "",
-        slNo: null,
-        saveStatus: '01',
-        applId,
-      }));
-      setTimeout(() => {
-        setInitialValues({ data: newData });
-        setIsProcessing(false);
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Lender data imported successfully");
-      }, 0);
-    }
-  }, [excelData, applId]);
+    const handleClickOpen = (index: number) => {
+        setIndex(index);
+        setOpen(true);
+    };
 
-  const parseExcelValue = (value: any): number => {
-    if (value === undefined || value === null || value === '') return 0;
-    if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-    return parseFloat(value) || 0;
-  };
 
-  const extractErrorMessages = (errorResponse: Record<string, string>): string[] => {
-    return Object.values(errorResponse).flatMap(msg => msg.split(',').map(m => m.trim()));
-  };
+    const calculateSanTotal = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.sanctionedLimit) || 0);
+        }, 0);
+    };
 
-  const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
-    try {
-      const requestBody = Array.isArray(values) ? values : values.data;
-      setIsUploading(true);
-      if (await addLimitTlDetails(requestBody).unwrap()) {
-        setIsUploading(false);
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
+    const calculateFy2Total = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtTMinus2) || 0);
+        }, 0);
+    };
+
+    const calculateFy1Total = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtTMinus1) || 0);
+        }, 0);
+    };
+
+    const calculateFyTotal = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtT) || 0);
+        }, 0);
+    };
+
+    const calculateNcdTotal = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.ncdOs) || 0);
+        }, 0);
+    };
+
+    const odListingSchema = Yup.object().shape({
+        data: Yup.array().of(
+            Yup.object().shape({
+                lenderName: Yup.string().required('Required'),
+                lenderType: Yup.string().required('Required')
+            })
+        ),
+    });
+
+    const handleClose = () => {
+        setOpen(false);
+    };
+    const handleCloseConfirmation = () => {
         setActionVal(null);
-        return true;
-      }
-      return false;
-    } catch (err: any) {
-      setIsUploading(false);
-      if (err.status === 400 && err.message === "Invalid") {
-        const errorMessages = extractErrorMessages(err.customCode);
-        setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
-        setSnackSeverity('error');
-        setSnackOpen(true);
-      } else {
-        console.error(err);
-      }
-      return false;
-    }
-  };
+        setOpenConfirmation(false);
+    };
+    const handleSubmitConfirmation = (values: any) => {
+        setOpenConfirmation(false);
+        handleSubmitApis(values);
+    };
+    const handleSubmit = async (values: any) => {
+        let finalValue = values?.data?.map((listData: any, index: number) => ({
+            ...listData, applId, slNo: index + 1, saveStatus: actionVal
+        }));
+        if (actionVal === '02') {
+            setFormData(finalValue);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(finalValue);
+        }
+        setActionVal(null);
+    };
 
-  const handleClosePop = () => setOpenSnackbar(false);
+    const handleClickSetAction = (action: any) => {
+        setActionVal(action);
+    };
 
-  const handleDelete = async (applId: string, index: number) => {
-    handleClose();
-    try {
-      if (await deleteLimitTlDetails({ applId, index }).unwrap()) {
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Record Deleted successfully");
-      }
-    } catch (error) {
-      console.error("Error deleting record:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to delete");
-    }
-  };
+    const handleSnackbarCloseSnack = () => {
+        setSnackOpen(false);
+    };
+    if (isLoading) return <FormLoader />
 
-  const handleClickOpen = (index: number) => {
-    setIndex(index);
-    setOpen(true);
-  };
+    if (isUploading) return <FullScreenLoaderNoClose />;
 
-  const calculateSanTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.sancAmt as any) || 0), 0);
-  const calculateDisbTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.disbAmt as any) || 0), 0);
-  const calculateUndrawnSanctionTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.undrawnSanc as any) || 0), 0);
-  const calculateOutStTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.outstandingAmt as any) || 0), 0);
-  const calculateExpoTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.totalExposure as any) || 0), 0);
-
-  const termLoanListingSchema = Yup.object().shape({
-    data: Yup.array().of(
-      Yup.object().shape({
-        lenderName: Yup.string().min(3, 'Lender Name must be at least 3 characters').max(100, 'Lender Name cannot exceed 100 characters').required('Required'),
-        lenderType: Yup.string().max(100, 'Lender Type cannot exceed 100 characters').required('Required'),
-        acr: Yup.string().required('Required').matches(/^[0-9.]+$/, 'ACR must be a number').test('positive', 'ACR must be between 0-2', val => val ? Number(val) > 0 && Number(val) <= 2 : false),
-        sancAmt: Yup.number().required('Required'),
-        disbAmt: Yup.number().required('Required').test('is-not-greater-than-value1', 'Disbursement Amt. cannot be greater than Sanction Amt.', function (value) {
-          const { sancAmt } = this.parent;
-          return value <= sancAmt;
-        }),
-      })
-    ),
-  });
-
-  const handleClose = () => setOpen(false);
-  const handleCloseConfirmation = () => {
-    setActionVal(null);
-    setOpenConfirmation(false);
-  };
-  const handleSubmitConfirmation = (values: LenderRow[]) => {
-    setOpenConfirmation(false);
-    handleSubmitApis(values);
-  };
-  const handleSubmit = async (values: FormValues) => {
-    const finalValue = values.data.map((listData, index) => ({
-      ...listData,
-      applId,
-      slNo: index + 1,
-      saveStatus: actionVal || '',
-    }));
-    if (actionVal === '02') {
-      setFormData(finalValue);
-      setOpenConfirmation(true);
-    } else {
-      handleSubmitApis(finalValue);
-    }
-    setActionVal(null);
-  };
-
-  const handleClickSetAction = (action: string) => setActionVal(action);
-
-  const calculateTotalExposure = (outstandingAmt: number | null, undrawnSanc: number | null): number => {
-    const outstanding = parseFloat(outstandingAmt?.toString() || '0') || 0;
-    const undrawn = parseFloat(undrawnSanc?.toString() || '0') || 0;
-    return outstanding + undrawn;
-  };
-
-  const handleFieldChange = useCallback((index: number, field: string, value: any, setFieldValue: any, values: FormValues) => {
-    setFieldValue(`data.${index}.${field}`, value);
-    if (field === 'outstandingAmt' || field === 'undrawnSanc') {
-      const currentRow = values.data[index];
-      const outstandingAmt = field === 'outstandingAmt' ? value : currentRow.outstandingAmt;
-      const undrawnSanc = field === 'undrawnSanc' ? value : currentRow.undrawnSanc;
-      const newTotalExposure = calculateTotalExposure(outstandingAmt, undrawnSanc);
-      setFieldValue(`data.${index}.totalExposure`, newTotalExposure);
-    }
-  }, []);
-
-  const handleSnackbarCloseSnack = () => setSnackOpen(false);
-
-  const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
-  const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
-
-  const { data: lenderTypeData, isLoading: isLenderTypeLoading } = useGetMaterQuery(`refapi/mstr/getLenderType`);
-  const lenderTypeOptions = useMemo(() => lenderTypeData ? modify("mstr/getLenderType", lenderTypeData) : [], [lenderTypeData]);
-
-  const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
-    const { values, setFieldValue } = data;
-    const row = values.data[index];
     return (
-      <div style={{ ...style, display: 'flex' }}>
-        {columnWidths.map((width, colIndex) => (
-          <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }}>
-            {colIndex === 0 && (
-              <IconButton disabled={row.saveStatus === '02'} onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}>
-                <Delete />
-              </IconButton>
-            )}
-            {colIndex === 1 && <p>{index + 1}</p>}
-            {colIndex === 2 && (
-              <MultipleLenderDropDown
-                label=""
-                name={`data.${index}.lenderName`}
-                domain="mstr/getBankMasters"
-                disabled={row.saveStatus === '02'}
-                options={bankOptions}
-                isLoading={isBankMasterLoading}
-              />
-            )}
-            {colIndex === 3 && (
-              <EnhancedDropDown
-                label=""
-                name={`data.${index}.lenderType`}
-                disabled={row.saveStatus === '02'}
-                customOptions={lenderTypeOptions}
-                domain=""
-              />
-            )}
-            {colIndex === 4 && (
-              <AdvanceDatePickerField
-                label=""
-                name={`data.${index}.sancDt`}
-                disableFuture={true}
-              />
-            )}
-            {colIndex === 5 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.sancAmt`}
-                type="number"
-              />
-            )}
-            {colIndex === 6 && (
-              <AdvanceDatePickerField
-                label=""
-                name={`data.${index}.disbDt`}
-                disableFuture={true}
-              />
-            )}
-            {colIndex === 7 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.disbAmt`}
-                type="number"
-              />
-            )}
-            {colIndex === 8 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.undrawnSanc`}
-                type="number"
-                onCustomChange={(value: any) => handleFieldChange(index, 'undrawnSanc', value, setFieldValue, values)}
-              />
-            )}
-            {colIndex === 9 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.outstandingAmt`}
-                type="number"
-                onCustomChange={(value: any) => handleFieldChange(index, 'outstandingAmt', value, setFieldValue, values)}
-              />
-            )}
-            {colIndex === 10 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.totalExposure`}
-                type="number"
-                disabled={true}
-              />
-            )}
-            {colIndex === 11 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.intRate`}
-                type="number"
-              />
-            )}
-            {colIndex === 12 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.tenure`}
-                type="number"
-              />
-            )}
-            {colIndex === 13 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.contactDetails`}
-              />
-            )}
-            {colIndex === 14 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.acr`}
-                type="number"
-              />
-            )}
-            {colIndex === 15 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.security`}
-              />
-            )}
-            {colIndex === 16 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.corpGuarantee`}
-              />
-            )}
-            {colIndex === 17 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.persGuarantee`}
-              />
-            )}
-            {colIndex === 18 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.collSecurity`}
-              />
-            )}
-            {colIndex === 19 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.majorCovenants`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  };
+        <div className="wrap-appraisal-area">
 
-  if (isLoading || isProcessing) return <FormLoader />;
-  if (isUploading) return <FullScreenLoaderNoClose />;
+            <Snackbar
+                open={snackOpen}
+                autoHideDuration={6000}
+                onClose={handleSnackbarCloseSnack}
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+                <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverityList} sx={{ width: '100%' }}>
+                    <ul className="list-unstyled">
+                        {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => {
+                            return (
+                                <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
+                            )
 
-  return (
-    <div className="wrap-appraisal-area">
-      <Snackbar
-        open={snackOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarCloseSnack}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
-          <ul className="list-unstyled">
-            {snackMessages.map((msg, i) => (
-              <li key={i} className="text-danger">{`(${i + 1}) ${msg}`}</li>
-            ))}
-          </ul>
-        </Alert>
-      </Snackbar>
+                        }) : ''}
+                    </ul>
+                </Alert>
+            </Snackbar>
 
-      <ConfirmationAlertDialog
-        id={1}
-        type={4}
-        open={openConfirmation}
-        handleClose={handleCloseConfirmation}
-        handleDelete={handleSubmitConfirmation}
-        values={formData}
-      />
-      <div className="custome-form">
-        <ConfirmationAlertDialog
-          id={2}
-          index={index}
-          type={2}
-          open={open}
-          handleClose={handleClose}
-          handleDelete={handleDelete}
-        />
-        <div className="wrap-inner-table">
-          <Formik
-            initialValues={initialValues}
-            onSubmit={handleSubmit}
-            enableReinitialize={true}
-            validationSchema={termLoanListingSchema}
-            validateOnChange={true}
-            validateOnBlur={true}
-          >
-            {({ values, setFieldValue }) => {
-              const listHeight = Math.max(50, Math.min(300, values.data.length * 50)); // Minimum 50px, max 300px
-              const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
-              const disbTotal = useMemo(() => calculateDisbTotal(values), [values]);
-              const undrawnTotal = useMemo(() => calculateUndrawnSanctionTotal(values), [values]);
-              const outStTotal = useMemo(() => calculateOutStTotal(values), [values]);
-              const expoTotal = useMemo(() => calculateExpoTotal(values), [values]);
-              const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
 
-              return (
-                <Form>
-                  <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                    {values?.data?.[0]?.saveStatus !== "02" && (
-                      <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                    )}
-                    <FieldArray name="data">
-                      {({ push }) => (
-                        <>
-                          {values?.data?.[0]?.saveStatus !== "02" && (
-                            <Button
-                              type="button"
-                              size='small'
-                              className='psn_btn text-capitalize my-2 saveBtn'
-                              variant="contained"
-                              color="primary"
-                              style={{ marginLeft: '15px', display: 'block' }}
-                              onClick={() =>
-                                push({
-                                  applId,
-                                  slNo: values.data.length,
-                                  lenderName: '',
-                                  lenderType: null,
-                                  sancDt: null,
-                                  sancAmt: null,
-                                  disbDt: null,
-                                  disbAmt: null,
-                                  undrawnSanc: null,
-                                  outstandingAmt: null,
-                                  totalExposure: null,
-                                  intRate: null,
-                                  tenure: null,
-                                  contactDetails: null,
-                                  acr: null,
-                                  security: '',
-                                  corpGuarantee: '',
-                                  persGuarantee: '',
-                                  collSecurity: '',
-                                  majorCovenants: '',
-                                  saveStatus: ''
-                                })
-                              }
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                          )}
-                          <div style={{ width: `${totalWidth}px` }}>
-                            <div style={{ display: 'flex', width: '100%' }}>
-                              {columnWidths.map((width, i) => (
-                                <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }}>
-                                  {i === 0 && <b>Action</b>}
-                                  {i === 1 && <b>Sr. No.</b>}
-                                  {i === 2 && <b>Name of the Bank/ lender</b>}
-                                  {i === 3 && <b>Institution Type</b>}
-                                  {i === 4 && <b>Date of Sanction</b>}
-                                  {i === 5 && <b>Sanctioned Amount (In ₹ crore)</b>}
-                                  {i === 6 && <b>Date of Disbursement</b>}
-                                  {i === 7 && <b>Amount Disbursement (In ₹ crore)</b>}
-                                  {i === 8 && <b>Undrawn Sanction</b>}
-                                  {i === 9 && <b>Amount Outstanding (In ₹ crore)</b>}
-                                  {i === 10 && <b>Total Exposure</b>}
-                                  {i === 11 && <b>Interest rate (%)</b>}
-                                  {i === 12 && <b>Tenure(in months)</b>}
-                                  {i === 13 && <b>Contact Details of Lenders</b>}
-                                  {i === 14 && <b>ACR</b>}
-                                  {i === 15 && <b>Security</b>}
-                                  {i === 16 && <b>Any Corporate Guarantee given for others</b>}
-                                  {i === 17 && <b>Any personal guarantee of promoters / founders / directors given to others</b>}
-                                  {i === 18 && <b>Any collateral security provided to any lender</b>}
-                                  {i === 19 && <b>Major Covenants</b>}
-                                </div>
-                              ))}
-                            </div>
-                            <FixedSizeList
-                              height={listHeight}
-                              itemCount={values.data.length}
-                              itemSize={50}
-                              width={totalWidth}
-                              itemData={{ values, setFieldValue }}
-                              style={{ overflowX: 'hidden' }} // Prevent horizontal scrollbar in list
-                            >
-                              {renderRow}
-                            </FixedSizeList>
-                            <div style={{ display: 'flex', width: '100%' }}>
-                              <div style={{ width: `${columnWidths[0]}px`, padding: '8px', flexShrink: 0 }}></div>
-                              <div style={{ width: `${columnWidths[1]}px`, padding: '8px', flexShrink: 0 }}></div>
-                              <div style={{ width: `${columnWidths[2] + columnWidths[3]}px`, padding: '8px', flexShrink: 0 }}></div>
-                              <div style={{ width: `${columnWidths[4]}px`, padding: '8px', flexShrink: 0 }}><b>Total</b></div>
-                              <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }}>
-                                <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[6]}px`, padding: '8px', flexShrink: 0 }}></div>
-                              <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }}>
-                                <b>{disbTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }}>
-                                <b>{undrawnTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[9]}px`, padding: '8px', flexShrink: 0 }}>
-                                <b>{outStTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[10]}px`, padding: '8px', flexShrink: 0 }}>
-                                <b>{expoTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths.slice(11).reduce((a, b) => a + b, 0)}px`, padding: '8px', flexShrink: 0 }}></div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </FieldArray>
-                  </fieldset>
-                  {values?.data?.[0]?.saveStatus !== "02" && (
-                    <>
-                      <Button
-                        className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
-                        type='submit'
-                        onClick={() => handleClickSetAction('01')}
-                        variant="contained"
-                      >
-                        Save <CheckCircleOutlineIcon />
-                      </Button>
-                      <Button
-                        className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
-                        type='submit'
-                        onClick={() => handleClickSetAction('02')}
-                        variant="contained"
-                      >
-                        Submit <SaveAsIcon />
-                      </Button>
-                    </>
-                  )}
-                </Form>
-              );
-            }}
-          </Formik>
+            <div className="custome-form">
+                <ConfirmationAlertDialog
+                    id={applId}
+                    type={4}
+                    open={openConfirmation}
+                    handleClose={handleCloseConfirmation}
+                    handleDelete={handleSubmitConfirmation}
+                    values={formData}
+                />
+                <ConfirmationAlertDialog
+                    id={applId}
+                    index={index}
+                    type={2}
+                    open={open}
+                    handleClose={handleClose}
+                    handleDelete={handleDelete}
+                />
+                <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
+                    <Formik
+                        initialValues={initialValues}
+                        onSubmit={handleSubmit}
+                        enableReinitialize={true}
+                        validationSchema={odListingSchema}
+                        validateOnChange={true}
+                        validateOnBlur={true}
+                    >
+                        {({ values, handleChange }) => (
+                            <Form>
+                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                    {values?.data?.[0]?.saveStatus !== "02" &&
+                                        < AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
+                                    }
+                                    <FieldArray name="data">
+                                        {({ push, remove }) => (
+                                            <>
+                                                {
+                                                    values?.data?.[0]?.saveStatus !== "02" &&
+                                                    <Button type="submit" size='small' className='psn_btn text-capitalize my-2 saveBtn'
+                                                        variant="contained" color="primary" style={{ marginLeft: '15px', display: 'block' }}
+                                                        onClick={() =>
+                                                            push({
+                                                                applId: applId,
+                                                                slNo: values.length,
+                                                                lenderType: null,
+                                                                limitType: '',
+                                                                sanctionedLimit: '',
+                                                                lenderName: '',
+                                                                lastFyT: '',
+                                                                fundingAmtTMinus1: null,
+                                                                fundingAmtTMinus2: null,
+                                                                fundingAmtT: null,
+                                                                avgIntRate: null,
+                                                                latestIntRate: null,
+                                                                ncdOs: '',
+                                                                contactDetails: '',
+                                                                security: '',
+                                                                saveStatus: ''
+                                                            })
+                                                        }>
+                                                        Add <AddCircleIcon />
+                                                    </Button>
+                                                }
+                                                <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                                                    <TableHead>
+                                                        <TableRow>
+
+                                                            <TableCell style={{ minWidth: '40px' }} align='center'>
+                                                                <b> Action</b>
+                                                            </TableCell>
+
+                                                            <TableCell style={{ minWidth: '50px' }}><b>Sr. No.</b></TableCell>
+                                                            <TableCell style={{ minWidth: '250px' }}><b>Name of the Bank/ lender</b></TableCell>
+                                                            <TableCell style={{ minWidth: '150px' }}><b>Type of FI</b></TableCell>
+                                                            <TableCell style={{ minWidth: '170px' }}><b>Limit Type</b></TableCell>
+                                                            <TableCell style={{ minWidth: '170px' }}><b>Sanctioned Limit</b></TableCell>
+                                                            <TableCell style={{ minWidth: '180px' }}>
+                                                                <b>Funding received in FY-{transactionData?.lstAudYrTm2}</b>
+                                                            </TableCell>
+                                                            <TableCell style={{ minWidth: '180px' }}>
+                                                                <b>Funding received in FY-{transactionData?.lstAudYrTm1}</b>
+                                                            </TableCell>
+                                                            <TableCell style={{ minWidth: '180px' }}>
+                                                                <b>Funding received in FY-{transactionData?.lstAudYrT}</b>
+                                                            </TableCell>
+                                                            <TableCell style={{ minWidth: '170px' }}><b>Avg rate of interest</b></TableCell>
+                                                            <TableCell style={{ minWidth: '170px' }}><b>Latest rate of interest</b></TableCell>
+                                                            <TableCell style={{ minWidth: '170px' }}><b>Contact details of lenders</b></TableCell>
+                                                            <TableCell style={{ minWidth: '120px' }}><b>NCD – o/s</b></TableCell>
+                                                            <TableCell style={{ minWidth: '350px' }}><b>Security</b></TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {
+                                                            values?.data?.map((limitOdData: any, index: number) => (
+                                                                <TableRow key={index + 1}>
+                                                                    <TableCell>
+                                                                        <IconButton disabled={limitOdData?.saveStatus === '02'} onClick={() => limitOdData?.slNo ? handleClickOpen(limitOdData?.slNo) : remove(index)}
+                                                                            color="error">
+                                                                            <Delete />
+                                                                        </IconButton>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <p>{index + 1}</p>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <MultipleDropDownField
+                                                                            // label="Name of the Bank/ lender"
+                                                                            name={`data.${index}.lenderName`}
+                                                                            domain="mstr/getBankMasters"
+                                                                            disabled={limitOdData.saveStatus === '02'}
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Grid item xs={12}>
+                                                                            <EnhancedDropDown
+                                                                                // label="Type of FI"
+                                                                                name={`data.${index}.lenderType`}
+                                                                                domain="mstr/getLenderType"
+                                                                                disabled={limitOdData.saveStatus === '02'}
+                                                                            />
+                                                                        </Grid>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <FormControl fullWidth>
+                                                                            <InputLabel className="select-label" id="FldgFlag">Limit Type</InputLabel>
+                                                                            <Select
+                                                                                labelId="FldgFlag"
+                                                                                value={limitOdData.limitType}
+                                                                                name={`data.${index}.limitType`}
+                                                                                onChange={handleChange}
+                                                                                size="small"
+                                                                                disabled={limitOdData.saveStatus === '02'}
+                                                                            >
+                                                                                <MenuItem value="CC">CC</MenuItem>
+                                                                                <MenuItem value="WC">WC</MenuItem>
+                                                                                <MenuItem value="OD">OD</MenuItem>
+                                                                                <MenuItem value="NCD">NCD</MenuItem>
+                                                                            </Select>
+                                                                        </FormControl>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.sanctionedLimit`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.fundingAmtTMinus2`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.fundingAmtTMinus1`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.fundingAmtT`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.avgIntRate`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.latestIntRate`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            // label="Enter Contact Details"
+                                                                            name={`data.${index}.contactDetails`} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.ncdOs`}
+                                                                            // label="Enter only Number"
+                                                                            type={"number"} />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <TextBoxField
+                                                                            name={`data.${index}.security`}
+                                                                        // label="Enter Security"
+                                                                        />
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))
+                                                        }
+
+                                                        <TableRow>
+                                                            <TableCell></TableCell>
+                                                            <TableCell></TableCell>
+                                                            <TableCell colSpan={2}></TableCell>
+                                                            <TableCell><b>Total</b></TableCell>
+                                                            <TableCell>
+                                                                <b>
+                                                                    {calculateSanTotal(values).toLocaleString('en-IN', {
+                                                                        maximumFractionDigits: 2,
+                                                                        style: 'currency',
+                                                                        currency: 'INR'
+                                                                    })}
+                                                                </b>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <b>
+                                                                    {calculateFy2Total(values).toLocaleString('en-IN', {
+                                                                        maximumFractionDigits: 2,
+                                                                        style: 'currency',
+                                                                        currency: 'INR'
+                                                                    })}
+                                                                </b>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <b>
+                                                                    {calculateFy1Total(values).toLocaleString('en-IN', {
+                                                                        maximumFractionDigits: 2,
+                                                                        style: 'currency',
+                                                                        currency: 'INR'
+                                                                    })}
+                                                                </b>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <b>
+                                                                    {calculateFyTotal(values).toLocaleString('en-IN', {
+                                                                        maximumFractionDigits: 2,
+                                                                        style: 'currency',
+                                                                        currency: 'INR'
+                                                                    })}
+                                                                </b>
+                                                            </TableCell>
+                                                            <TableCell colSpan={3}></TableCell>
+                                                            <TableCell>
+                                                                <b>
+                                                                    {calculateNcdTotal(values).toLocaleString('en-IN', {
+                                                                        maximumFractionDigits: 2,
+                                                                        style: 'currency',
+                                                                        currency: 'INR'
+                                                                    })}
+                                                                </b>
+                                                            </TableCell>
+                                                            <TableCell></TableCell>
+                                                        </TableRow>
+                                                    </TableBody>
+                                                </Table>
+                                            </>
+                                        )}
+                                    </FieldArray>
+                                </fieldset>
+                                {values?.data?.[0]?.saveStatus !== "02" &&
+                                    <Button className="sbmtBtn psn_btn mt-3 mb-3 ms-3" type='submit'
+                                        onClick={() => handleClickSetAction('01')}
+                                        variant="contained"> Save <CheckCircleOutlineIcon />
+                                    </Button>
+                                }
+                                {values?.data?.[0]?.saveStatus !== "02" &&
+                                    <Button className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3" type='submit'
+                                        onClick={() => handleClickSetAction('02')}
+                                        variant="contained"> Submit <SaveAsIcon />
+                                    </Button>
+                                }
+                            </Form>
+                        )}
+                    </Formik>
+                </div>
+                <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
+                    handleSnackClose={handleClosePop} />
+            </div>
         </div>
-        <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
-      </div>
-    </div>
-  );
-};
 
-export default connect((state: any) => ({
-  applId: state.userStore.applId
-}))(LenderTermLoanForm);
+    )
+}
 
-
-
-
-
-
-
-
-
+export default connect((state: any) => {
+    return {
+        applId: state.userStore.applId
+    };
+})(LenderLimitOdForm)
 
 
 import { FieldArray, Form, Formik } from "formik";
@@ -902,7 +842,7 @@ const LenderTermLoanForm = ({ applId, excelData }: Props) => {
               <MultipleLenderDropDown
                 label=""
                 name={`data.${index}.lenderName`}
-                domain="mstr/getBankMasters"
+                domain=""
                 disabled={row.saveStatus === '02'}
                 options={bankOptions}
                 isLoading={isBankMasterLoading}
@@ -1131,7 +1071,7 @@ const LenderTermLoanForm = ({ applId, excelData }: Props) => {
                               Add <AddCircleIcon />
                             </Button>
                           )}
-                          <div style={{ overflowX: 'auto' }}>
+                          <div>
                             <div style={{ display: 'flex' }}>
                               {columnWidths.map((width, i) => (
                                 <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }}>
@@ -1232,1319 +1172,5 @@ export default connect((state: any) => ({
 }))(LenderTermLoanForm);
 
 
-
-
-
-
-
-import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { Alert, Button, Grid, IconButton, Snackbar, Table, TableCell, TableHead, TableRow } from "@mui/material";
-import { Delete } from '@mui/icons-material';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { FixedSizeList } from 'react-window';
-import { connect } from 'react-redux';
-import { useDeleteLenderTermLoanByIdMutation, useGetLenderTermLoanFormDataQuery, useSaveLenderTermLoanFormDataMutation } from "../../../features/application-form/capitalResourceForm";
-import AutoSave from "../../../components/framework/AutoSave";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import FormLoader from "../../../loader/FormLoader";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
-import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
-import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
-import * as Yup from 'yup';
-
-interface LenderRow {
-  lenderName: string;
-  lenderType: string | null;
-  sancDt: string | null;
-  sancAmt: number | null;
-  disbDt: string | null;
-  disbAmt: number | null;
-  undrawnSanc: number | null;
-  outstandingAmt: number | null;
-  totalExposure: number | null;
-  intRate: number | null;
-  tenure: number | null;
-  contactDetails: string | null;
-  acr: number | null;
-  security: string;
-  corpGuarantee: string;
-  persGuarantee: string;
-  collSecurity: string;
-  majorCovenants: string;
-  slNo: number | null;
-  saveStatus: string;
-  applId: string;
-}
-
-interface FormValues {
-  data: LenderRow[];
-}
-
-interface Props {
-  applId: string;
-  excelData: any[];
-}
-
-const LenderTermLoanForm = ({ applId, excelData }: Props) => {
-  const [addLimitTlDetails] = useSaveLenderTermLoanFormDataMutation();
-  const [deleteLimitTlDetails] = useDeleteLenderTermLoanByIdMutation();
-  const { data: LimitTlData, isLoading } = useGetLenderTermLoanFormDataQuery(applId);
-  const [open, setOpen] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
-  const [openConfirmation, setOpenConfirmation] = useState(false);
-  const [formData, setFormData] = useState<LenderRow[] | null>(null);
-  const [actionVal, setActionVal] = useState<string | null>(null);
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [severity, setSeverity] = useState<"success" | "error">("success");
-  const [isUploading, setIsUploading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [snackOpen, setSnackOpen] = useState(false);
-  const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
-  const [snackMessages, setSnackMessages] = useState<string[]>([]);
-
-  const columnWidths = [40, 50, 250, 150, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 350, 350, 350, 350];
-
-  const formatDate = (str: string | null): string => {
-    if (!str) return "";
-    if (typeof str === "string") return str;
-    const date = new Date(str);
-    const mnth = ("0" + (date.getMonth() + 1)).slice(-2);
-    const day = ("0" + date.getDate()).slice(-2);
-    return [day, mnth, date.getFullYear()].join("-");
-  };
-
-  useEffect(() => {
-    if (LimitTlData) {
-      const dataWithApplId: LenderRow[] = LimitTlData.map((item: any) => ({ ...item, applId }));
-      setInitialValues({ data: dataWithApplId });
-    }
-  }, [LimitTlData, applId]);
-
-  useEffect(() => {
-    if (excelData && excelData.length > 0) {
-      setIsProcessing(true);
-      const lenderRows = excelData.filter((row: any) => row[2] && row[2] !== 'Total');
-      const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
-        lenderName: excelRow[2]?.toString().trim() || "",
-        lenderType: excelRow[3]?.toString().trim() || null,
-        sancDt: formatDate(excelRow[4]),
-        sancAmt: parseExcelValue(excelRow[5]),
-        disbDt: formatDate(excelRow[6]),
-        disbAmt: parseExcelValue(excelRow[7]),
-        undrawnSanc: parseExcelValue(excelRow[8]),
-        outstandingAmt: parseExcelValue(excelRow[9]),
-        totalExposure: calculateTotalExposure(parseExcelValue(excelRow[8]), parseExcelValue(excelRow[9])),
-        intRate: parseExcelValue(excelRow[11]),
-        tenure: parseExcelValue(excelRow[12]),
-        contactDetails: excelRow[13]?.toString().trim() || null,
-        acr: parseExcelValue(excelRow[14]),
-        security: excelRow[15]?.toString().trim() || "",
-        corpGuarantee: excelRow[16]?.toString().trim() || "",
-        persGuarantee: excelRow[17]?.toString().trim() || "",
-        collSecurity: excelRow[18]?.toString().trim() || "",
-        majorCovenants: excelRow[19]?.toString().trim() || "",
-        slNo: null,
-        saveStatus: '01',
-        applId,
-      }));
-      setTimeout(() => {
-        setInitialValues({ data: newData });
-        setIsProcessing(false);
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Lender data imported successfully");
-      }, 0);
-    }
-  }, [excelData, applId]);
-
-  const parseExcelValue = (value: any): number => {
-    if (value === undefined || value === null || value === '') return 0;
-    if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-    return parseFloat(value) || 0;
-  };
-
-  const extractErrorMessages = (errorResponse: Record<string, string>): string[] => {
-    return Object.values(errorResponse).flatMap(msg => msg.split(',').map(m => m.trim()));
-  };
-
-  const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
-    try {
-      const requestBody = Array.isArray(values) ? values : values.data;
-      setIsUploading(true);
-      if (await addLimitTlDetails(requestBody).unwrap()) {
-        setIsUploading(false);
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
-        setActionVal(null);
-        return true;
-      }
-      return false;
-    } catch (err: any) {
-      setIsUploading(false);
-      if (err.status === 400 && err.message === "Invalid") {
-        const errorMessages = extractErrorMessages(err.customCode);
-        setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
-        setSnackSeverity('error');
-        setSnackOpen(true);
-      } else {
-        console.error(err);
-      }
-      return false;
-    }
-  };
-
-  const handleClosePop = () => setOpenSnackbar(false);
-
-  const handleDelete = async (applId: string, index: number) => {
-    handleClose();
-    try {
-      if (await deleteLimitTlDetails({ applId, index }).unwrap()) {
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Record Deleted successfully");
-      }
-    } catch (error) {
-      console.error("Error deleting record:", error);
-      setOpenSnackbar(true);
-      setSeverity("error");
-      setSnackMsg("Failed to delete");
-    }
-  };
-
-  const handleClickOpen = (index: number) => {
-    setIndex(index);
-    setOpen(true);
-  };
-
-  const calculateSanTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.sancAmt as any) || 0), 0);
-  const calculateDisbTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.disbAmt as any) || 0), 0);
-  const calculateUndrawnSanctionTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.undrawnSanc as any) || 0), 0);
-  const calculateOutStTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.outstandingAmt as any) || 0), 0);
-  const calculateExpoTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.totalExposure as any) || 0), 0);
-
-  const termLoanListingSchema = Yup.object().shape({
-    data: Yup.array().of(
-      Yup.object().shape({
-        lenderName: Yup.string().min(3, 'Lender Name must be at least 3 characters').max(100, 'Lender Name cannot exceed 100 characters').required('Required'),
-        lenderType: Yup.string().max(100, 'Lender Type cannot exceed 100 characters').required('Required'),
-        acr: Yup.string().required('Required').matches(/^[0-9.]+$/, 'ACR must be a number').test('positive', 'ACR must be between 0-2', val => val ? Number(val) > 0 && Number(val) <= 2 : false),
-        sancAmt: Yup.number().required('Required'),
-        disbAmt: Yup.number().required('Required').test('is-not-greater-than-value1', 'Disbursement Amt. cannot be greater than Sanction Amt.', function (value) {
-          const { sancAmt } = this.parent;
-          return value <= sancAmt;
-        }),
-      })
-    ),
-  });
-
-  const handleClose = () => setOpen(false);
-  const handleCloseConfirmation = () => {
-    setActionVal(null);
-    setOpenConfirmation(false);
-  };
-  const handleSubmitConfirmation = (values: LenderRow[]) => {
-    setOpenConfirmation(false);
-    handleSubmitApis(values);
-  };
-  const handleSubmit = async (values: FormValues) => {
-    const finalValue = values.data.map((listData, index) => ({
-      ...listData,
-      applId,
-      slNo: index + 1,
-      saveStatus: actionVal || '',
-    }));
-    if (actionVal === '02') {
-      setFormData(finalValue);
-      setOpenConfirmation(true);
-    } else {
-      handleSubmitApis(finalValue);
-    }
-    setActionVal(null);
-  };
-
-  const handleClickSetAction = (action: string) => setActionVal(action);
-
-  const calculateTotalExposure = (outstandingAmt: number | null, undrawnSanc: number | null): number => {
-    const outstanding = parseFloat(outstandingAmt?.toString() || '0') || 0;
-    const undrawn = parseFloat(undrawnSanc?.toString() || '0') || 0;
-    return outstanding + undrawn;
-  };
-
-  const handleFieldChange = useCallback((index: number, field: string, value: any, setFieldValue: any, values: FormValues) => {
-    setFieldValue(`data.${index}.${field}`, value);
-    if (field === 'outstandingAmt' || field === 'undrawnSanc') {
-      const currentRow = values.data[index];
-      const outstandingAmt = field === 'outstandingAmt' ? value : currentRow.outstandingAmt;
-      const undrawnSanc = field === 'undrawnSanc' ? value : currentRow.undrawnSanc;
-      const newTotalExposure = calculateTotalExposure(outstandingAmt, undrawnSanc);
-      setFieldValue(`data.${index}.totalExposure`, newTotalExposure);
-    }
-  }, []);
-
-  const handleSnackbarCloseSnack = () => setSnackOpen(false);
-
-  const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
-  const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
-
-  const { data: lenderTypeData, isLoading: isLenderTypeLoading } = useGetMaterQuery(`refapi/mstr/getLenderType`);
-  const lenderTypeOptions = useMemo(() => lenderTypeData ? modify("mstr/getLenderType", lenderTypeData) : [], [lenderTypeData]);
-
-  const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
-    const { values, setFieldValue } = data;
-    const row = values.data[index];
-    return (
-      <div style={{ ...style, display: 'flex' }}>
-        {columnWidths.map((width, colIndex) => (
-          <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }}>
-            {colIndex === 0 && (
-              <IconButton disabled={row.saveStatus === '02'} onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}>
-                <Delete />
-              </IconButton>
-            )}
-            {colIndex === 1 && <p>{index + 1}</p>}
-            {colIndex === 2 && (
-              <MultipleLenderDropDown
-                label=""
-                name={`data.${index}.lenderName`}
-                domain="mstr/getBankMasters"
-                disabled={row.saveStatus === '02'}
-                options={bankOptions}
-                isLoading={isBankMasterLoading}
-              />
-            )}
-            {colIndex === 3 && (
-              <EnhancedDropDown
-                label=""
-                name={`data.${index}.lenderType`}
-                disabled={row.saveStatus === '02'}
-                customOptions={lenderTypeOptions}
-                domain=""
-              />
-            )}
-            {colIndex === 4 && (
-              <AdvanceDatePickerField
-                label=""
-                name={`data.${index}.sancDt`}
-                disableFuture={true}
-              />
-            )}
-            {colIndex === 5 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.sancAmt`}
-                type="number"
-              />
-            )}
-            {colIndex === 6 && (
-              <AdvanceDatePickerField
-                label=""
-                name={`data.${index}.disbDt`}
-                disableFuture={true}
-              />
-            )}
-            {colIndex === 7 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.disbAmt`}
-                type="number"
-              />
-            )}
-            {colIndex === 8 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.undrawnSanc`}
-                type="number"
-                onCustomChange={(value: any) => handleFieldChange(index, 'undrawnSanc', value, setFieldValue, values)}
-              />
-            )}
-            {colIndex === 9 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.outstandingAmt`}
-                type="number"
-                onCustomChange={(value: any) => handleFieldChange(index, 'outstandingAmt', value, setFieldValue, values)}
-              />
-            )}
-            {colIndex === 10 && (
-              <AdvanceTextBoxField
-                label=""
-                name={`data.${index}.totalExposure`}
-                type="number"
-                disabled={true}
-              />
-            )}
-            {colIndex === 11 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.intRate`}
-                type="number"
-              />
-            )}
-            {colIndex === 12 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.tenure`}
-                type="number"
-              />
-            )}
-            {colIndex === 13 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.contactDetails`}
-              />
-            )}
-            {colIndex === 14 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.acr`}
-                type="number"
-              />
-            )}
-            {colIndex === 15 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.security`}
-              />
-            )}
-            {colIndex === 16 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.corpGuarantee`}
-              />
-            )}
-            {colIndex === 17 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.persGuarantee`}
-              />
-            )}
-            {colIndex === 18 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.collSecurity`}
-              />
-            )}
-            {colIndex === 19 && (
-              <TextBoxField
-                label=""
-                name={`data.${index}.majorCovenants`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  if (isLoading || isProcessing) return <FormLoader />;
-  if (isUploading) return <FullScreenLoaderNoClose />;
-
-  return (
-    <div className="wrap-appraisal-area">
-      <Snackbar
-        open={snackOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarCloseSnack}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
-          <ul className="list-unstyled">
-            {snackMessages.map((msg, i) => (
-              <li key={i} className="text-danger">{`(${i + 1}) ${msg}`}</li>
-            ))}
-          </ul>
-        </Alert>
-      </Snackbar>
-
-      <ConfirmationAlertDialog
-        id={1}
-        type={4}
-        open={openConfirmation}
-        handleClose={handleCloseConfirmation}
-        handleDelete={handleSubmitConfirmation}
-        values={formData}
-      />
-      <div className="custome-form">
-        <ConfirmationAlertDialog
-          id={2}
-          index={index}
-          type={2}
-          open={open}
-          handleClose={handleClose}
-          handleDelete={handleDelete}
-        />
-        <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
-          <Formik
-            initialValues={initialValues}
-            onSubmit={handleSubmit}
-            enableReinitialize={true}
-            validationSchema={termLoanListingSchema}
-            validateOnChange={true}
-            validateOnBlur={true}
-          >
-            {({ values, setFieldValue }) => {
-              const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
-              const disbTotal = useMemo(() => calculateDisbTotal(values), [values]);
-              const undrawnTotal = useMemo(() => calculateUndrawnSanctionTotal(values), [values]);
-              const outStTotal = useMemo(() => calculateOutStTotal(values), [values]);
-              const expoTotal = useMemo(() => calculateExpoTotal(values), [values]);
-
-              return (
-                <Form>
-                  <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                    {values?.data?.[0]?.saveStatus !== "02" && (
-                      <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                    )}
-                    <FieldArray name="data">
-                      {({ push }) => (
-                        <>
-                          {values?.data?.[0]?.saveStatus !== "02" && (
-                            <Button
-                              type="button"
-                              size='small'
-                              className='psn_btn text-capitalize my-2 saveBtn'
-                              variant="contained"
-                              color="primary"
-                              style={{ marginLeft: '15px', display: 'block' }}
-                              onClick={() =>
-                                push({
-                                  applId,
-                                  slNo: values.data.length,
-                                  lenderName: '',
-                                  lenderType: null,
-                                  sancDt: null,
-                                  sancAmt: null,
-                                  disbDt: null,
-                                  disbAmt: null,
-                                  undrawnSanc: null,
-                                  outstandingAmt: null,
-                                  totalExposure: null,
-                                  intRate: null,
-                                  tenure: null,
-                                  contactDetails: null,
-                                  acr: null,
-                                  security: '',
-                                  corpGuarantee: '',
-                                  persGuarantee: '',
-                                  collSecurity: '',
-                                  majorCovenants: '',
-                                  saveStatus: ''
-                                })
-                              }
-                            >
-                              Add <AddCircleIcon />
-                            </Button>
-                          )}
-                          <div style={{ overflowX: 'auto' }}>
-                            <div style={{ display: 'flex' }}>
-                              {columnWidths.map((width, i) => (
-                                <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }}>
-                                  {i === 0 && <b>Action</b>}
-                                  {i === 1 && <b>Sr. No.</b>}
-                                  {i === 2 && <b>Name of the Bank/ lender</b>}
-                                  {i === 3 && <b>Institution Type</b>}
-                                  {i === 4 && <b>Date of Sanction</b>}
-                                  {i === 5 && <b>Sanctioned Amount (In ₹ crore)</b>}
-                                  {i === 6 && <b>Date of Disbursement</b>}
-                                  {i === 7 && <b>Amount Disbursement (In ₹ crore)</b>}
-                                  {i === 8 && <b>Undrawn Sanction</b>}
-                                  {i === 9 && <b>Amount Outstanding (In ₹ crore)</b>}
-                                  {i === 10 && <b>Total Exposure</b>}
-                                  {i === 11 && <b>Interest rate (%)</b>}
-                                  {i === 12 && <b>Tenure(in months)</b>}
-                                  {i === 13 && <b>Contact Details of Lenders</b>}
-                                  {i === 14 && <b>ACR</b>}
-                                  {i === 15 && <b>Security</b>}
-                                  {i === 16 && <b>Any Corporate Guarantee given for others</b>}
-                                  {i === 17 && <b>Any personal guarantee of promoters / founders / directors given to others</b>}
-                                  {i === 18 && <b>Any collateral security provided to any lender</b>}
-                                  {i === 19 && <b>Major Covenants</b>}
-                                </div>
-                              ))}
-                            </div>
-                            <FixedSizeList
-                              height={300}
-                              itemCount={values.data.length}
-                              itemSize={50}
-                              width="100%"
-                              itemData={{ values, setFieldValue }}
-                            >
-                              {renderRow}
-                            </FixedSizeList>
-                            <div style={{ display: 'flex' }}>
-                              <div style={{ width: `${columnWidths[0]}px` }}></div>
-                              <div style={{ width: `${columnWidths[1]}px` }}></div>
-                              <div style={{ width: `${columnWidths[2]}px` }}></div>
-                              <div style={{ width: `${columnWidths[3]}px`, padding: '8px' }}><b>Total</b></div>
-                              <div style={{ width: `${columnWidths[4]}px`, padding: '8px' }}>
-                                <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[5]}px` }}></div>
-                              <div style={{ width: `${columnWidths[6]}px`, padding: '8px' }}>
-                                <b>{disbTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[7]}px`, padding: '8px' }}>
-                                <b>{undrawnTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[8]}px`, padding: '8px' }}>
-                                <b>{outStTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths[9]}px`, padding: '8px' }}>
-                                <b>{expoTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                              </div>
-                              <div style={{ width: `${columnWidths.slice(10).reduce((a, b) => a + b, 0)}px` }}></div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </FieldArray>
-                  </fieldset>
-                  {values?.data?.[0]?.saveStatus !== "02" && (
-                    <>
-                      <Button
-                        className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
-                        type='submit'
-                        onClick={() => handleClickSetAction('01')}
-                        variant="contained"
-                      >
-                        Save <CheckCircleOutlineIcon />
-                      </Button>
-                      <Button
-                        className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
-                        type='submit'
-                        onClick={() => handleClickSetAction('02')}
-                        variant="contained"
-                      >
-                        Submit <SaveAsIcon />
-                      </Button>
-                    </>
-                  )}
-                </Form>
-              );
-            }}
-          </Formik>
-        </div>
-        <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
-      </div>
-    </div>
-  );
-};
-
-export default connect((state: any) => ({
-  applId: state.userStore.applId
-}))(LenderTermLoanForm);
-
-
-
-import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Grid, IconButton, Snackbar, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
-import { Delete } from '@mui/icons-material';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-
-import { connect } from 'react-redux'
-import { useDeleteLenderTermLoanByIdMutation, useGetLenderTermLoanFormDataQuery, useSaveLenderTermLoanFormDataMutation }
-    from "../../../features/application-form/capitalResourceForm";
-import AutoSave from "../../../components/framework/AutoSave";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import FormLoader from "../../../loader/FormLoader";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
-import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleDropDownField } from "../../pnf/components/MultiplePnfDropDown";
-import * as Yup from 'yup';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
-import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-
-const LenderTermLoanForm = ({ applId, excelData }: any) => {
-    const [addLimitTlDetails] = useSaveLenderTermLoanFormDataMutation();
-    const [deleteLimitTlDetails] = useDeleteLenderTermLoanByIdMutation();
-    const { data: LimitTlData, isLoading } = useGetLenderTermLoanFormDataQuery(applId);
-    const [open, setOpen] = useState(false);
-    const [index, setIndex] = useState(0);
-
-    const [initialValues, setInitialValues] = useState<any>({ data: [] });
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<any>("");
-    const [actionVal, setActionVal] = useState<any>("");
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<any>("");
-    const [severity, setSeverity] = useState<string | any>("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [snackMsgList, setSnackMsgList] = useState<any>("");
-
-    const [snackOpen, setSnackOpen] = useState(false);
-    const [snackSeverity, setSnackSeverity] = useState<'error' | 'success' | 'info'>('error');
-    const [snackMessages, setSnackMessages] = useState<any>([]);
-    const [snackSeverityList, setSnackSeverityList] = useState<string | any>("success");
-
-
-    const formatDate = (str: string) => {
-        if (!str) return "";
-        if ((typeof str) == "string") return str;
-        let date = new Date(str),
-            mnth = ("0" + (date.getMonth() + 1)).slice(-2),
-            day = ("0" + date.getDate()).slice(-2);
-        return [day, mnth, date.getFullYear()].join("-");
-    }
-
-    useEffect(() => {
-        if (LimitTlData) {
-            const dataWithApplId = LimitTlData.map((item: any) => ({
-                ...item,
-                applId
-            }))
-            setInitialValues({ data: dataWithApplId })
-        }
-    }, [LimitTlData, applId]);
-
-    useEffect(() => {
-        if (excelData && excelData.length > 0) {
-            const lenderRows = excelData.filter((row: any) => {
-                return row[2] && row[2] !== 'Total'
-            });
-            const newData: any = [];
-            lenderRows.forEach((excelRow: any) => {
-                const rowData = {
-                    lenderName: excelRow[2]?.toString().trim(),
-                    lenderType: excelRow[3]?.toString().trim(),
-                    sancDt: formatDate(excelRow[4]),
-                    sancAmt: parseExcelValue(excelRow[5]),
-                    disbDt: formatDate(excelRow[6]),
-                    disbAmt: parseExcelValue(excelRow[7]),
-                    undrawnSanc: parseExcelValue(excelRow[8]),
-                    outstandingAmt: parseExcelValue(excelRow[9]),
-                    totalExposure: calculateTotalExposure(parseExcelValue(excelRow[8]), parseExcelValue(excelRow[9])),
-                    intRate: parseExcelValue(excelRow[11]),
-                    tenure: parseExcelValue(excelRow[12]),
-                    contactDetails: excelRow[13]?.toString().trim(),
-                    acr: parseExcelValue(excelRow[14]),
-                    security: excelRow[15]?.toString().trim(),
-                    corpGuarantee: excelRow[16]?.toString().trim(),
-                    persGuarantee: excelRow[17]?.toString().trim(),
-                    collSecurity: excelRow[18]?.toString().trim(),
-                    majorCovenants: excelRow[19]?.toString().trim(),
-                    slNo: null,
-                    saveStatus: '01',
-                };
-                newData.push(rowData);
-            });
-            setInitialValues({ data: newData });
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Lender data imported successfully");
-        }
-    }, [excelData]);
-
-
-    const parseExcelValue = (value: any): number => {
-        if (value === undefined || value === null || value === '') return 0;
-        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-        return parseFloat(value) || 0;
-    };
-
-    const extractErrorMessages = (errorResponse: Record<string, string>) => {
-        const allMessages = Object.values(errorResponse)
-            .flatMap(msg => msg.split(',').map(m => m.trim()));
-        return allMessages;
-    };
-
-
-    const handleSubmitApis = async (values: any) => {
-
-        try {
-            let requestBody = values.data;
-            if (!requestBody) {
-                requestBody = values;
-            }
-            setIsUploading(true);
-            if (await addLimitTlDetails(requestBody).unwrap()) {
-                if (requestBody?.[0]?.saveStatus === '02' || requestBody?.[0]?.saveStatus === '01') {
-                    setOpenSnackbar(true);
-                    setIsUploading(false);
-                    setSeverity("success");
-                    if (requestBody?.[0]?.saveStatus === '02') {
-                        setSnackMsg("Section submitted successfully");
-                    } else if (requestBody?.[0]?.saveStatus === '01') {
-                        setSnackMsg("Record saved successfully");
-                    }
-                }
-                setActionVal(null);
-                return true;
-            }
-            return false;
-        } catch (err: any) {
-            setIsUploading(false);
-            if (err.status == 400 && err.message === "Invalid") {
-                setIsUploading(false);
-                console.log('api error', err.customCode);
-                const errorMessages = extractErrorMessages(err.customCode);
-                setSnackMsgList(errorMessages.length > 0 ? errorMessages : "Validation failed.");
-                setSnackMessages(errorMessages.length > 0 ? errorMessages : "Validation failed.");
-                setSnackSeverityList('error');
-                setSnackOpen(true);
-            }
-            else {
-                console.error(err);
-                setIsUploading(false);
-                // setOpenSnackbar(true);
-                // setSeverity("error");
-                // setSnackMsg("failed to save : " + err?.message);
-
-                // console.error(err);
-                // setOpenSnackbar(true);
-                // setSeverity("error");
-                // setSnackMsg("failed to save : " + err?.message);
-            }
-            return false;
-        }
-    };
-
-    const handleClosePop = () => {
-        setOpenSnackbar(false);
-    };
-
-    const handleDelete = async (applId: any, index: number) => {
-        handleClose();
-        try {
-            if (await deleteLimitTlDetails({ applId, index }).unwrap()) {
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg("Record Deleted successfully");
-            }
-        } catch (error) {
-            console.error("Error saving compliance position:", error);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("Failed to delete");
-        }
-    };
-
-    const handleClickOpen = (index: number) => {
-        setIndex(index);
-        setOpen(true);
-    };
-
-    const calculateSanTotal = (values: any) => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.sancAmt) || 0);
-        }, 0);
-    };
-
-    const calculateDisbTotal = (values: any) => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.disbAmt) || 0);
-        }, 0);
-    };
-
-    const calculateUndrawnSanctionTotal = (values: any) => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.undrawnSanc) || 0);
-        }, 0);
-    };
-
-    const calculateOutStTotal = (values: any) => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.outstandingAmt) || 0);
-        }, 0);
-    };
-
-    const calculateExpoTotal = (values: any) => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.totalExposure) || 0);
-        }, 0);
-    };
-
-    const termLoanListingSchema = Yup.object().shape({
-        data: Yup.array().of(
-            Yup.object().shape({
-                lenderName: Yup.string()
-                    .min(3, 'Lender Name must be at least 3 characters')
-                    .max(100, 'Lender Name cannot exceed 100 characters')
-                    .required('Required'),
-                lenderType: Yup.string()
-                    //.min(3, 'Lender Type Name must be at least 3 characters')
-                    .max(100, 'Lender Type cannot exceed 100 characters')
-                    .required('Required'),
-                acr: Yup.string().required('Required')
-                    .matches(/^[0-9.]+$/, 'ACR must be a number')
-                    .test('positive', 'ACR must be between 0-2', val => val ? Number(val) > 0 && Number(val) <= 2 : false),
-                sancAmt: Yup.number().required('Required'),
-                disbAmt: Yup.number()
-                    .required('Required')
-                    .test(
-                        'is-not-greater-than-value1',
-                        'Disburement Amt. cannot be greater than Sanction Amt.',
-                        function (value) {
-                            const { sancAmt } = this.parent;
-                            return value <= sancAmt;
-                        }
-                    ),
-            })
-
-        ),
-    });
-
-    const handleClose = () => {
-        setOpen(false);
-    };
-    const handleCloseConfirmation = () => {
-        setActionVal(null);
-        setOpenConfirmation(false);
-    };
-    const handleSubmitConfirmation = (values: any) => {
-        setOpenConfirmation(false);
-        handleSubmitApis(values);
-    };
-    const handleSubmit = async (values: any) => {
-        let finalValue = values?.data?.map((listData: any, index: number) => ({
-            ...listData, applId, slNo: index + 1, saveStatus: actionVal
-        }));
-        if (actionVal === '02') {
-            setFormData(finalValue);
-            setOpenConfirmation(true);
-        } else {
-            handleSubmitApis(finalValue);
-        }
-        setActionVal(null);
-    };
-
-    const handleClickSetAction = (action: any) => {
-        setActionVal(action);
-    };
-
-
-    const calculateTotalExposure = (outstandingAmt: number, undrawnSanc: number) => {
-        const outstanding = parseFloat(outstandingAmt?.toString() || '0') || 0;
-        const undrawn = parseFloat(undrawnSanc?.toString() || '0') || 0;
-        return outstanding + undrawn;
-    };
-
-
-    const handleFieldChange = (index: number, field: string, value: any, setFieldValue: any, values: any) => {
-        setFieldValue(`data.${index}.${field}`, value);
-        if (field === 'outstandingAmt' || field === 'undrawnSanc') {
-            const currentRow = values.data[index];
-            const outstandingAmt = field === 'outstandingAmt' ? value : currentRow.outstandingAmt;
-            const undrawnSanc = field === 'undrawnSanc' ? value : currentRow.undrawnSanc;
-
-            const newTotalExposure = calculateTotalExposure(outstandingAmt, undrawnSanc);
-            setFieldValue(`data.${index}.totalExposure`, newTotalExposure);
-        }
-    };
-
-    const handleSnackbarCloseSnack = () => {
-        setSnackOpen(false);
-    };
-
-    const {
-        data: bankMasterData,
-        isLoading: isBankMasterLoading
-    } = useGetMaterQuery(`refapi/mstr/getBankMasters`, {
-        refetchOnMountOrArgChange: true
-    });
-    const bankOptions = useMemo(() => {
-        if (!bankMasterData) return [];
-        return modify("mstr/getBankMasters", bankMasterData);
-    }, [bankMasterData]);
-
-    const {
-        data: lenderTypeData,
-        isLoading: isLenderTypeLoading
-    } = useGetMaterQuery(`refapi/mstr/getLenderType`, {
-        refetchOnMountOrArgChange: true
-    });
-
-    const lenderTypeOptions = useMemo(() => {
-        if (!lenderTypeData) return [];
-        return modify("mstr/getLenderType", lenderTypeData);
-    }, [lenderTypeData]);
-
-    if (isLoading) return <FormLoader />
-    if (isUploading) return <FullScreenLoaderNoClose />;
-
-    return (
-        <div className="wrap-appraisal-area">
-
-            <Snackbar
-                open={snackOpen}
-                autoHideDuration={6000}
-                onClose={handleSnackbarCloseSnack}
-                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-            >
-                <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverityList} sx={{ width: '100%' }}>
-                    <ul className="list-unstyled">
-                        {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => {
-                            return (
-                                <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
-                            )
-
-                        }) : ''}
-                    </ul>
-                </Alert>
-            </Snackbar>
-
-
-            <ConfirmationAlertDialog
-                id={applId}
-                type={4}
-                open={openConfirmation}
-                handleClose={handleCloseConfirmation}
-                handleDelete={handleSubmitConfirmation}
-                values={formData}
-            />
-            <div className="custome-form">
-                <ConfirmationAlertDialog
-                    id={applId}
-                    index={index}
-                    type={2}
-                    open={open}
-                    handleClose={handleClose}
-                    handleDelete={handleDelete}
-                />
-                <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
-                    <Formik
-                        initialValues={initialValues}
-                        onSubmit={handleSubmit}
-                        enableReinitialize={true}
-                        validationSchema={termLoanListingSchema}
-                        validateOnChange={true}
-                        validateOnBlur={true}
-                    >
-                        {({ values, setFieldValue }) => (
-                            <Form>
-                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                                    {values?.data?.[0]?.saveStatus !== "02" &&
-                                        < AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                                    }
-                                    <FieldArray name="data">
-                                        {({ push, remove }) => (
-                                            <>
-                                                {
-                                                    values?.data?.[0]?.saveStatus !== "02" &&
-                                                    <Button type="submit" size='small' className='psn_btn text-capitalize my-2 saveBtn'
-                                                        variant="contained" color="primary" style={{ marginLeft: '15px', display: 'block' }}
-                                                        onClick={() =>
-                                                            push({
-                                                                applId: applId,
-                                                                slNo: values.length,
-                                                                lenderName: '',
-                                                                lenderType: null,
-                                                                sancDt: null,
-                                                                sancAmt: null,
-                                                                disbDt: null,
-                                                                disbAmt: null,
-                                                                undrawnSanc: null,
-                                                                outstandingAmt: null,
-                                                                totalExposure: null,
-                                                                intRate: null,
-                                                                tenure: null,
-                                                                contactDetails: null,
-                                                                acr: null,
-                                                                security: '',
-                                                                corpGuarantee: '',
-                                                                persGuarantee: '',
-                                                                collSecurity: '',
-                                                                majorCovenants: '',
-                                                                saveStatus: ''
-                                                            })
-                                                        }>
-                                                        Add <AddCircleIcon />
-                                                    </Button>
-                                                }
-                                                <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell style={{ minWidth: '40px' }} align='center'>
-                                                                <b> Action </b>
-                                                            </TableCell>
-                                                            <TableCell style={{ minWidth: '50px' }}><b>Sr. No.</b></TableCell>
-                                                            <TableCell style={{ minWidth: '250px' }}><b>Name of the Bank/ lender</b></TableCell>
-                                                            <TableCell style={{ minWidth: '150px' }}><b>Institution Type</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Date of Sanction</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Sanctioned Amount (In ₹ crore)</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Date of Disbursement</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Amount Disbursement (In ₹ crore)</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Undrawn Sanction</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Amount Outstanding (In ₹ crore)</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Total Exposure</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Interest rate (%)</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Tenure(in months)</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Contact Details of Lenders</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>ACR</b></TableCell>
-                                                            <TableCell style={{ minWidth: '170px' }}><b>Security</b></TableCell>
-                                                            <TableCell style={{ minWidth: '350px' }}><b>Any Corporate
-                                                                Gurantee given for others</b></TableCell>
-                                                            <TableCell style={{ minWidth: '350px' }}><b>Any personal
-                                                                guarantee of promoters / founders / directors given to others</b></TableCell>
-                                                            <TableCell style={{ minWidth: '350px' }}><b>Any collateral security provided to any lender</b></TableCell>
-                                                            <TableCell style={{ minWidth: '350px' }}><b>Major Convenants</b></TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        {
-                                                            values?.data?.map((tlData: any, index: number) => (
-                                                                <TableRow key={index + 1}>
-
-                                                                    <TableCell>
-                                                                        <IconButton disabled={tlData.saveStatus === '02'} onClick={() => tlData?.slNo ? handleClickOpen(tlData?.slNo) : remove(index)}
-                                                                            color="error">
-                                                                            <Delete />
-                                                                        </IconButton>
-                                                                    </TableCell>
-
-                                                                    <TableCell>
-                                                                        <p>{index + 1}</p>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <MultipleLenderDropDown
-                                                                            // label="Name of the Bank/ lender"
-                                                                            label=""
-                                                                            name={`data.${index}.lenderName`}
-                                                                            domain="mstr/getBankMasters"
-                                                                            disabled={tlData.saveStatus === '02'}
-                                                                            options={bankOptions}
-                                                                            isLoading={isBankMasterLoading}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <Grid item xs={12}>
-                                                                            <EnhancedDropDown
-                                                                                // label="Institution Type"
-                                                                                label=""
-                                                                                name={`data.${index}.lenderType`}
-                                                                                disabled={tlData.saveStatus === '02'}
-                                                                                customOptions={lenderTypeOptions} domain={""}                                                                            />
-                                                                        </Grid>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <AdvanceDatePickerField
-                                                                            // label="Date of Sanction"
-                                                                            label=""
-                                                                            name={`data.${index}.sancDt`}
-                                                                            disableFuture={true}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.sancAmt`}
-                                                                            // label="Enter Sanctioned Amount"
-                                                                            type={"number"} />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <AdvanceDatePickerField
-                                                                            label=""
-                                                                            // label="Date of Disbursement"
-                                                                            name={`data.${index}.disbDt`}
-                                                                            disableFuture={true}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.disbAmt`}
-                                                                            // label="Enter Amount Disbursement"
-                                                                            type={"number"} />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <AdvanceTextBoxField
-                                                                            name={`data.${index}.undrawnSanc`}
-                                                                            // label="Undrawn Sanction"
-                                                                            type="number"
-                                                                            onCustomChange={(value: any) => handleFieldChange(index, 'undrawnSanc', value, setFieldValue, values)}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <AdvanceTextBoxField
-                                                                            name={`data.${index}.outstandingAmt`}
-                                                                            // label="Amount Outstanding"
-                                                                            type="number"
-                                                                            onCustomChange={(value: any) => handleFieldChange(index, 'outstandingAmt', value, setFieldValue, values)}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <AdvanceTextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.totalExposure`}
-                                                                            // label="Enter Total Exposure"
-                                                                            type={"number"}
-                                                                            disabled={true}
-
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.intRate`}
-                                                                            // label="Enter Interest rate"
-                                                                            type={"number"} />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.tenure`}
-                                                                            // label="Enter Tenure"
-                                                                            type={"number"} />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.contactDetails`}
-                                                                        // label="Enter Contact Details"
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.acr`}
-                                                                            // label="Enter ACR"
-                                                                            type={"number"} />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.security`}
-                                                                        // label="Enter Security"
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.corpGuarantee`}
-                                                                        // label="Enter Corporate Gurantee"
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.persGuarantee`}
-                                                                        // label="Enter personal guarantee"
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.collSecurity`}
-                                                                        // label="Enter collateral Security"
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <TextBoxField
-                                                                            label=""
-                                                                            name={`data.${index}.majorCovenants`}
-                                                                        // label="Enter Major Convenants"
-                                                                        />
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))
-                                                        }
-                                                        <TableRow>
-                                                            <TableCell></TableCell>
-                                                            <TableCell></TableCell>
-                                                            <TableCell colSpan={2}></TableCell>
-                                                            <TableCell><b>Total</b></TableCell>
-                                                            <TableCell>
-                                                                <b>
-                                                                    {calculateSanTotal(values).toLocaleString('en-IN', {
-                                                                        maximumFractionDigits: 2,
-                                                                        style: 'currency',
-                                                                        currency: 'INR'
-                                                                    })}
-                                                                </b>
-                                                            </TableCell>
-                                                            <TableCell></TableCell>
-                                                            <TableCell>
-                                                                <b>
-                                                                    {calculateDisbTotal(values).toLocaleString('en-IN', {
-                                                                        maximumFractionDigits: 2,
-                                                                        style: 'currency',
-                                                                        currency: 'INR'
-                                                                    })}
-                                                                </b>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <b>
-                                                                    {calculateUndrawnSanctionTotal(values).toLocaleString('en-IN', {
-                                                                        maximumFractionDigits: 2,
-                                                                        style: 'currency',
-                                                                        currency: 'INR'
-                                                                    })}
-                                                                </b>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <b>
-                                                                    {calculateOutStTotal(values).toLocaleString('en-IN', {
-                                                                        maximumFractionDigits: 2,
-                                                                        style: 'currency',
-                                                                        currency: 'INR'
-                                                                    })}
-                                                                </b>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <b>
-                                                                    {calculateExpoTotal(values).toLocaleString('en-IN', {
-                                                                        maximumFractionDigits: 2,
-                                                                        style: 'currency',
-                                                                        currency: 'INR'
-                                                                    })}
-                                                                </b>
-                                                            </TableCell>
-                                                            <TableCell colSpan={9}></TableCell>
-                                                        </TableRow>
-                                                    </TableBody>
-                                                </Table>
-                                            </>
-                                        )}
-                                    </FieldArray>
-                                </fieldset>
-                                {values?.data?.[0]?.saveStatus !== "02" &&
-                                    <Button className="sbmtBtn psn_btn mt-3 mb-3 ms-3" type='submit'
-                                        onClick={() => handleClickSetAction('01')}
-                                        variant="contained"> Save <CheckCircleOutlineIcon />
-                                    </Button>
-                                }
-                                {values?.data?.[0]?.saveStatus !== "02" &&
-                                    <Button className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3" type='submit'
-                                        onClick={() => handleClickSetAction('02')}
-                                        variant="contained"> Submit <SaveAsIcon />
-                                    </Button>
-                                }
-                            </Form>
-                        )}
-                    </Formik>
-                </div>
-                <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
-                    handleSnackClose={handleClosePop} />
-            </div>
-        </div>
-
-    )
-}
-
-export default connect((state: any) => {
-    return {
-        applId: state.userStore.applId
-    };
-})(LenderTermLoanForm)
-
-
-
+as like LenderTermLoanForm form i want same  changes in LenderLimitOdForm also mainly that FixedSizeList should be add so large data will handle properly 
+apart from this don't change anything like api calaculation payload etc just take reference  LenderTermLoanForm
