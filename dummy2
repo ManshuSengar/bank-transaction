@@ -1,3 +1,239 @@
+import { useState, useEffect } from "react";
+import { FieldArray, Form, Formik } from 'formik';
+import AutoSave from '../../../components/framework/AutoSave';
+import { Button, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import {
+    useGetRepsessionDetailQuery,
+    useSaveRepsessionDetailsMutation
+} from "../../../features/application-form/portfolioApi";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+
+const RepsessionDetails = ({ applId }: any) => {
+    const [saveRepsessionDetails] = useSaveRepsessionDetailsMutation();
+    const { data: repsessionData } = useGetRepsessionDetailQuery(applId, { refetchOnMountOrArgChange: true });
+    const [initialValues, setInitialValues] = useState<any>({ data: [] });
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string>("success");
+
+    useEffect(() => {
+        if (repsessionData) {
+            setInitialValues({ data: repsessionData.data });
+        }
+    }, [repsessionData, applId]);
+
+    const handleSubmitApis = async (values: any) => {
+        let finalValue = values?.data?.map((listData: any, index: number) => {
+            return {
+                ...listData,
+                applId,
+                slNo: index + 1
+            };
+        });
+
+        try {
+            if (await saveRepsessionDetails(finalValue).unwrap()) {
+                setOpenSnackbar(true);
+                setSeverity("success");
+                if (finalValue?.[0]?.saveStatus === '02') {
+                    setSnackMsg("Section submitted successfully");
+                } else {
+                    setSnackMsg("Record saved successfully");
+                }
+                return true;
+            }
+        } catch (error: any) {
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to save: " + error?.message);
+            return false;
+        }
+    };
+
+    const handleClose = () => {
+        setOpenSnackbar(false);
+    };
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = (values: any) => {
+        const finalValue = values?.data?.map((listData: any) => {
+            return {
+                ...listData,
+                saveStatus: '02'
+            };
+        });
+        setOpenConfirmation(false);
+        handleSubmitApis(finalValue);
+    };
+
+    const handleSubmit = async (values: any) => {
+        if (actionVal === '02') {
+            setFormData(values);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(values);
+        }
+        setActionVal(null);
+    };
+
+    const handleClickSetAction = (action: any) => {
+        setActionVal(action);
+    };
+
+    const calculation = (setFieldValue: any, values: any, column: string) => {
+        if (values.data && values.data.length >= 3) {
+            const row0Value = parseFloat(values.data[0][column]) || 0;
+            const row1Value = parseFloat(values.data[1][column]) || 0;
+            const total = row0Value - row1Value;
+            setFieldValue(`data.2.${column}`, total.toFixed(2));
+        }
+    };
+
+    return (
+        <>
+            <div className="custome-form">
+                <ConfirmationAlertDialog
+                    id={applId as unknown as number}
+                    type={4}
+                    open={openConfirmation}
+                    handleClose={handleCloseConfirmation}
+                    handleDelete={handleSubmitConfirmation}
+                    values={formData}
+                />
+                <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
+                    <Formik
+                        initialValues={initialValues}
+                        onSubmit={handleSubmit}
+                        enableReinitialize
+                    >
+                        {({ values, setFieldValue }) => {
+                            return (
+                                <Form>
+                                    <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                        {values?.data?.[0]?.saveStatus !== "02" &&
+                                            <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} autoStyle={true} />
+                                        }
+                                        <FieldArray name="data">
+                                            {() => (
+                                                <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell><b>Sr. No.</b></TableCell>
+                                                            <TableCell><b>Particulars</b></TableCell>
+                                                            <TableCell><b>Val Ason T2</b></TableCell>
+                                                            <TableCell><b>Val Ason T1</b></TableCell>
+                                                            <TableCell><b>Val Ason T</b></TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {values?.data?.map((item: any, index: number) => (
+                                                            <TableRow
+                                                                key={item?.slNo}
+                                                                sx={item?.particulares === "Total Net" ? {
+                                                                    backgroundColor: "gray.100",
+                                                                    fontWeight: "bold"
+                                                                } : {}}
+                                                            >
+                                                                <TableCell>{item?.slNo}</TableCell>
+                                                                <TableCell>{item?.particulares}</TableCell>
+                                                                <TableCell>
+                                                                    <AdvanceTextBoxField
+                                                                        name={`data.${index}.valAsonT2`}
+                                                                        label={index === 2 ? "" : "Enter only Number"}
+                                                                        onCustomChange={() => index < 2 && calculation(setFieldValue, values, 'valAsonT2')}
+                                                                        type={'number'}
+                                                                        disabled={index === 2}
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <AdvanceTextBoxField
+                                                                        name={`data.${index}.valAsonT1`}
+                                                                        label={index === 2 ? "" : "Enter only Number"}
+                                                                        onCustomChange={() => index < 2 && calculation(setFieldValue, values, 'valAsonT1')}
+                                                                        type={'number'}
+                                                                        disabled={index === 2}
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <AdvanceTextBoxField
+                                                                        name={`data.${index}.valAsonT`}
+                                                                        label={index === 2 ? "" : "Enter only Number"}
+                                                                        onCustomChange={() => index < 2 && calculation(setFieldValue, values, 'valAsonT')}
+                                                                        type={'number'}
+                                                                        disabled={index === 2}
+                                                                    />
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            )}
+                                        </FieldArray>
+                                    </fieldset>
+                                    {values?.data?.[0]?.saveStatus !== "02" &&
+                                        <Button
+                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('01')}
+                                            variant="contained"
+                                        >
+                                            Save <CheckCircleOutlineIcon />
+                                        </Button>
+                                    }
+                                    {values?.data?.[0]?.saveStatus !== "02" &&
+                                        <Button
+                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                            type='submit'
+                                            onClick={() => handleClickSetAction('02')}
+                                            variant="contained"
+                                        >
+                                            Submit <SaveAsIcon />
+                                        </Button>
+                                    }
+                                </Form>
+                            );
+                        }}
+                    </Formik>
+                </div>
+            </div>
+            <OnlineSnackbar
+                open={openSnackbar}
+                msg={snackMsg}
+                severity={severity}
+                handleSnackClose={handleClose}
+            />
+        </>
+    );
+};
+
+export default RepsessionDetails;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 https://dev-nbfc.sidbi.in/refapi/appl/getRepsessionDtl/M000004374
