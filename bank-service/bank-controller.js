@@ -17,7 +17,6 @@ const bankSchema = Joi.object({
 
 bankRouter.post('/',
     authenticateToken,
-    // authorize(['manage_banks']),
     async (req, res) => {
         try {
             const { error } = bankSchema.validate(req.body);
@@ -73,7 +72,6 @@ bankRouter.get('/',
 // Update bank account status
 bankRouter.put('/:id/status',
     authenticateToken,
-    // authorize(['manage_banks']),
     async (req, res) => {
         try {
             const { status } = req.body;
