@@ -10,3 +10,5 @@ npm install config
 
 *** In this application I'm using custom-environment-variables.json file to supply the JWT secret key when required from environment variable.
 Note: The application will not start if the 'bankingapp-secretkey' is not set in environment variable.
+
+
