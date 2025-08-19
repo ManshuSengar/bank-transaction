@@ -11,9 +11,11 @@ const bankSchema = Joi.object({
     accountNumber: Joi.string().pattern(/^\d+$/).required(),
     ifsc: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required(),
     branch: Joi.string().required(),
-    securityPin: Joi.string().min(4).max(6).pattern(/^\d+$/),
+    securityPin?: Joi.string().min(4).max(6).pattern(/^\d+$/),
     status: Joi.string().valid('ACTIVE', 'INACTIVE').default('ACTIVE')
 });
+
+
 
 bankRouter.post('/',
     authenticateToken,
