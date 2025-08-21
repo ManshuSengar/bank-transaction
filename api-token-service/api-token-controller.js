@@ -9,13 +9,30 @@ const {
 } = require("../middleware/auth-token-validator");
 const Joi = require("joi");
 
-// Validation schemas
+// ============================================================================
+// VALIDATION SCHEMAS
+// ============================================================================
+
+/**
+ * Schema for validating token creation requests
+ * - name: Required string between 3-100 characters
+ * - description: Optional string
+ * - ipAddresses: Required array of valid IP addresses (at least one)
+ */
 const tokenRequestSchema = Joi.object({
   name: Joi.string().min(3).max(100).required(),
   description: Joi.string(),
   ipAddresses: Joi.array().items(Joi.string().ip()).min(1).required(),
 });
 
+/**
+ * Schema for validating token update requests
+ * - name: Optional string between 3-100 characters
+ * - description: Optional string
+ * - ipAddresses: Optional array of valid IP addresses
+ * - status: Optional string with specific allowed values
+ * - rejectionReason: Required only when status is "REJECTED"
+ */
 const tokenUpdateSchema = Joi.object({
   name: Joi.string().min(3).max(100),
   description: Joi.string(),
@@ -28,9 +45,18 @@ const tokenUpdateSchema = Joi.object({
   }),
 });
 
-// Request new API token
+// ============================================================================
+// ROUTE HANDLERS
+// ============================================================================
+
+/**
+ * POST /api/tokens
+ * Request a new API token
+ * Requires authentication
+ */
 apiTokenRouter.post("/", authenticateToken, async (req, res) => {
   try {
+    // Validate request body
     const { error } = tokenRequestSchema.validate(req.body);
     if (error) {
       return res.status(400).send({
@@ -39,12 +65,14 @@ apiTokenRouter.post("/", authenticateToken, async (req, res) => {
       });
     }
 
+    // Create token in database
     const token = await apiTokenDao.createToken({
       ...req.body,
       userId: req.user.userId,
-      ipAddresses: req.body.ipAddresses.join(","),
+      ipAddresses: req.body.ipAddresses.join(","), // Convert array to string for storage
     });
 
+    // Return success response (without actual token until approved)
     res.status(201).send({
       messageCode: "TOKEN_REQUESTED",
       message: "API token request submitted successfully",
@@ -62,13 +90,18 @@ apiTokenRouter.post("/", authenticateToken, async (req, res) => {
   }
 });
 
-// Update token (admin only)
+/**
+ * PUT /api/tokens/:id
+ * Update a token (admin only)
+ * Requires authentication and authorization (commented out)
+ */
 apiTokenRouter.put(
   "/:id",
   authenticateToken,
-  // authorize(['manage_tokens']),
+  // authorize(['manage_tokens']), // Uncomment when authorization is implemented
   async (req, res) => {
     try {
+      // Validate request body
       const { error } = tokenUpdateSchema.validate(req.body);
       if (error) {
         return res.status(400).send({
@@ -77,15 +110,18 @@ apiTokenRouter.put(
         });
       }
 
+      // Prepare update data
       const updateData = {
         ...req.body,
-        ipAddresses: req.body.ipAddresses?.join(","),
+        ipAddresses: req.body.ipAddresses?.join(","), // Convert array to string if provided
         approvedBy: req.user.userId,
         approvedAt: new Date(),
       };
 
+      // Update token in database
       const token = await apiTokenDao.updateToken(req.params.id, updateData);
 
+      // Check if token exists
       if (!token) {
         return res.status(404).send({
           messageCode: "TOKEN_NOT_FOUND",
@@ -93,6 +129,7 @@ apiTokenRouter.put(
         });
       }
 
+      // Return success response
       res.send({
         messageCode: "TOKEN_UPDATED",
         message: "API token updated successfully",
@@ -109,17 +146,24 @@ apiTokenRouter.put(
   }
 );
 
-// Get all tokens (admin)
+/**
+ * GET /api/tokens
+ * Get all tokens (admin only)
+ * Requires authentication and authorization (commented out)
+ * Supports pagination and filtering
+ */
 apiTokenRouter.get(
   "/",
   authenticateToken,
-  // authorize(['manage_tokens']),
+  // authorize(['manage_tokens']), // Uncomment when authorization is implemented
   async (req, res) => {
     try {
+      // Parse query parameters
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const { status, search } = req.query;
 
+      // Fetch tokens from database
       const tokens = await apiTokenDao.getTokens({
         page,
         limit,
@@ -127,6 +171,7 @@ apiTokenRouter.get(
         search: search || null,
       });
 
+      // Return success response
       res.send({
         messageCode: "TOKENS_FETCHED",
         message: "API tokens retrieved successfully",
@@ -143,18 +188,24 @@ apiTokenRouter.get(
   }
 );
 
-// Get user's tokens
+/**
+ * GET /api/tokens/my-tokens
+ * Get current user's tokens
+ * Requires authentication
+ */
 apiTokenRouter.get("/my-tokens", authenticateToken, async (req, res) => {
   try {
+    // Fetch user's tokens from database
     const tokens = await apiTokenDao.getUserTokens(req.user.userId);
+    
+    // Return success response (only include token value if status is ACTIVE)
     res.send({
-        messageCode: 'TOKENS_FETCHED',
-        message: 'API tokens retrieved successfully',
-        tokens: tokens.map(token => ({
-            ...token,
-            // Only include token value if status is ACTIVE
-            token: token.status === 'ACTIVE' ? token.token : undefined
-        }))
+      messageCode: "TOKENS_FETCHED",
+      message: "API tokens retrieved successfully",
+      tokens: tokens.map((token) => ({
+        ...token,
+        token: token.status === "ACTIVE" ? token.token : undefined,
+      })),
     });
   } catch (error) {
     log.error("Error getting user tokens:", error);
@@ -165,11 +216,18 @@ apiTokenRouter.get("/my-tokens", authenticateToken, async (req, res) => {
   }
 });
 
-// Get token details
+/**
+ * GET /api/tokens/:id
+ * Get token details by ID
+ * Requires authentication
+ * Users can only view their own tokens unless they have admin permissions
+ */
 apiTokenRouter.get("/:id", authenticateToken, async (req, res) => {
   try {
+    // Fetch token from database
     const token = await apiTokenDao.getTokenById(req.params.id);
 
+    // Check if token exists
     if (!token) {
       return res.status(404).send({
         messageCode: "TOKEN_NOT_FOUND",
@@ -177,7 +235,7 @@ apiTokenRouter.get("/:id", authenticateToken, async (req, res) => {
       });
     }
 
-    // Only allow users to view their own tokens unless they have admin permission
+    // Authorization check
     if (
       token.userId !== req.user.userId &&
       !req.user.permissions.includes("manage_tokens")
@@ -188,6 +246,7 @@ apiTokenRouter.get("/:id", authenticateToken, async (req, res) => {
       });
     }
 
+    // Return success response (only include token value if status is ACTIVE and user owns the token)
     res.send({
       messageCode: "TOKEN_FETCHED",
       message: "API token retrieved successfully",
@@ -205,11 +264,18 @@ apiTokenRouter.get("/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// Get token usage logs
+/**
+ * GET /api/tokens/:id/logs
+ * Get token usage logs
+ * Requires authentication
+ * Users can only view their own token logs unless they have admin permissions
+ */
 apiTokenRouter.get("/:id/logs", authenticateToken, async (req, res) => {
   try {
+    // Fetch token from database
     const token = await apiTokenDao.getTokenById(req.params.id);
 
+    // Check if token exists
     if (!token) {
       return res.status(404).send({
         messageCode: "TOKEN_NOT_FOUND",
@@ -217,7 +283,7 @@ apiTokenRouter.get("/:id/logs", authenticateToken, async (req, res) => {
       });
     }
 
-    // Only allow users to view their own token logs unless they have admin permission
+    // Authorization check
     if (
       token.userId !== req.user.userId &&
       !req.user.permissions.includes("manage_tokens")
@@ -228,12 +294,16 @@ apiTokenRouter.get("/:id/logs", authenticateToken, async (req, res) => {
       });
     }
 
+    // Parse query parameters
     const { page = 1, limit = 10 } = req.query;
+    
+    // Fetch token logs from database
     const logs = await apiTokenDao.getTokenLogs(req.params.id, {
       page: parseInt(page),
       limit: parseInt(limit),
     });
 
+    // Return success response
     res.send({
       messageCode: "LOGS_FETCHED",
       message: "Token usage logs retrieved successfully",
@@ -248,10 +318,15 @@ apiTokenRouter.get("/:id/logs", authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/tokens/:id/status
+ * Update token status (admin only)
+ * Requires authentication and authorization (commented out)
+ */
 apiTokenRouter.put(
   "/:id/status",
   authenticateToken,
-//   authorize(["manage_tokens"]),
+  // authorize(["manage_tokens"]), // Uncomment when authorization is implemented
   async (req, res) => {
     try {
       const { status, rejectionReason } = req.body;
@@ -272,6 +347,7 @@ apiTokenRouter.put(
         });
       }
 
+      // Update token status in database
       const token = await apiTokenDao.updateTokenStatus(
         req.params.id,
         status,
@@ -279,6 +355,7 @@ apiTokenRouter.put(
         req.user.userId
       );
 
+      // Check if token exists
       if (!token) {
         return res.status(404).send({
           messageCode: "TOKEN_NOT_FOUND",
@@ -286,6 +363,7 @@ apiTokenRouter.put(
         });
       }
 
+      // Return success response
       res.send({
         messageCode: "STATUS_UPDATED",
         message: "Token status updated successfully",
@@ -301,4 +379,9 @@ apiTokenRouter.put(
     }
   }
 );
+
+// ============================================================================
+// EXPORT ROUTER
+// ============================================================================
+
 module.exports = apiTokenRouter;
