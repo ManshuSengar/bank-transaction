@@ -1,3 +1,165 @@
+import { KeyValuePair } from "./KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import Select from "@mui/material/Select";
+import { useGetMaterQuery, useLazyGetMasterByIdQuery } from "../../features/master/api";
+import { modify } from "../../utlis/helpers";
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import { useEffect, useState } from "react";
+import SelectLoader from "../../loader/SelectLoader";
+import { Backdrop, CircularProgress } from "@mui/material";
+
+interface EnhancedDropDownProps {
+    label?: string;
+    name: string;
+    domain: string;
+    disabled?: boolean;
+    dependsOn?: any;
+    onChange?: (value: any) => void;
+    onValueChange?: (value: any) => void;
+    customOptions?: Array<{ key: string, value: string, label: string }>;
+    valueKey?: string;
+    labelKey?: string;
+    query?: string;
+    basePath?: string
+}
+
+export const EnhancedDropDown = ({
+    basePath = "refapi",
+    ...props
+}: EnhancedDropDownProps) => {
+    const formik = useFormikContext<KeyValuePair>();
+    const {
+        handleBlur,
+        values,
+        touched,
+        errors,
+        setFieldValue,
+        setFieldTouched
+    } = formik || {};
+
+    const [dependMasterdata, setDependMasterData] = useState<any>();
+    const {
+        data: masterData,
+        isLoading
+    } = useGetMaterQuery(`${basePath}/${props.domain}`, {
+        skip: Boolean(props.dependsOn),
+        refetchOnMountOrArgChange: true
+    });
+
+    const [dependsOnData, { data, isFetching, isLoading: isMstrLoading, error }] = useLazyGetMasterByIdQuery();
+
+    const handleChange = async (event: any) => {
+        const value = event.target.value;
+        await setFieldValue(props.name, value);
+        await setFieldTouched(props.name, true, false);
+
+        if (props.onChange) {
+            props.onChange(value);
+        }
+        if (props.onValueChange) {
+            props.onValueChange(value);
+        }
+    };
+
+    const dependentValue: any = getIn(values, props.dependsOn);
+
+    const dependData = async () => {
+        let options: any = [];
+        if (props.dependsOn) {
+            if (getIn(values, props.dependsOn)) {
+                try {
+                    const dependMasterData = await dependsOnData(
+                        `${basePath}/${props.domain}?${props?.query}=${dependentValue}`
+                    ).unwrap();
+                    options = modify(`${props.domain}`, dependMasterData);
+                    return options;
+                } catch (error) {
+                    return [];
+                }
+            }
+            return options;
+        }
+        return [];
+    };
+
+    const getOptions = () => {
+        if (props.customOptions) {
+            return props.customOptions;
+        }
+        return modify(props.domain, masterData);
+    };
+
+    useEffect(() => {
+        dependData()
+            .then((options: any) => {
+                setDependMasterData(options);
+            })
+            .catch(() => {
+                setDependMasterData([]);
+            });
+    }, [props?.dependsOn, dependentValue]);
+
+    if (isLoading) return <SelectLoader />;
+
+    return (
+        <>
+            <FormControl fullWidth>
+                <InputLabel
+                    className="select-label"
+                    id={`label-id-${props.name}`}
+                    error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                >
+                    {props.label}
+                </InputLabel>
+                <Select
+                    labelId={`label-id-${props.name}`}
+                    id={`id-${props.name}`}
+                    value={getIn(values, props.name) || ''}
+                    disabled={props.disabled}
+                    name={props.name}
+                    label={props.label}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                    size="small"
+                >
+                    {(!props?.dependsOn ? getOptions() : dependMasterdata)?.map((item: any) => (
+                        <MenuItem
+                            value={item.value}
+                            key={item.key}
+                        >
+                            {item.label}
+                        </MenuItem>
+                    ))}
+                </Select>
+            </FormControl>
+            <div className="mt-0 position-relative">
+                <Typography
+                    color="error"
+                    variant="subtitle2"
+                    gutterBottom
+                    component="span"
+                    className="mybooking_error"
+                >
+                    {getIn(touched, props.name) && getIn(errors, props.name) &&
+                        JSON.stringify(getIn(errors, props.name)).replaceAll('"', '')}
+                </Typography>
+            </div>
+        </>
+    );
+};
+
+
+
+
+
+
+
+
+
 import { FieldArray, Form, Formik } from "formik";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Grid, IconButton, Snackbar } from "@mui/material";
