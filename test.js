@@ -59,16 +59,14 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                     const maxTenure = parseExcelValue(excelRow[2]); // Max column
 
                     if (minTenure !== null && maxTenure !== null && !isNaN(minTenure) && !isNaN(maxTenure)) {
-                        // Current FY DPD values
                         const qtrDpd0 = parseExcelValue(excelRow[9]);
                         const qtrDpd1To30 = parseExcelValue(excelRow[10]);
                         const qtrDpd31To60 = parseExcelValue(excelRow[11]);
                         const qtrDpd61To90 = parseExcelValue(excelRow[12]);
                         const qtrDpdAbove90 = parseExcelValue(excelRow[13]);
-                        const qtrPosFormula = parseExcelValue(excelRow[8]); // SUM(I4:M4)
+                        const qtrPosFormula = parseExcelValue(excelRow[8]); 
                         const qtrPos = Number((qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90).toFixed(2));
 
-                        // Validate formula result
                         if (Math.abs(qtrPos - qtrPosFormula) > 0.01) {
                             console.warn(`Row ${rowIndex}: qtrPos formula mismatch. Calculated: ${qtrPos}, Excel: ${qtrPosFormula}`);
                             setOpenSnackbar(true);
@@ -89,7 +87,6 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                             const tposFormula = parseExcelValue(excelRow[15]); // SUM(P4:T4)
                             tpos = Number((tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90).toFixed(2));
 
-                            // Validate formula result
                             if (Math.abs(tpos - tposFormula) > 0.01) {
                                 console.warn(`Row ${rowIndex}: tpos formula mismatch. Calculated: ${tpos}, Excel: ${tposFormula}`);
                                 setOpenSnackbar(true);
@@ -1100,12 +1097,6 @@ export default connect((state: any) => {
 
 
 
-
-
-
-
-
-
 import { useState, useEffect, useRef } from "react";
 import { FieldArray, Form, Formik } from 'formik';
 import AutoSave from '../../../components/framework/AutoSave';
@@ -1116,9 +1107,9 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAppSelector } from "../../../app/hooks";
 import {
-    useGetpFCutsTenurWiseFormDataQuery,
-    useSavepFCutsTenurWiseFormDetailsMutation,
-    useDeletePfTenureCutseByIdMutation
+    useGetPFCutsIntWiseFormDataQuery,
+    useSavepFCutsIntWiseFormDetailsMutation,
+    useDeletePFCutsIntWiseMutation 
 } from "../../../features/application-form/Portfoliocuts";
 import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
 import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
@@ -1132,150 +1123,98 @@ import NotificationSectionWiseButton from "../../../components/DrawerComponent/N
 import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
 import Notification from "../../../components/shared/Notification";
 
-const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
+const InterestRateWisePortfolioCutsTable = ({ excelData, openSectionsData }: any) => {
     const { applId, transactionData } = useAppSelector((state) => state.userStore);
-    const [savepFCutsTenurWiseFormDetails] = useSavepFCutsTenurWiseFormDetailsMutation();
-    const [deletepfCuts] = useDeletePfTenureCutseByIdMutation();
-    const { data: getpFCutsTenurWiseFormData } = useGetpFCutsTenurWiseFormDataQuery(applId, { refetchOnMountOrArgChange: true });
+    const [savepFCutsIntWiseFormDetails] = useSavepFCutsIntWiseFormDetailsMutation();
+    const [deletePfIntCuts] = useDeletePFCutsIntWiseMutation();
+    const { data: getPFCutsIntWiseFormData } = useGetPFCutsIntWiseFormDataQuery(applId, { refetchOnMountOrArgChange: true });
     const [openDeleteConfirmation, setOpenDeleteConfirmation] = useState(false);
     const [deleteIndex, setDeleteIndex] = useState<any>(null);
-    const [deleteSlNo, setDeleteSlNo] = useState<number | null>(null);
+    const [deleteSlNo, setDeleteSlNo] = useState<any>(null);
     const [openSubmitConfirmation, setOpenSubmitConfirmation] = useState<boolean>(false);
     const [formData, setFormData] = useState<any>("");
     const [actionVal, setActionVal] = useState<any>("");
     const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
     const [snackMsg, setSnackMsg] = useState<any>("");
     const [severity, setSeverity] = useState<string | any>("success");
+    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const setFieldValueRef = useRef<any>(null);
 
     useEffect(() => {
         if (excelData && excelData?.length > 0) {
-            const tenureRows = excelData.filter((row: any) => {
-                const minValue = row[1]; // Min tenure column
-                return minValue !== undefined &&
-                       minValue !== null &&
-                       minValue.toString().trim() !== '' &&
-                       minValue.toString().trim().toLowerCase() !== 'sub total' &&
-                       minValue.toString().trim().toLowerCase() !== 'subtotal';
-            });
-
+            const rateRows = excelData.filter((row: any) => row[0] && row[0]?.toString().trim() !== 'Sub Total');
             const newData: any = [];
-            tenureRows.forEach((excelRow: any, rowIndex: number) => {
-                try {
-                    const minTenure = parseExcelValue(excelRow[1]); // Min column
-                    const maxTenure = parseExcelValue(excelRow[2]); // Max column
 
-                    if (minTenure !== null && maxTenure !== null && !isNaN(minTenure) && !isNaN(maxTenure)) {
-                        const qtrDpd0 = parseExcelValue(excelRow[8]);
-                        const qtrDpd1To30 = parseExcelValue(excelRow[9]);
-                        const qtrDpd31To60 = parseExcelValue(excelRow[10]);
-                        const qtrDpd61To90 = parseExcelValue(excelRow[11]);
-                        const qtrDpdAbove90 = parseExcelValue(excelRow[12]);
-                        const qtrPos = Number((qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90).toFixed(2));
+            rateRows.forEach((excelRow: any) => {
+                const rateSlab = excelRow[0]?.toString().trim();
+                let minRateType = 0;
+                let maxRateType = 0;
+                if (rateSlab !== "Sub Total") {
+                   
+                    const qtrDpd0 = parseExcelValue(excelRow[7]);
+                    const qtrDpd1To30 = parseExcelValue(excelRow[8]);
+                    const qtrDpd31To60 = parseExcelValue(excelRow[9]);
+                    const qtrDpd61To90 = parseExcelValue(excelRow[10]);
+                    const qtrDpdAbove90 = parseExcelValue(excelRow[11]);
+                    const qtrPos = (qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90).toFixed(2);
 
-                        let tloans = 0;
-                        let tpos = '0';
-                        let tdpd0 = 0, tdpd1To30 = 0, tdpd31To60 = 0, tdpd61To90 = 0, tdpdAbove90 = 0;
-                        if (transactionData?.lstAudQ !== 'Not Applicable') {
-                            tloans = parseExcelValue(excelRow[13]);
-                            tdpd0 = parseExcelValue(excelRow[15]);
-                            tdpd1To30 = parseExcelValue(excelRow[16]);
-                            tdpd31To60 = parseExcelValue(excelRow[17]);
-                            tdpd61To90 = parseExcelValue(excelRow[18]);
-                            tdpdAbove90 = parseExcelValue(excelRow[19]);
-                            tpos = Number((tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90).toFixed(2));
-                        }
-
-                        const rowData = {
-                            minTenureSlab: Number(minTenure.toFixed(0)),
-                            maxTenureSlab: Number(maxTenure.toFixed(0)),
-                            tminus2Loans: Number(parseExcelValue(excelRow[3]).toFixed(0)),
-                            tminus2Pos: Number(parseExcelValue(excelRow[4]).toFixed(2)),
-                            tminus1Loans: Number(parseExcelValue(excelRow[5]).toFixed(0)),
-                            tminus1Pos: Number(parseExcelValue(excelRow[6]).toFixed(2)),
-                            qtrLoans: Number(parseExcelValue(excelRow[7]).toFixed(0)),
-                            qtrPos,
-                            qtrDpd0: Number(qtrDpd0.toFixed(2)),
-                            qtrDpd1To30: Number(qtrDpd1To30.toFixed(2)),
-                            qtrDpd31To60: Number(qtrDpd31To60.toFixed(2)),
-                            qtrDpd61To90: Number(qtrDpd61To90.toFixed(2)),
-                            qtrDpdAbove90: Number(qtrDpdAbove90.toFixed(2)),
-                            tloans: Number(tloans.toFixed(0)),
-                            tpos,
-                            tdpd0: Number(tdpd0.toFixed(2)),
-                            tdpd1To30: Number(tdpd1To30.toFixed(2)),
-                            tdpd31To60: Number(tdpd31To60.toFixed(2)),
-                            tdpd61To90: Number(tdpd61To90.toFixed(2)),
-                            tdpdAbove90: Number(tdpdAbove90.toFixed(2)),
-                            slNo: null,
-                            saveStatus: '01',
-                        };
-
-                        const existingIndex = newData.findIndex((row: any) => 
-                            row.minTenureSlab === rowData.minTenureSlab && 
-                            row.maxTenureSlab === rowData.maxTenureSlab
-                        );
-                        if (existingIndex !== -1) {
-                            newData[existingIndex] = { ...newData[existingIndex], ...rowData };
-                        } else {
-                            newData.push(rowData);
-                        }
-                    } else {
-                        console.warn(`Skipping row ${rowIndex}: Invalid tenure values (min: ${minTenure}, max: ${maxTenure})`);
+                    let tpos = '0';
+                    if (transactionData?.lstAudQ !== 'Not Applicable') {
+                        const tdpd0 = parseExcelValue(excelRow[14]);
+                        const tdpd1To30 = parseExcelValue(excelRow[15]);
+                        const tdpd31To60 = parseExcelValue(excelRow[16]);
+                        const tdpd61To90 = parseExcelValue(excelRow[17]);
+                        const tdpdAbove90 = parseExcelValue(excelRow[18]);
+                        tpos = (tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90).toFixed(2);
                     }
-                } catch (error) {
-                    console.error(`Error processing row ${rowIndex}:`, error);
-                    setOpenSnackbar(true);
-                    setSeverity("warning");
-                    setSnackMsg(`Warning: Could not process row ${rowIndex + 1} from Excel data`);
+
+                    const rowData = {
+                        minRateType,
+                        maxRateType,
+                        tminus2Loans: parseExcelValue(excelRow[1]),
+                        tminus2Pos: parseExcelValue(excelRow[2]),
+                        tminus1Loans: parseExcelValue(excelRow[3]),
+                        tminus1Pos: parseExcelValue(excelRow[4]),
+                        qtrLoans: parseExcelValue(excelRow[5]),
+                        qtrPos,
+                        qtrDpd0,
+                        qtrDpd1To30,
+                        qtrDpd31To60,
+                        qtrDpd61To90,
+                        qtrDpdAbove90,
+                        tloans: parseExcelValue(excelRow[12]),
+                        tpos,
+                        tdpd0: parseExcelValue(excelRow[14]),
+                        tdpd1To30: parseExcelValue(excelRow[15]),
+                        tdpd31To60: parseExcelValue(excelRow[16]),
+                        tdpd61To90: parseExcelValue(excelRow[17]),
+                        tdpdAbove90: parseExcelValue(excelRow[18]),
+                        slNo: null,
+                        saveStatus: '01',
+                    };
+
+                    const existingIndex = newData.findIndex((row: any) => row.minRateType === minRateType && row.maxRateType === maxRateType);
+                    if (existingIndex !== -1) {
+                        newData[existingIndex] = { ...newData[existingIndex], ...rowData };
+                    } else {
+                        newData.push(rowData);
+                    }
                 }
             });
 
-            if (newData.length > 0) {
-                setFieldValueRef.current("data", newData);
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg(`Tenure-wise data imported successfully (${newData.length} rows)`);
-            } else {
-                setOpenSnackbar(true);
-                setSeverity("warning");
-                setSnackMsg("No valid tenure data found in Excel");
-            }
+            setFieldValueRef.current("data", newData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Interest Rate-wise data imported successfully");
         }
     }, [excelData, transactionData]);
 
-    const parseExcelValue = (value: any): number => {
-        if (value === undefined || value === null || value === '') {
-            return 0;
-        }
-
-        let numericValue: number;
-
-        if (typeof value === 'object' && value !== null && 'result' in value) {
-            numericValue = parseFloat(value.result) || 0;
-        } else if (typeof value === 'string') {
-            const cleanedString = value.replace(/,/g, '').trim();
-            numericValue = parseFloat(cleanedString) || 0;
-        } else if (typeof value === 'number') {
-            numericValue = value;
-        } else {
-            numericValue = parseFloat(String(value).replace(/,/g, '')) || 0;
-        }
-
-        if (isNaN(numericValue)) {
-            console.warn(`Invalid numeric value parsed: ${JSON.stringify(value)} -> returning 0`);
-            return 0;
-        }
-
-        return numericValue;
-    };
-
-    const tenureWiseListingSchema = Yup.object().shape({
+    const interestWiseListingSchema = Yup.object().shape({
         data: Yup.array().of(
             Yup.object().shape({
-                minTenureSlab: Yup.number().required('Required'),
-                maxTenureSlab: Yup.number().required('Required').moreThan(Yup.ref('minTenureSlab'), 'Max must be greater than Min'),
+                minRateType: Yup.number().required('Required'),
+                maxRateType: Yup.number().required('Required').moreThan(Yup.ref('minRateType'), 'Max must be greater than Min'),
             })
         ),
     });
@@ -1283,17 +1222,20 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
     const handleSubmitApis = async (finalValue: any) => {
         try {
             setIsUploading(true);
-            const response = await savepFCutsTenurWiseFormDetails(finalValue).unwrap();
+            const response = await savepFCutsIntWiseFormDetails(finalValue).unwrap();
             if (response) {
                 setOpenSnackbar(true);
                 setSeverity("success");
                 setIsUploading(false);
+
                 const message = finalValue[0]?.saveStatus === '02'
                     ? "Section submitted successfully"
                     : "Record saved successfully";
+
                 setSnackMsg(message);
                 return true;
             }
+
             return false;
         } catch (error: any) {
             console.error("Submission error:", error);
@@ -1327,6 +1269,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
     };
 
     const handleSubmit = async (values: any) => {
+
         if (actionVal === '02') {
             let finalValue = values?.data?.map((listData: any, index: number) => {
                 return {
@@ -1343,6 +1286,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
             });
             handleSubmitApis(finalValue);
         }
+        //setActionVal(null);
     };
 
     const handleClickSetAction = (action: any) => {
@@ -1370,7 +1314,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
         const qtrDpdAbove90 = parseFloat(currentRowId === 'qtrDpdAbove90' ? currentVal : currentRow.qtrDpdAbove90) || 0;
 
         const total = qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90;
-        setFieldValue(`data.${currentIndex}.qtrPos`, Number(total.toFixed(2)));
+        setFieldValue(`data.${currentIndex}.qtrPos`, total.toFixed(2));
     };
 
     const calculationCurrentFyQtr = (setFieldValue: any, values: any, currentIndex: number,
@@ -1383,7 +1327,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
         const tdpdAbove90 = parseFloat(currentRowId === 'tdpdAbove90' ? currentVal : currentRow.tdpdAbove90) || 0;
 
         const total = tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90;
-        setFieldValue(`data.${currentIndex}.tpos`, Number(total.toFixed(2)));
+        setFieldValue(`data.${currentIndex}.tpos`, total.toFixed(2));
     };
 
     const getRowValue = (values: any, index: number, currentRowId: string) => {
@@ -1408,133 +1352,140 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
     };
 
     const handleClickOpenDeleteConfirmation = (item: any, index: number) => {
+        console.log("item ",item?.slNo,index);
         setDeleteIndex(index);
         setDeleteSlNo(item?.slNo || null);
         setOpenDeleteConfirmation(true);
     };
 
-    const handleConfirmDelete = async (applId: any, index: number) => {
+    const handleConfirmDelete = async (applId: any, slNo: number) => {
         handleCloseDeleteConfirmation();
         try {
-            if (await deletepfCuts({ applId, index }).unwrap()) {
+            if (await deletePfIntCuts({ applId, slNo }).unwrap()) {
                 setOpenSnackbar(true);
                 setSeverity("success");
                 setSnackMsg("Record Deleted successfully");
             }
         } catch (error) {
-            console.error("Error deleting tenure-wise record:", error);
+            console.error("Error deleting interest rate-wise record:", error);
             setOpenSnackbar(true);
             setSeverity("error");
             setSnackMsg("Failed to delete");
         }
     };
 
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '') return 0;
+        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
+        return parseFloat(value.toFixed(2)) || 0;
+    };
+
     const calculatetminus2Loans = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tminus2Loans) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatettminus2Pos = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tminus2Pos) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetminus1Loans = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tminus1Loans) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetminus1Pos = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tminus1Pos) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrLoans = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrLoans) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrPos = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrPos) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrDpd0 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrDpd0) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrDpd1To30 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrDpd1To30) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtrDpd31To60 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrDpd31To60) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtrqtrDpd61To90 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrDpd61To90) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtrqtrDpdAbove90 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.qtrDpdAbove90) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtrqtrtloans = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tloans) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtrtpos = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tpos) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqttdpd0 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tdpd0) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtdpd1To30 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tdpd1To30) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtdptdpd31To60 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tdpd31To60) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtdptdpdtdpd61To90 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tdpd61To90) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const calculatetqtrqtdptdpdtdtdpdAbove90 = (values: any) => {
-        return values.data?.reduce((total: number, data1: any) => {
+        return values.data.reduce((total: number, data1: any) => {
             return total + (parseFloat(data1?.tdpdAbove90) || 0);
-        }, 0) || 0;
+        }, 0);
     };
 
     const [updateCommentByNId] = useUpdateCommentByNIdMutation();
@@ -1559,8 +1510,8 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
         let prevMax = parseFloat(newMax);
         if (isNaN(prevMax)) return;
         for (let i = startIndex + 1; i < values.data.length; i++) {
-            setFieldValue(`data.${i}.minTenureSlab`, prevMax);
-            prevMax = parseFloat(values.data[i].maxTenureSlab);
+            setFieldValue(`data.${i}.minRateType`, prevMax);
+            prevMax = parseFloat(values.data[i].maxRateType);
             if (isNaN(prevMax)) break;
         }
     };
@@ -1581,7 +1532,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                             justifyContent="end">
                             {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
                                 const matchedItem = getOpenSectionsData.find(
-                                    (item: any) => item?.sectionId === "06" && item?.subSectionId === "02"
+                                    (item: any) => item?.sectionId === "06" && item?.subSectionId === "03"
                                 );
                                 return matchedItem ? (
                                     <div className="openSection-item">
@@ -1591,6 +1542,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                             className="btn-primary-css--"
                                             notfId={matchedItem?.notfId}
                                             getOpenSectionsData={getOpenSectionsData}
+
                                         />
                                     </div>
                                 ) : null;
@@ -1618,7 +1570,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
 
                         <ConfirmationAlertDialog
                             id={applId as unknown as number}
-                            index={deleteIndex}
+                            index={deleteSlNo}
                             type={2}
                             open={openDeleteConfirmation}
                             handleClose={handleCloseDeleteConfirmation}
@@ -1627,10 +1579,10 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
 
                         <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
                             <Formik
-                                initialValues={getpFCutsTenurWiseFormData || { data: [] }}
+                                initialValues={getPFCutsIntWiseFormData || { data: [] }}
                                 onSubmit={handleSubmit}
                                 enableReinitialize
-                                validationSchema={tenureWiseListingSchema}
+                                validationSchema={interestWiseListingSchema}
                                 validateOnChange={true}
                                 validateOnBlur={true}
                             >
@@ -1655,14 +1607,14 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                         const lastIndex = values.data.length - 1;
                                                                         let newMin: any = 0;
                                                                         if (lastIndex >= 0) {
-                                                                            const lastMax = parseFloat(values.data[lastIndex].maxTenureSlab);
+                                                                            const lastMax = parseFloat(values.data[lastIndex].maxRateType);
                                                                             if (!isNaN(lastMax)) {
                                                                                 newMin = lastMax;
                                                                             }
                                                                         }
                                                                         push({
-                                                                            minTenureSlab: newMin,
-                                                                            maxTenureSlab: "",
+                                                                            minRateType: newMin,
+                                                                            maxRateType: "",
                                                                             tminus2Loans: "",
                                                                             tminus2Pos: "",
                                                                             tminus1Loans: "",
@@ -1695,7 +1647,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                             {values?.data?.[0]?.saveStatus !== "02" && (
                                                                                 <b>Action</b>)}
                                                                         </TableCell>
-                                                                        <TableCell colSpan={2} align='center'><b>Tenure</b></TableCell>
+                                                                        <TableCell colSpan={2} align='center'><b>Interest Rate</b></TableCell>
                                                                         <TableCell colSpan={2} align='center'><b>FY {transactionData?.lstAudYrTm2}</b></TableCell>
                                                                         <TableCell colSpan={2} align='center'><b>FY {transactionData?.lstAudYrTm1}</b></TableCell>
                                                                         <TableCell colSpan={7} align='center'><b>FY {transactionData?.lstAudYrT}</b></TableCell>
@@ -1752,7 +1704,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                                         <IconButton
                                                                                             onClick={() =>
                                                                                                 item?.slNo
-                                                                                                    ? handleClickOpenDeleteConfirmation(item, item?.slNo)
+                                                                                                    ? handleClickOpenDeleteConfirmation(item, index)
                                                                                                     : remove(index)
                                                                                             }
                                                                                             color="error"
@@ -1768,24 +1720,24 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                             </TableCell>
                                                                             <TableCell>
                                                                                 <AdvanceTextBoxField
-                                                                                    name={`data.${index}.minTenureSlab`}
+                                                                                    name={`data.${index}.minRateType`}
                                                                                     disabled={true}
                                                                                     type={'number'}
                                                                                     allowNegative={false}
-                                                                                    allowDecimal={false}
+                                                                                    allowDecimal={true}
                                                                                 />
                                                                             </TableCell>
                                                                             <TableCell>
                                                                                 <AdvanceTextBoxField
-                                                                                    name={`data.${index}.maxTenureSlab`}
+                                                                                    name={`data.${index}.maxRateType`}
                                                                                     onCustomChange={(currentVal: any) => {
                                                                                         const val = parseFloat(currentVal) || "";
-                                                                                        setFieldValue(`data.${index}.maxTenureSlab`, val);
+                                                                                        setFieldValue(`data.${index}.maxRateType`, val);
                                                                                         adjustSubsequentMins(setFieldValue, values, index, currentVal);
                                                                                     }}
                                                                                     type={'number'}
                                                                                     allowNegative={false}
-                                                                                    allowDecimal={false}
+                                                                                    allowDecimal={true}
                                                                                     disabled={item?.saveStatus === '02'}
                                                                                 />
                                                                             </TableCell>
@@ -1895,83 +1847,83 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                                 />
                                                                             </TableCell>
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tloans`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tloans')}
-                                                                                    type={'number'}
-                                                                                    allowNegative={false}
-                                                                                    allowDecimal={false}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tloans`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tloans')}
+                                                                                        type={'number'}
+                                                                                        allowNegative={false}
+                                                                                        allowDecimal={false}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tpos`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tpos')}
-                                                                                    type={'number'}
-                                                                                    disabled={true}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tpos`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tpos')}
+                                                                                        type={'number'}
+                                                                                        disabled={true}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tdpd0`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd0')}
-                                                                                    type={'number'}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd0`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd0')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tdpd1To30`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd1To30')}
-                                                                                    type={'number'}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd1To30`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd1To30')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tdpd31To60`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd31To60')}
-                                                                                    type={'number'}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd31To60`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd31To60')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tdpd61To90`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd61To90')}
-                                                                                    type={'number'}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd61To90`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd61To90')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                             {transactionData?.lstAudQ !== 'Not Applicable' &&
-                                                                            <TableCell>
-                                                                                <AdvanceTextBoxField
-                                                                                    name={`data.${index}.tdpdAbove90`}
-                                                                                    onCustomChange={(currentVal: any) =>
-                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpdAbove90')}
-                                                                                    type={'number'}
-                                                                                    disabled={item?.saveStatus === '02'}
-                                                                                />
-                                                                            </TableCell>
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpdAbove90`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpdAbove90')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
                                                                             }
                                                                         </TableRow>
                                                                     ))}
@@ -1984,7 +1936,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                         <TableCell>
                                                                             <b>
                                                                                 {calculatetminus2Loans(values).toLocaleString('en-IN', {
-                                                                                    maximumFractionDigits: 0,
+                                                                                    maximumFractionDigits: 2,
                                                                                     style: 'currency',
                                                                                     currency: 'INR'
                                                                                 })}
@@ -2002,7 +1954,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                         <TableCell>
                                                                             <b>
                                                                                 {calculatetminus1Loans(values).toLocaleString('en-IN', {
-                                                                                    maximumFractionDigits: 0,
+                                                                                    maximumFractionDigits: 2,
                                                                                     style: 'currency',
                                                                                     currency: 'INR'
                                                                                 })}
@@ -2020,7 +1972,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                         <TableCell>
                                                                             <b>
                                                                                 {calculatetqtrLoans(values).toLocaleString('en-IN', {
-                                                                                    maximumFractionDigits: 0,
+                                                                                    maximumFractionDigits: 2,
                                                                                     style: 'currency',
                                                                                     currency: 'INR'
                                                                                 })}
@@ -2084,7 +2036,7 @@ const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
                                                                             <TableCell>
                                                                                 <b>
                                                                                     {calculatetqtrqtrqtrtloans(values).toLocaleString('en-IN', {
-                                                                                        maximumFractionDigits: 0,
+                                                                                        maximumFractionDigits: 2,
                                                                                         style: 'currency',
                                                                                         currency: 'INR'
                                                                                     })}
@@ -2205,16 +2157,5 @@ export default connect((state: any) => {
     return {
         applId: state.userStore.applId
     };
-})(TenureWisePortfolioCuts);
+})(InterestRateWisePortfolioCutsTable);
 
-
-
-
-
-
-
-
-tenureRows-->  [[null,0,2,12,12,1,2,12,{"formula":"SUM(I4:M4)","result":40},12,12,2,12,2,12,{"formula":"SUM(P4:T4)","result":169,"ref":"O4:O5","shareType":"shared"},12,12,12,12,121]]
-
-value.toFixed is not a function
-TypeError: value.toFixed is not a function
