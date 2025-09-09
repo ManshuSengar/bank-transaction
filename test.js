@@ -1,1692 +1,1074 @@
-
-import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Grid, IconButton, Snackbar } from "@mui/material";
-import { Delete } from '@mui/icons-material';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { FixedSizeList } from 'react-window';
+import { useState, useEffect, useRef } from "react";
+import { FieldArray, Form, Formik } from 'formik';
+import AutoSave from '../../../components/framework/AutoSave';
+import { Button, Table, TableBody, TableCell, TableHead, TableRow, IconButton, Grid } from "@mui/material";
 import { connect } from 'react-redux';
-import { useDeleteLenderLimitByIdMutation, useGetLenderLimitFormDataQuery, useSaveLenderLimitFormDataMutation } from "../../../features/application-form/capitalResourceForm";
-import AutoSave from "../../../components/framework/AutoSave";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import FormLoader from "../../../loader/FormLoader";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useAppSelector } from "../../../app/hooks";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import {
+    useGetpFCutsTenurWiseFormDataQuery,
+    useSavepFCutsTenurWiseFormDetailsMutation,
+    useDeletePfTenureCutseByIdMutation
+} from "../../../features/application-form/Portfoliocuts";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
 import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-import * as Yup from 'yup';
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
 import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
-import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
-import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
+import * as Yup from 'yup';
+import React from "react";
 import DrawerResponseComponent from "../../../components/DrawerComponent/DrawerResponseComponent";
+import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
+import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
 import Notification from "../../../components/shared/Notification";
 
-interface LenderRow {
-    lenderName: string;
-    lenderType: string | null;
-    limitType: string;
-    sanctionedLimit: number | null;
-    fundingAmtTMinus2: number | null;
-    fundingAmtTMinus1: number | null;
-    fundingAmtT: number | null;
-    avgIntRate: number | null;
-    latestIntRate: number | null;
-    contactDetails: string;
-    ncdOs: string;
-    security: string;
-    slNo: number | null;
-    saveStatus: string;
-    applId: string;
-}
-
-interface FormValues {
-    data: LenderRow[];
-}
-
-interface Props {
-    applId: string;
-    excelData: any[];
-    openSectionsData?: any[];
-}
-
-const LenderLimitOdForm = ({ applId, excelData, openSectionsData }: Props) => {
-    const [addLimitDetails] = useSaveLenderLimitFormDataMutation();
-    const { data: LimitData, isLoading } = useGetLenderLimitFormDataQuery(applId);
-    const [deleteLimitDetails] = useDeleteLenderLimitByIdMutation();
-    const [index, setIndex] = useState(0);
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<LenderRow[] | null>(null);
-    const [actionVal, setActionVal] = useState<string | null>(null);
+const TenureWisePortfolioCuts = ({ excelData, openSectionsData }: any) => {
+    const { applId, transactionData } = useAppSelector((state) => state.userStore);
+    const [savepFCutsTenurWiseFormDetails] = useSavepFCutsTenurWiseFormDetailsMutation();
+    const [deletepfCuts] = useDeletePfTenureCutseByIdMutation();
+    const { data: getpFCutsTenurWiseFormData } = useGetpFCutsTenurWiseFormDataQuery(applId, { refetchOnMountOrArgChange: true });
+    const [openDeleteConfirmation, setOpenDeleteConfirmation] = useState(false);
+    const [deleteIndex, setDeleteIndex] = useState<any>(null);
+    const [deleteSlNo, setDeleteSlNo] = useState<number | null>(null);
+    const [openSubmitConfirmation, setOpenSubmitConfirmation] = useState<boolean>(false);
+    const [formData, setFormData] = useState<any>("");
+    const [actionVal, setActionVal] = useState<any>("");
     const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<string>("");
-    const [severity, setSeverity] = useState<"success" | "error">("success");
+    const [snackMsg, setSnackMsg] = useState<any>("");
+    const [severity, setSeverity] = useState<string | any>("success");
+    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [snackOpen, setSnackOpen] = useState(false);
-    const [snackMessages, setSnackMessages] = useState<string[]>([]);
-    const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
-    const { transactionData } = useAppSelector((state) => state.userStore);
-    const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
-
-    const columnWidths = [60, 60, 250, 150, 170, 170, 180, 180, 180, 170, 170, 170, 120, 350];
+    const setFieldValueRef = useRef<any>(null);
 
     useEffect(() => {
-        if (LimitData) {
-            const dataWithApplId: LenderRow[] = LimitData.map((item: any) => ({
-                ...item,
-                applId
-            }));
-            setInitialValues({ data: dataWithApplId });
-        }
-    }, [LimitData, applId]);
-
-    useEffect(() => {
-        if (excelData && excelData.length > 0) {
-            const lenderRows = excelData.filter((row: any) => row[2] && row[2] !== 'Total');
-            const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
-                lenderName: excelRow[2]?.toString().trim() || "",
-                lenderType: excelRow[3]?.toString().trim() || null,
-                limitType: excelRow[4]?.toString().trim() || "",
-                sanctionedLimit: parseExcelValue(excelRow[5]),
-                fundingAmtTMinus2: parseExcelValue(excelRow[6]),
-                fundingAmtTMinus1: parseExcelValue(excelRow[7]),
-                fundingAmtT: parseExcelValue(excelRow[8]),
-                avgIntRate: parseExcelValue(excelRow[9]),
-                latestIntRate: parseExcelValue(excelRow[10]),
-                contactDetails: excelRow[11]?.toString().trim() || "",
-                ncdOs: excelRow[12]?.toString().trim() || "",
-                security: excelRow[13]?.toString().trim() || "",
-                slNo: null,
-                saveStatus: '01',
-                applId
-            }));
-            setInitialValues({ data: newData });
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Lender data imported successfully");
-        }
-    }, [excelData, applId]);
-
-    const parseExcelValue = (value: any): number => {
-        if (value === undefined || value === null || value === '') return 0;
-        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-        return parseFloat(value) || 0;
-    };
-
-    const extractErrorMessages = (errorResponse: Record<string, string>) => {
-        const allMessages = Object.values(errorResponse)
-            .flatMap(msg => msg.split(',').map(m => m.trim()));
-        return allMessages;
-    };
-
-    const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
-        try {
-            const requestBody = Array.isArray(values) ? values : values.data;
-            setIsUploading(true);
-            if (await addLimitDetails(requestBody).unwrap()) {
-                setOpenSnackbar(true);
-                setIsUploading(false);
-                setSeverity("success");
-                setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
-                setActionVal(null);
-                return true;
-            }
-            return false;
-        } catch (err: any) {
-            console.error(err);
-            setIsUploading(false);
-            if (err.status === 400 && err.message === "Invalid") {
-                const errorMessages = extractErrorMessages(err.customCode);
-                setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
-                setSnackSeverity('error');
-                setSnackOpen(true);
-            } else {
-                console.error(err);
-            }
-            return false;
-        }
-    };
-
-    const handleClosePop = () => setOpenSnackbar(false);
-
-    const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
-    const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
-
-    const { data: limitTypeData, isLoading: isLimitTypeLoading } = useGetMaterQuery(`refapi/mstr/getLimitType`);
-    const limitTypeOptions = useMemo(() => limitTypeData ? modify("mstr/getLimitType", limitTypeData) : [], [limitTypeData]);
-
-    const handleDelete = async (applId: string, index: number) => {
-        handleClose();
-        try {
-            if (await deleteLimitDetails({ applId, index }).unwrap()) {
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg("Record Deleted successfully");
-                return true;
-            }
-            return false;
-        } catch (error: any) {
-            console.error("Error saving compliance position:", error);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("failed to save : " + error?.message);
-            return false;
-        }
-    };
-
-    const handleClickOpen = (index: number) => {
-        setIndex(index);
-        setOpen(true);
-    };
-
-    const calculateSanTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.sanctionedLimit) || 0);
-        }, 0);
-    };
-
-    const calculateFy2Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus2) || 0);
-        }, 0);
-    };
-
-    const calculateFy1Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus1) || 0);
-        }, 0);
-    };
-
-    const calculateFyTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtT) || 0);
-        }, 0);
-    };
-
-    const calculateNcdTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.ncdOs) || 0);
-        }, 0);
-    };
-
-    const odListingSchema = Yup.object().shape({
-        data: Yup.array().of(
-            Yup.object().shape({
-                lenderName: Yup.string().required('Required'),
-                lenderType: Yup.string().required('Required'),
-                limitType: Yup.string().required('Required'),
-            })
-        ),
-    });
-
-    const handleClose = () => setOpen(false);
-
-    const handleCloseConfirmation = () => {
-        setActionVal(null);
-        setOpenConfirmation(false);
-    };
-
-    const handleSubmitConfirmation = (values: LenderRow[]) => {
-        setOpenConfirmation(false);
-        handleSubmitApis(values);
-    };
-
-    const handleSubmit = async (values: FormValues) => {
-        const finalValue = values.data.map((listData: any, index: number) => ({
-            ...listData,
-            applId,
-            slNo: index + 1,
-            saveStatus: actionVal
-        }));
-        if (actionVal === '02') {
-            setFormData(finalValue);
-            setOpenConfirmation(true);
-        } else {
-            handleSubmitApis(finalValue);
-        }
-        setActionVal(null);
-    };
-
-    const handleClickSetAction = (action: string) => setActionVal(action);
-
-    const handleSnackbarCloseSnack = () => setSnackOpen(false);
-
-    const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
-        const { values, setFieldValue } = data;
-        const row = values.data[index];
-        // Find the lenderType options for the selected limitType
-        const selectedLimitType = limitTypeOptions.find((option: any) => option.value === row.limitType);
-        const lenderTypeOptionsForRow = selectedLimitType ? selectedLimitType.lenderType.map((type: string) => ({
-            key: type,
-            value: type,
-            label: type
-        })) : [];
-
-        return (
-            <div style={{ ...style, display: 'flex' }} className="div-table-row">
-                {columnWidths.map((width, colIndex) => (
-                    <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                        {colIndex === 0 && (
-                            <IconButton
-                                className="text-danger"
-                                disabled={row.saveStatus === '02'}
-                                onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}
-                            >
-                                <Delete />
-                            </IconButton>
-                        )}
-                        {colIndex === 1 && <span>{index + 1}</span>}
-                        {colIndex === 2 && (
-                            <MultipleLenderDropDown
-                                label=""
-                                name={`data.${index}.lenderName`}
-                                domain=""
-                                disabled={row.saveStatus === '02'}
-                                options={bankOptions}
-                                isLoading={isBankMasterLoading}
-                            />
-                        )}
-                        {colIndex === 3 && (
-                            <Grid item xs={12}>
-                                <EnhancedDropDown
-                                    label=""
-                                    name={`data.${index}.lenderType`}
-                                    disabled={row.saveStatus === '02'}
-                                    customOptions={lenderTypeOptionsForRow}
-                                    domain=""
-                                />
-                            </Grid>
-                        )}
-                        {colIndex === 4 && (
-                            <Grid item xs={12}>
-                                <EnhancedDropDown
-                                    label=""
-                                    name={`data.${index}.limitType`}
-                                    disabled={row.saveStatus === '02'}
-                                    customOptions={limitTypeOptions}
-                                    domain=""
-                                    onChange={(value: any) => {
-                                        // Reset lenderType when limitType changes
-                                        setFieldValue(`data.${index}.lenderType`, '');
-                                    }}
-                                />
-                            </Grid>
-                        )}
-                        {colIndex === 5 && (
-                            <TextBoxField
-                                name={`data.${index}.sanctionedLimit`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 6 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus2`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 7 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus1`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 8 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtT`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 9 && (
-                            <TextBoxField
-                                name={`data.${index}.avgIntRate`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 10 && (
-                            <TextBoxField
-                                name={`data.${index}.latestIntRate`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 11 && (
-                            <TextBoxField
-                                name={`data.${index}.contactDetails`}
-                            />
-                        )}
-                        {colIndex === 12 && (
-                            <TextBoxField
-                                name={`data.${index}.ncdOs`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 13 && (
-                            <TextBoxField
-                                name={`data.${index}.security`}
-                            />
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    };
-
-    const [updateCommentByNId] = useUpdateCommentByNIdMutation();
-    const { opensections } = useAppSelector((state) => state.userStore);
-    const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
-    const [open, setOpen] = useState<any>(false);
-    const [getNotiId, setNotiId] = useState<any>('');
-
-    const toggleDrawer = (newOpen: boolean) => () => {
-        setOpen(true);
-    };
-    const handleButtonClick = (notfId: any) => {
-        setOpen(true);
-        setNotiId(notfId);
-    };
-    useEffect(() => {
-        if (opensections && opensections.length > 0) {
-            setOpenSections(opensections);
-        }
-    }, [opensections]);
-    if (isLoading) return <FormLoader />;
-    if (isUploading) return <FullScreenLoaderNoClose />;
-
-    return (
-        <>
-            {!transactionData ?
-                <Notification /> : <>
-                    <Grid item xs={12} className="opensections-sticky-css">
-                        <Grid
-                            className="pb-0"
-                            item
-                            xs={12}
-                            display="flex"
-                            justifyContent="end">
-                            {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
-                                const matchedItem = getOpenSectionsData.find(
-                                    (item: any) => item?.sectionId === "09" && item?.subSectionId === "03"
-                                );
-                                return matchedItem ? (
-                                    <div className="openSection-item">
-                                        <NotificationSectionWiseButton
-                                            label="Respond"
-                                            handleClick={() => handleButtonClick(matchedItem?.notfId)}
-                                            className="btn-primary-css--"
-                                            notfId={matchedItem?.notfId}
-                                            getOpenSectionsData={getOpenSectionsData}
-                                        />
-                                    </div>
-                                ) : null;
-                            })()}
-                            <DrawerResponseComponent
-                                open={open}
-                                toggleDrawer={toggleDrawer}
-                                notfId={getNotiId}
-                                detailsData={''}
-                                postDataTrigger={updateCommentByNId}
-                                setOpen={setOpen}
-                            />
-                        </Grid>
-                    </Grid>
-                    <div className="wrap-appraisal-area">
-                        <Snackbar
-                            open={snackOpen}
-                            autoHideDuration={6000}
-                            onClose={handleSnackbarCloseSnack}
-                            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                        >
-                            <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
-                                <ul className="list-unstyled">
-                                    {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => (
-                                        <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
-                                    )) : ''}
-                                </ul>
-                            </Alert>
-                        </Snackbar>
-                        <div className="custome-form">
-                            <ConfirmationAlertDialog
-                                id={1}
-                                type={4}
-                                open={openConfirmation}
-                                handleClose={handleCloseConfirmation}
-                                handleDelete={handleSubmitConfirmation}
-                                values={formData}
-                            />
-                            <ConfirmationAlertDialog
-                                id={2}
-                                index={index}
-                                type={2}
-                                open={open}
-                                handleClose={handleClose}
-                                handleDelete={handleDelete}
-                            />
-                            <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
-                                <Formik
-                                    initialValues={initialValues}
-                                    onSubmit={handleSubmit}
-                                    enableReinitialize={true}
-                                    validationSchema={odListingSchema}
-                                    validateOnChange={true}
-                                    validateOnBlur={true}
-                                >
-                                    {({ values, setFieldValue }) => {
-                                        const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
-                                        const fy2Total = useMemo(() => calculateFy2Total(values), [values]);
-                                        const fy1Total = useMemo(() => calculateFy1Total(values), [values]);
-                                        const fyTotal = useMemo(() => calculateFyTotal(values), [values]);
-                                        const ncdTotal = useMemo(() => calculateNcdTotal(values), [values]);
-                                        const itemCount = values.data.length;
-                                        const ITEM_SIZE = 50;
-                                        const MAX_HEIGHT = 500;
-                                        const calculatedHeight = Math.min(itemCount * ITEM_SIZE, MAX_HEIGHT);
-
-                                        return (
-                                            <Form>
-                                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                                                    {values?.data?.[0]?.saveStatus !== "02" && (
-                                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                                                    )}
-                                                    <FieldArray name="data">
-                                                        {({ push }) => (
-                                                            <>
-                                                                {values?.data?.[0]?.saveStatus !== "02" && (
-                                                                    <Button
-                                                                        type="button"
-                                                                        size='small'
-                                                                        className='psn_btn text-capitalize my-2 saveBtn'
-                                                                        variant="contained"
-                                                                        color="primary"
-                                                                        style={{ marginLeft: '15px', display: 'block' }}
-                                                                        onClick={() =>
-                                                                            push({
-                                                                                applId: applId,
-                                                                                slNo: values.data.length,
-                                                                                lenderType: null,
-                                                                                limitType: '',
-                                                                                sanctionedLimit: null,
-                                                                                lenderName: '',
-                                                                                fundingAmtTMinus2: null,
-                                                                                fundingAmtTMinus1: null,
-                                                                                fundingAmtT: null,
-                                                                                avgIntRate: null,
-                                                                                latestIntRate: null,
-                                                                                ncdOs: '',
-                                                                                contactDetails: '',
-                                                                                security: '',
-                                                                                saveStatus: ''
-                                                                            })
-                                                                        }
-                                                                    >
-                                                                        Add <AddCircleIcon />
-                                                                    </Button>
-                                                                )}
-                                                                <div className="table-ui div-table">
-                                                                    <div style={{ display: 'flex' }} className="div-table-row div-table-header">
-                                                                        {columnWidths.map((width, i) => (
-                                                                            <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                                                                                {i === 0 && <b>Action</b>}
-                                                                                {i === 1 && <b style={{ minWidth: '50px', display: 'inline-block' }}>Sr. No.</b>}
-                                                                                {i === 2 && <b>Name of the Bank/ lender</b>}
-                                                                                {i === 3 && <b>Type of FI</b>}
-                                                                                {i === 4 && <b>Limit Type</b>}
-                                                                                {i === 5 && <b>Sanctioned Limit</b>}
-                                                                                {i === 6 && <b>Funding received in FY-{transactionData?.lstAudYrTm2}</b>}
-                                                                                {i === 7 && <b>Funding received in FY-{transactionData?.lstAudYrTm1}</b>}
-                                                                                {i === 8 && <b>Funding received in FY-{transactionData?.lstAudYrT}</b>}
-                                                                                {i === 9 && <b>Avg rate of interest</b>}
-                                                                                {i === 10 && <b>Latest rate of interest</b>}
-                                                                                {i === 11 && <b>Contact details of lenders</b>}
-                                                                                {i === 12 && <b>NCD – o/s</b>}
-                                                                                {i === 13 && <b>Security</b>}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                    {values.data.length > 0 ? (
-                                                                        <div style={{ flex: 1 }}>
-                                                                            <FixedSizeList
-                                                                                className="table-list-container"
-                                                                                height={calculatedHeight}
-                                                                                itemCount={values.data.length}
-                                                                                itemSize={ITEM_SIZE}
-                                                                                width="100%"
-                                                                                itemData={{ values, setFieldValue }}
-                                                                            >
-                                                                                {renderRow}
-                                                                            </FixedSizeList>
-                                                                        </div>
-                                                                    ) : null}
-                                                                    <div style={{ display: 'flex' }} className="div-table-row">
-                                                                        <div style={{ width: `${columnWidths[0]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[1]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[2]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[3]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[4]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell"><b>Total</b></div>
-                                                                        <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[6]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy2Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy1Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fyTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[9]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[10]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[11]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[12]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{ncdTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[13]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </FieldArray>
-                                                </fieldset>
-                                                {values?.data?.[0]?.saveStatus !== "02" && (
-                                                    <>
-                                                        <Button
-                                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
-                                                            type='submit'
-                                                            onClick={() => handleClickSetAction('01')}
-                                                            variant="contained"
-                                                        >
-                                                            Save <CheckCircleOutlineIcon />
-                                                        </Button>
-                                                        <Button
-                                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
-                                                            type='submit'
-                                                            onClick={() => handleClickSetAction('02')}
-                                                            variant="contained"
-                                                        >
-                                                            Submit <SaveAsIcon />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </Form>
-                                        );
-                                    }}
-                                </Formik>
-                            </div>
-                            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
-                        </div>
-                    </div></>}
-        </>
-    );
-};
-
-export default connect((state: any) => ({
-    applId: state.userStore.applId
-}))(LenderLimitOdForm);
-
-
-export const modify = (domain: string, masterData: any) => {
-    if (!masterData || !masterData.data) return [];
-
-    switch (domain) {
-        case 'mstr/getLimitType':
-            return masterData.data.map((item: any) => ({
-                key: item.slNo.toString(),
-                value: item.particulars,
-                label: item.particulars,
-                lenderType: item.lenderType || []
-            }));
-        case 'mstr/getBankMasters':
-            return masterData.data.map((item: any) => ({
-                key: item.slNo.toString(),
-                value: item.particulars,
-                label: item.particulars
-            }));
-        default:
-            return masterData.data.map((item: any) => ({
-                key: item.slNo.toString(),
-                value: item.particulars,
-                label: item.particulars
-            }));
-    }
-};
-
-
-
-
-
-
-
-
-
-import { KeyValuePair } from "./KeyValuePair";
-import { getIn, useFormikContext } from "formik";
-import Typography from "@mui/material/Typography";
-import Select from "@mui/material/Select";
-import { useGetMaterQuery, useLazyGetMasterByIdQuery } from "../../features/master/api";
-import { modify } from "../../utlis/helpers";
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import { useEffect, useState } from "react";
-import SelectLoader from "../../loader/SelectLoader";
-import { Backdrop, CircularProgress } from "@mui/material";
-
-interface EnhancedDropDownProps {
-    label?: string;
-    name: string;
-    domain: string;
-    disabled?: boolean;
-    dependsOn?: any;
-    onChange?: (value: any) => void;
-    onValueChange?: (value: any) => void;
-    customOptions?: Array<{ key: string, value: string, label: string }>;
-    valueKey?: string;
-    labelKey?: string;
-    query?: string;
-    basePath?: string
-}
-
-export const EnhancedDropDown = ({
-    basePath = "refapi",
-    ...props
-}: EnhancedDropDownProps) => {
-    const formik = useFormikContext<KeyValuePair>();
-    const {
-        handleBlur,
-        values,
-        touched,
-        errors,
-        setFieldValue,
-        setFieldTouched
-    } = formik || {};
-
-    const [dependMasterdata, setDependMasterData] = useState<any>();
-    const {
-        data: masterData,
-        isLoading
-    } = useGetMaterQuery(`${basePath}/${props.domain}`, {
-        skip: Boolean(props.dependsOn),
-        refetchOnMountOrArgChange: true
-    });
-
-    const [dependsOnData, { data, isFetching, isLoading: isMstrLoading, error }] = useLazyGetMasterByIdQuery();
-
-    const handleChange = async (event: any) => {
-        const value = event.target.value;
-        await setFieldValue(props.name, value);
-        await setFieldTouched(props.name, true, false);
-
-        if (props.onChange) {
-            props.onChange(value);
-        }
-        if (props.onValueChange) {
-            props.onValueChange(value);
-        }
-    };
-
-    const dependentValue: any = getIn(values, props.dependsOn);
-
-    const dependData = async () => {
-        let options: any = [];
-        if (props.dependsOn) {
-            if (getIn(values, props.dependsOn)) {
-                try {
-                    const dependMasterData = await dependsOnData(
-                        `${basePath}/${props.domain}?${props?.query}=${dependentValue}`
-                    ).unwrap();
-                    options = modify(`${props.domain}`, dependMasterData);
-                    return options;
-                } catch (error) {
-                    return [];
-                }
-            }
-            return options;
-        }
-        return [];
-    };
-
-    const getOptions = () => {
-        if (props.customOptions) {
-            return props.customOptions;
-        }
-        return modify(props.domain, masterData);
-    };
-
-    useEffect(() => {
-        dependData()
-            .then((options: any) => {
-                setDependMasterData(options);
-            })
-            .catch(() => {
-                setDependMasterData([]);
+        console.log("excelData", excelData);
+        if (excelData && excelData?.length > 0) {
+            const tenureRows = excelData.filter((row: any) => {
+                const value = row[1];
+                return value !== undefined &&
+                       value !== null &&
+                       value.toString().trim() !== '' &&
+                       value.toString().trim().toLowerCase() !== 'sub total'
             });
-    }, [props?.dependsOn, dependentValue]);
+            const newData: any = [];
+            console.log("tenureRows", tenureRows);
 
-    if (isLoading) return <SelectLoader />;
-
-    return (
-        <>
-            <FormControl fullWidth>
-                <InputLabel
-                    className="select-label"
-                    id={`label-id-${props.name}`}
-                    error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
-                >
-                    {props.label}
-                </InputLabel>
-                <Select
-                    labelId={`label-id-${props.name}`}
-                    id={`id-${props.name}`}
-                    value={getIn(values, props.name) || ''}
-                    disabled={props.disabled}
-                    name={props.name}
-                    label={props.label}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
-                    size="small"
-                >
-                    {(!props?.dependsOn ? getOptions() : dependMasterdata)?.map((item: any) => (
-                        <MenuItem
-                            value={item.value}
-                            key={item.key}
-                        >
-                            {item.label}
-                        </MenuItem>
-                    ))}
-                </Select>
-            </FormControl>
-            <div className="mt-0 position-relative">
-                <Typography
-                    color="error"
-                    variant="subtitle2"
-                    gutterBottom
-                    component="span"
-                    className="mybooking_error"
-                >
-                    {getIn(touched, props.name) && getIn(errors, props.name) &&
-                        JSON.stringify(getIn(errors, props.name)).replaceAll('"', '')}
-                </Typography>
-            </div>
-        </>
-    );
-};
+            tenureRows.forEach((excelRow: any) => {
+                const tenureSlab = excelRow[1]?.toString().trim();
+             
+                console.log("tenureSlab",tenureSlab);
+                if (tenureSlab!== "Sub Total") {
 
 
+                    const qtrDpd0 = parseExcelValue(excelRow[8]);
+                    const qtrDpd1To30 = parseExcelValue(excelRow[9]);
+                    const qtrDpd31To60 = parseExcelValue(excelRow[10]);
+                    const qtrDpd61To90 = parseExcelValue(excelRow[11]);
+                    const qtrDpdAbove90 = parseExcelValue(excelRow[12]);
+                    const qtrPos = (qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90).toFixed(2);
 
+                    let tpos = '0';
+                    if (transactionData?.lstAudQ !== 'Not Applicable') {
+                        const tdpd0 = parseExcelValue(excelRow[15]);
+                        const tdpd1To30 = parseExcelValue(excelRow[16]);
+                        const tdpd31To60 = parseExcelValue(excelRow[17]);
+                        const tdpd61To90 = parseExcelValue(excelRow[18]);
+                        const tdpdAbove90 = parseExcelValue(excelRow[19]);
+                        tpos = (tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90).toFixed(2);
+                    }
 
+                    const rowData = {
+                        minTenureSlab,
+                        maxTenureSlab,
+                        tminus2Loans: parseExcelValue(excelRow[2]),
+                        tminus2Pos: parseExcelValue(excelRow[3]),
+                        tminus1Loans: parseExcelValue(excelRow[4]),
+                        tminus1Pos: parseExcelValue(excelRow[5]),
+                        qtrLoans: parseExcelValue(excelRow[6]),
+                        qtrPos,
+                        qtrDpd0,
+                        qtrDpd1To30,
+                        qtrDpd31To60,
+                        qtrDpd61To90,
+                        qtrDpdAbove90,
+                        tloans: parseExcelValue(excelRow[13]),
+                        tpos,
+                        tdpd0: parseExcelValue(excelRow[15]),
+                        tdpd1To30: parseExcelValue(excelRow[16]),
+                        tdpd31To60: parseExcelValue(excelRow[17]),
+                        tdpd61To90: parseExcelValue(excelRow[18]),
+                        tdpdAbove90: parseExcelValue(excelRow[19]),
+                        slNo: null,
+                        saveStatus: '01',
+                    };
 
+                    console.log("rowData", rowData, tenureSlab);
 
-
-
-
-import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Grid, IconButton, Snackbar } from "@mui/material";
-import { Delete } from '@mui/icons-material';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { FixedSizeList } from 'react-window';
-import { connect } from 'react-redux';
-import { useDeleteLenderLimitByIdMutation, useGetLenderLimitFormDataQuery, useSaveLenderLimitFormDataMutation } from "../../../features/application-form/capitalResourceForm";
-import AutoSave from "../../../components/framework/AutoSave";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import FormLoader from "../../../loader/FormLoader";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-import { useAppSelector } from "../../../app/hooks";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
-import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-import * as Yup from 'yup';
-import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
-import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
-import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
-import DrawerResponseComponent from "../../../components/DrawerComponent/DrawerResponseComponent";
-import Notification from "../../../components/shared/Notification";
-interface LenderRow {
-    lenderName: string;
-    lenderType: string | null;
-    limitType: string;
-    sanctionedLimit: number | null;
-    fundingAmtTMinus2: number | null;
-    fundingAmtTMinus1: number | null;
-    fundingAmtT: number | null;
-    avgIntRate: number | null;
-    latestIntRate: number | null;
-    contactDetails: string;
-    ncdOs: string;
-    security: string;
-    slNo: number | null;
-    saveStatus: string;
-    applId: string;
-}
-
-interface FormValues {
-    data: LenderRow[];
-}
-
-interface Props {
-    applId: string;
-    excelData: any[];
-    openSectionsData?: any[];
-}
-
-const LenderLimitOdForm = ({ applId, excelData, openSectionsData }: Props) => {
-    const [addLimitDetails] = useSaveLenderLimitFormDataMutation();
-    const { data: LimitData, isLoading } = useGetLenderLimitFormDataQuery(applId);
-    const [deleteLimitDetails] = useDeleteLenderLimitByIdMutation();
-    const [index, setIndex] = useState(0);
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<LenderRow[] | null>(null);
-    const [actionVal, setActionVal] = useState<string | null>(null);
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<string>("");
-    const [severity, setSeverity] = useState<"success" | "error">("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [snackOpen, setSnackOpen] = useState(false);
-    const [snackMessages, setSnackMessages] = useState<string[]>([]);
-    const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
-    const { transactionData } = useAppSelector((state) => state.userStore);
-    const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
-
-    const columnWidths = [60, 60, 250, 150, 170, 170, 180, 180, 180, 170, 170, 170, 120, 350];
-
-    useEffect(() => {
-        if (LimitData) {
-            const dataWithApplId: LenderRow[] = LimitData.map((item: any) => ({
-                ...item,
-                applId
-            }));
-            setInitialValues({ data: dataWithApplId });
-        }
-    }, [LimitData, applId]);
-
-    useEffect(() => {
-        if (excelData && excelData.length > 0) {
-            const lenderRows = excelData.filter((row: any) => row[2] && row[2] !== 'Total');
-            const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
-                lenderName: excelRow[2]?.toString().trim() || "",
-                lenderType: excelRow[3]?.toString().trim() || null,
-                limitType: excelRow[4]?.toString().trim() || "",
-                sanctionedLimit: parseExcelValue(excelRow[5]),
-                fundingAmtTMinus2: parseExcelValue(excelRow[6]),
-                fundingAmtTMinus1: parseExcelValue(excelRow[7]),
-                fundingAmtT: parseExcelValue(excelRow[8]),
-                avgIntRate: parseExcelValue(excelRow[9]),
-                latestIntRate: parseExcelValue(excelRow[10]),
-                contactDetails: excelRow[11]?.toString().trim() || "",
-                ncdOs: excelRow[12]?.toString().trim() || "",
-                security: excelRow[13]?.toString().trim() || "",
-                slNo: null,
-                saveStatus: '01',
-                applId
-            }));
-            setInitialValues({ data: newData });
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Lender data imported successfully");
-        }
-    }, [excelData, applId]);
-
-    const parseExcelValue = (value: any): number => {
-        if (value === undefined || value === null || value === '') return 0;
-        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-        return parseFloat(value) || 0;
-    };
-
-    const extractErrorMessages = (errorResponse: Record<string, string>) => {
-        const allMessages = Object.values(errorResponse)
-            .flatMap(msg => msg.split(',').map(m => m.trim()));
-        return allMessages;
-    };
-
-    const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
-        try {
-            const requestBody = Array.isArray(values) ? values : values.data;
-            setIsUploading(true);
-            if (await addLimitDetails(requestBody).unwrap()) {
-                setOpenSnackbar(true);
-                setIsUploading(false);
-                setSeverity("success");
-                setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
-                setActionVal(null);
-                return true;
-            }
-            return false;
-        } catch (err: any) {
-            console.error(err);
-            setIsUploading(false);
-            if (err.status === 400 && err.message === "Invalid") {
-                const errorMessages = extractErrorMessages(err.customCode);
-                setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
-                setSnackSeverity('error');
-                setSnackOpen(true);
-            } else {
-                console.error(err);
-            }
-            return false;
-        }
-    };
-
-    const handleClosePop = () => setOpenSnackbar(false);
-
-    const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
-    const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
-
-    const { data: lenderTypeData, isLoading: isLenderTypeLoading } = useGetMaterQuery(`refapi/mstr/getLenderType`);
-    const lenderTypeOptions = useMemo(() => lenderTypeData ? modify("mstr/getLenderType", lenderTypeData) : [], [lenderTypeData]);
-
-    const { data: limitTypeData, isLoading: isLimitTypeLoading } = useGetMaterQuery(`refapi/mstr/getLimitType`);
-    const limitTypeOptions = useMemo(() => limitTypeData ? modify("mstr/getLimitType", limitTypeData) : [], [limitTypeData]);
-
-    const handleDelete = async (applId: string, index: number) => {
-        handleClose();
-        try {
-            if (await deleteLimitDetails({ applId, index }).unwrap()) {
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg("Record Deleted successfully");
-                return true;
-            }
-            return false;
-        } catch (error: any) {
-            console.error("Error saving compliance position:", error);
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("failed to save : " + error?.message);
-            return false;
-        }
-    };
-
-    const handleClickOpen = (index: number) => {
-        setIndex(index);
-        setOpen(true);
-    };
-
-    const calculateSanTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.sanctionedLimit) || 0);
-        }, 0);
-    };
-
-    const calculateFy2Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus2) || 0);
-        }, 0);
-    };
-
-    const calculateFy1Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus1) || 0);
-        }, 0);
-    };
-
-    const calculateFyTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtT) || 0);
-        }, 0);
-    };
-
-    const calculateNcdTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.ncdOs) || 0);
-        }, 0);
-    };
-
-    const odListingSchema = Yup.object().shape({
-        data: Yup.array().of(
-            Yup.object().shape({
-                lenderName: Yup.string()
-                    .required('Required')
-                    .test('lenderName-ncd', 'Must be Others when limitType is NCD', function (value) {
-                        const limitType: any = this.parent.limitType;
-                        if (limitType === 'NCD') {
-                            return value === 'Others';
-                        }
-                        return true;
-                    }),
-                lenderType: Yup.string()
-                    .required('Required')
-                    .test('lenderType-ncd', 'Must be Others-NCD when limitType is NCD', function (value) {
-                        const limitType: any = this.parent.limitType;
-                        if (limitType === 'NCD') {
-                            return value === 'Others-NCD';
-                        }
-                        return true;
-                    }),
-                limitType: Yup.string().required('Required'),
-            })
-        ),
-    });
-
-    const handleClose = () => setOpen(false);
-
-    const handleCloseConfirmation = () => {
-        setActionVal(null);
-        setOpenConfirmation(false);
-    };
-
-    const handleSubmitConfirmation = (values: LenderRow[]) => {
-        setOpenConfirmation(false);
-        handleSubmitApis(values);
-    };
-
-    const handleSubmit = async (values: FormValues) => {
-        const finalValue = values.data.map((listData: any, index: number) => ({
-            ...listData,
-            applId,
-            slNo: index + 1,
-            saveStatus: actionVal
-        }));
-        if (actionVal === '02') {
-            setFormData(finalValue);
-            setOpenConfirmation(true);
-        } else {
-            handleSubmitApis(finalValue);
-        }
-        setActionVal(null);
-    };
-
-    const handleClickSetAction = (action: string) => setActionVal(action);
-
-    const handleSnackbarCloseSnack = () => setSnackOpen(false);
-
-    const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
-        const { values, setFieldValue } = data;
-        const row = values.data[index];
-        return (
-            <div style={{ ...style, display: 'flex' }} className="div-table-row">
-                {columnWidths.map((width, colIndex) => (
-                    <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                        {colIndex === 0 && (
-                            <IconButton
-                                className="text-danger"
-                                disabled={row.saveStatus === '02'}
-                                onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}
-                            >
-                                <Delete />
-                            </IconButton>
-                        )}
-                        {colIndex === 1 && <span>{index + 1}</span>}
-                        {colIndex === 2 && (
-                            <MultipleLenderDropDown
-                                label=""
-                                name={`data.${index}.lenderName`}
-                                domain=""
-                                disabled={row.saveStatus === '02'}
-                                options={bankOptions}
-                                isLoading={isBankMasterLoading}
-                            />
-                        )}
-                        {colIndex === 3 && (
-                            <Grid item xs={12}>
-                                <EnhancedDropDown
-                                    label=""
-                                    name={`data.${index}.lenderType`}
-                                    disabled={row.saveStatus === '02'}
-                                    customOptions={lenderTypeOptions}
-                                    domain=""
-                                />
-                            </Grid>
-                        )}
-                        {colIndex === 4 && (
-                            <Grid item xs={12}>
-                                <EnhancedDropDown
-                                    label=""
-                                    name={`data.${index}.limitType`}
-                                    disabled={row.saveStatus === '02'}
-                                    customOptions={limitTypeOptions}
-                                    domain=""
-                                />
-                            </Grid>
-                        )}
-                        {colIndex === 5 && (
-                            <TextBoxField
-                                name={`data.${index}.sanctionedLimit`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 6 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus2`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 7 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus1`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 8 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtT`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 9 && (
-                            <TextBoxField
-                                name={`data.${index}.avgIntRate`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 10 && (
-                            <TextBoxField
-                                name={`data.${index}.latestIntRate`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 11 && (
-                            <TextBoxField
-                                name={`data.${index}.contactDetails`}
-                            />
-                        )}
-                        {colIndex === 12 && (
-                            <TextBoxField
-                                name={`data.${index}.ncdOs`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 13 && (
-                            <TextBoxField
-                                name={`data.${index}.security`}
-                            />
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    };
-
-    const [updateCommentByNId] = useUpdateCommentByNIdMutation();
-    const { opensections } = useAppSelector((state) => state.userStore);
-    const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
-    const [open, setOpen] = useState<any>(false);
-    const [getNotiId, setNotiId] = useState<any>('');
-
-    const toggleDrawer = (newOpen: boolean) => () => {
-        setOpen(true);
-    };
-    const handleButtonClick = (notfId: any) => {
-        setOpen(true);
-        setNotiId(notfId);
-    };
-    useEffect(() => {
-        if (opensections && opensections.length > 0) {
-            setOpenSections(opensections);
-        }
-    }, [opensections]);
-    if (isLoading) return <FormLoader />;
-    if (isUploading) return <FullScreenLoaderNoClose />;
-
-    return (
-        <>
-            {!transactionData ?
-                <Notification /> : <>
-
-                    <Grid item xs={12} className="opensections-sticky-css">
-                        <Grid
-                            className="pb-0"
-                            item
-                            xs={12}
-                            display="flex"
-                            justifyContent="end">
-                            {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
-                                const matchedItem = getOpenSectionsData.find(
-                                    (item: any) => item?.sectionId === "09" && item?.subSectionId === "03"
-                                );
-                                return matchedItem ? (
-                                    <div className="openSection-item">
-                                        <NotificationSectionWiseButton
-                                            label="Respond"
-                                            handleClick={() => handleButtonClick(matchedItem?.notfId)}
-                                            className="btn-primary-css--"
-                                            notfId={matchedItem?.notfId}
-                                            getOpenSectionsData={getOpenSectionsData}
-
-                                        />
-                                    </div>
-                                ) : null;
-                            })()}
-                            <DrawerResponseComponent
-                                open={open}
-                                toggleDrawer={toggleDrawer}
-                                notfId={getNotiId}
-                                detailsData={''}
-                                postDataTrigger={updateCommentByNId}
-                                setOpen={setOpen}
-                            />
-                        </Grid>
-                    </Grid>
-                    <div className="wrap-appraisal-area">
-                        <Snackbar
-                            open={snackOpen}
-                            autoHideDuration={6000}
-                            onClose={handleSnackbarCloseSnack}
-                            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                        >
-                            <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
-                                <ul className="list-unstyled">
-                                    {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => (
-                                        <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
-                                    )) : ''}
-                                </ul>
-                            </Alert>
-                        </Snackbar>
-                        <div className="custome-form">
-                            <ConfirmationAlertDialog
-                                id={1}
-                                type={4}
-                                open={openConfirmation}
-                                handleClose={handleCloseConfirmation}
-                                handleDelete={handleSubmitConfirmation}
-                                values={formData}
-                            />
-                            <ConfirmationAlertDialog
-                                id={2}
-                                index={index}
-                                type={2}
-                                open={open}
-                                handleClose={handleClose}
-                                handleDelete={handleDelete}
-                            />
-                            <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
-                                <Formik
-                                    initialValues={initialValues}
-                                    onSubmit={handleSubmit}
-                                    enableReinitialize={true}
-                                    validationSchema={odListingSchema}
-                                    validateOnChange={true}
-                                    validateOnBlur={true}
-                                >
-                                    {({ values, setFieldValue }) => {
-                                        const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
-                                        const fy2Total = useMemo(() => calculateFy2Total(values), [values]);
-                                        const fy1Total = useMemo(() => calculateFy1Total(values), [values]);
-                                        const fyTotal = useMemo(() => calculateFyTotal(values), [values]);
-                                        const ncdTotal = useMemo(() => calculateNcdTotal(values), [values]);
-                                        const itemCount = values.data.length;
-                                        const ITEM_SIZE = 50;
-                                        const MAX_HEIGHT = 500;
-                                        const calculatedHeight = Math.min(itemCount * ITEM_SIZE, MAX_HEIGHT);
-
-                                        return (
-                                            <Form>
-                                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                                                    {values?.data?.[0]?.saveStatus !== "02" && (
-                                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                                                    )}
-                                                    <FieldArray name="data">
-                                                        {({ push }) => (
-                                                            <>
-                                                                {values?.data?.[0]?.saveStatus !== "02" && (
-                                                                    <Button
-                                                                        type="button"
-                                                                        size='small'
-                                                                        className='psn_btn text-capitalize my-2 saveBtn'
-                                                                        variant="contained"
-                                                                        color="primary"
-                                                                        style={{ marginLeft: '15px', display: 'block' }}
-                                                                        onClick={() =>
-                                                                            push({
-                                                                                applId: applId,
-                                                                                slNo: values.data.length,
-                                                                                lenderType: null,
-                                                                                limitType: '',
-                                                                                sanctionedLimit: null,
-                                                                                lenderName: '',
-                                                                                fundingAmtTMinus2: null,
-                                                                                fundingAmtTMinus1: null,
-                                                                                fundingAmtT: null,
-                                                                                avgIntRate: null,
-                                                                                latestIntRate: null,
-                                                                                ncdOs: '',
-                                                                                contactDetails: '',
-                                                                                security: '',
-                                                                                saveStatus: ''
-                                                                            })
-                                                                        }
-                                                                    >
-                                                                        Add <AddCircleIcon />
-                                                                    </Button>
-                                                                )}
-                                                                <div className="table-ui div-table">
-                                                                    <div style={{ display: 'flex' }} className="div-table-row div-table-header">
-                                                                        {columnWidths.map((width, i) => (
-                                                                            <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                                                                                {i === 0 && <b>Action</b>}
-                                                                                {i === 1 && <b style={{ minWidth: '50px', display: 'inline-block' }}>Sr. No.</b>}
-                                                                                {i === 2 && <b>Name of the Bank/ lender</b>}
-                                                                                {i === 3 && <b>Type of FI</b>}
-                                                                                {i === 4 && <b>Limit Type</b>}
-                                                                                {i === 5 && <b>Sanctioned Limit</b>}
-                                                                                {i === 6 && <b>Funding received in FY-{transactionData?.lstAudYrTm2}</b>}
-                                                                                {i === 7 && <b>Funding received in FY-{transactionData?.lstAudYrTm1}</b>}
-                                                                                {i === 8 && <b>Funding received in FY-{transactionData?.lstAudYrT}</b>}
-                                                                                {i === 9 && <b>Avg rate of interest</b>}
-                                                                                {i === 10 && <b>Latest rate of interest</b>}
-                                                                                {i === 11 && <b>Contact details of lenders</b>}
-                                                                                {i === 12 && <b>NCD – o/s</b>}
-                                                                                {i === 13 && <b>Security</b>}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                    {values.data.length > 0 ? (
-                                                                        <div style={{ flex: 1 }}>
-                                                                            <FixedSizeList
-                                                                                className="table-list-container"
-                                                                                height={calculatedHeight}
-                                                                                itemCount={values.data.length}
-                                                                                itemSize={ITEM_SIZE}
-                                                                                width="100%"
-                                                                                itemData={{ values, setFieldValue }}
-                                                                            >
-                                                                                {renderRow}
-                                                                            </FixedSizeList>
-                                                                        </div>
-                                                                    ) : null}
-                                                                    <div style={{ display: 'flex' }} className="div-table-row">
-                                                                        <div style={{ width: `${columnWidths[0]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[1]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[2]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[3]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[4]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell"><b>Total</b></div>
-                                                                        <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[6]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy2Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy1Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fyTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[9]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[10]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[11]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[12]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{ncdTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[13]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </FieldArray>
-                                                </fieldset>
-                                                {values?.data?.[0]?.saveStatus !== "02" && (
-                                                    <>
-                                                        <Button
-                                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
-                                                            type='submit'
-                                                            onClick={() => handleClickSetAction('01')}
-                                                            variant="contained"
-                                                        >
-                                                            Save <CheckCircleOutlineIcon />
-                                                        </Button>
-                                                        <Button
-                                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
-                                                            type='submit'
-                                                            onClick={() => handleClickSetAction('02')}
-                                                            variant="contained"
-                                                        >
-                                                            Submit <SaveAsIcon />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </Form>
-                                        );
-                                    }}
-                                </Formik>
-                            </div>
-                            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
-                        </div>
-                    </div></>}
-        </>
-    );
-};
-
-export default connect((state: any) => ({
-    applId: state.userStore.applId
-}))(LenderLimitOdForm);
-
-import { KeyValuePair } from "./KeyValuePair";
-import { getIn, useFormikContext } from "formik";
-import Typography from "@mui/material/Typography";
-import Select from "@mui/material/Select";
-import { useGetMaterQuery, useLazyGetMasterByIdQuery } from "../../features/master/api";
-import { modify } from "../../utlis/helpers";
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import { useEffect, useState } from "react";
-import SelectLoader from "../../loader/SelectLoader";
-import { Backdrop, CircularProgress } from "@mui/material";
-
-interface EnhancedDropDownProps {
-    label?: string;
-    name: string;
-    domain: string;
-    disabled?: boolean;
-    dependsOn?: any;
-    onChange?: (value: any) => void;
-    onValueChange?: (value: any) => void;
-    customOptions?: Array<{ key: string, value: string, label: string }>;
-    valueKey?: string;
-    labelKey?: string;
-    query?: string;
-    basePath?: string
-}
-
-export const EnhancedDropDown =
-    ({
-        basePath = "refapi",
-        ...props
-    }: EnhancedDropDownProps) => {
-        const formik = useFormikContext<KeyValuePair>();
-        const {
-            handleBlur,
-            values,
-            touched,
-            errors,
-            setFieldValue,
-            setFieldTouched
-        } = formik || {};
-
-        const [dependMasterdata, setDependMasterData] = useState<any>();
-        const {
-            data: masterData,
-            isLoading
-        } = useGetMaterQuery(`${basePath}/${props.domain}`, {
-            skip: Boolean(props.dependsOn),
-            refetchOnMountOrArgChange: true
-        });
-
-        // const [dependsOnData] = useLazyGetMasterByIdQuery();
-
-        const [dependsOnData, { data, isFetching, isLoading: isMstrLoading, error }] = useLazyGetMasterByIdQuery();
-
-
-        const handleChange = async (event: any) => {
-            const value = event.target.value;
-            await setFieldValue(props.name, value);
-            await setFieldTouched(props.name, true, false);
-
-            if (props.onChange) {
-                props.onChange(value);
-            }
-            if (props.onValueChange) {
-                props.onValueChange(value);
-            }
-        };
-
-        const dependentValue: any = getIn(values, props.dependsOn);
-
-        const dependData = async () => {
-            let options: any = [];
-            if (props.dependsOn) {
-                if (getIn(values, props.dependsOn)) {
-                    try {
-                        const dependMasterData = await dependsOnData(
-                            `${basePath}/${props.domain}?${props?.query}=${dependentValue}`
-                        ).unwrap();
-                        options = modify(`${props.domain}`, dependMasterData);
-                        return options;
-                    } catch (error) {
-                        return [];
+                    const existingIndex = newData.findIndex((row: any) => row.minTenureSlab === minTenureSlab && row.maxTenureSlab === maxTenureSlab);
+                    if (existingIndex !== -1) {
+                        newData[existingIndex] = { ...newData[existingIndex], ...rowData };
+                    } else {
+                        newData.push(rowData);
                     }
                 }
-                return options;
+            });
+
+            console.log("newData", newData);
+            setFieldValueRef.current("data", newData);
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Tenure-wise data imported successfully");
+        }
+    }, [excelData, transactionData]);
+
+    const tenureWiseListingSchema = Yup.object().shape({
+        data: Yup.array().of(
+            Yup.object().shape({
+                minTenureSlab: Yup.number().required('Required'),
+                maxTenureSlab: Yup.number().required('Required').moreThan(Yup.ref('minTenureSlab'), 'Max must be greater than Min'),
+            })
+        ),
+    });
+
+    const handleSubmitApis = async (finalValue: any) => {
+        try {
+            setIsUploading(true);
+            const response = await savepFCutsTenurWiseFormDetails(finalValue).unwrap();
+            if (response) {
+                setOpenSnackbar(true);
+                setSeverity("success");
+                setIsUploading(false);
+
+                const message = finalValue[0]?.saveStatus === '02'
+                    ? "Section submitted successfully"
+                    : "Record saved successfully";
+
+                setSnackMsg(message);
+                return true;
             }
-            return [];
-        };
 
-        const getOptions = () => {
-            if (props.customOptions) {
-                return props.customOptions;
-            }
-            return modify(props.domain, masterData);
-        };
-
-        useEffect(() => {
-            dependData()
-                .then((options: any) => {
-                    setDependMasterData(options);
-                })
-                .catch(() => {
-                    setDependMasterData([]);
-                });
-        }, [props?.dependsOn, dependentValue]);
-
-        // if (isLoading) return <SelectLoader />;
-
-        return (
-            <>
-                {/* <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={isLoading || isFetching || isMstrLoading}>
-                    <div style={{ textAlign: 'center' }}>
-                        <CircularProgress color="inherit" />
-                        <Typography variant="h6" sx={{ mt: 2 }}>
-                            Loading, please wait...
-                        </Typography>
-                    </div>
-                </Backdrop> */}
-                <FormControl fullWidth>
-                    <InputLabel
-                        className="select-label"
-                        id={`label-id-${props.name}`}
-                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
-                    >
-                        {props.label}
-                    </InputLabel>
-                    <Select
-                        labelId={`label-id-${props.name}`}
-                        id={`id-${props.name}`}
-                        value={getIn(values, props.name) || ''}
-                        disabled={props.disabled}
-                        name={props.name}
-                        label={props.label}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
-                        size="small"
-                    >
-                        {(!props?.dependsOn ? getOptions() : dependMasterdata)?.map((item: any) => (
-                            <MenuItem
-                                value={item.value}
-                                key={item.key}
-                            >
-                                {item.label}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                <div className="mt-0 position-relative">
-                    <Typography
-                        color="error"
-                        variant="subtitle2"
-                        gutterBottom
-                        component="span"
-                        className="mybooking_error"
-                    >
-                        {getIn(touched, props.name) && getIn(errors, props.name) &&
-                            JSON.stringify(getIn(errors, props.name)).replaceAll('"', '')}
-                    </Typography>
-                </div>
-            </>
-        );
+            return false;
+        } catch (error: any) {
+            console.error("Submission error:", error);
+            setOpenSnackbar(true);
+            setIsUploading(false);
+            setSeverity("error");
+            setSnackMsg("Failed to save: " + error?.message);
+            return false;
+        }
     };
 
-mstr/getLimitType
-{
-  "data": [
-    {
-      "particulars": "CC",
-      "slNo": 1,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC"
-      ]
-    },
-    {
-      "particulars": "WC",
-      "slNo": 2,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC"
-      ]
-    },
-    {
-      "particulars": "OD",
-      "slNo": 3,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC"
-      ]
-    },
-    {
-      "particulars": "NCD",
-      "slNo": 4,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC",
-        "Others-NCD"
-      ]
-    },
-    {
-      "particulars": "Commercial Paper",
-      "slNo": 5,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC",
-        "Others-Commercial Paper "
-      ]
-    },
-    {
-      "particulars": "Sub-debt (including perpetual debt)",
-      "slNo": 6,
-      "lenderType": [
-        "Bank",
-        "FI",
-        "NBFC",
-        "Others-Sub-debt (including perpetual debt) "
-      ]
-    }
-  ],
-  "message": "Success",
-  "status": 200
-}
+    const handleCloseDeleteConfirmation = () => {
+        setOpenDeleteConfirmation(false);
+        setDeleteIndex(null);
+        setDeleteSlNo(null);
+    };
 
-now limitType api is changed now lenderTypeOptions will come from limitTypeOptions on select lenderType will bind in that lenderType and remove that nc validation from lender name and lender type 
+    const handleCloseSubmitConfirmation = () => {
+        setActionVal(null);
+        setOpenSubmitConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = (values: any) => {
+        let finalValue = values?.map((listData: any, index: number) => {
+            return {
+                ...listData, applId, slNo: index + 1, saveStatus: '02'
+            };
+        });
+        setOpenSubmitConfirmation(false);
+        handleSubmitApis(finalValue);
+    };
+
+    const handleSubmit = async (values: any) => {
+
+        if (actionVal === '02') {
+            let finalValue = values?.data?.map((listData: any, index: number) => {
+                return {
+                    ...listData, applId, slNo: index + 1, saveStatus: '02'
+                };
+            });
+            setFormData(finalValue);
+            setOpenSubmitConfirmation(true);
+        } else {
+            let finalValue = values?.data?.map((listData: any, index: number) => {
+                return {
+                    ...listData, applId, slNo: index + 1, saveStatus: '01'
+                };
+            });
+            handleSubmitApis(finalValue);
+        }
+        //setActionVal(null);
+    };
+
+    const handleClickSetAction = (action: any) => {
+        setActionVal(action);
+    };
+
+    const calculation = (setFieldValue: any, values: any, currentIndex: number,
+        currentVal: number, currentRowId: string) => {
+        if (currentRowId === 'qtrDpd0' || currentRowId === 'qtrDpd1To30' || currentRowId === 'qtrDpd31To60'
+            || currentRowId === 'qtrDpd61To90' || currentRowId === 'qtrDpdAbove90') {
+            calculationCurrentFy(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        } else if (currentRowId === 'tdpd0' || currentRowId === 'tdpd1To30' || currentRowId === 'tdpd31To60'
+            || currentRowId === 'tdpd61To90' || currentRowId === 'tdpdAbove90') {
+            calculationCurrentFyQtr(setFieldValue, values, currentIndex, currentVal, currentRowId);
+        }
+    };
+
+    const calculationCurrentFy = (setFieldValue: any, values: any, currentIndex: number,
+        currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const qtrDpd0 = parseFloat(currentRowId === 'qtrDpd0' ? currentVal : currentRow.qtrDpd0) || 0;
+        const qtrDpd1To30 = parseFloat(currentRowId === 'qtrDpd1To30' ? currentVal : currentRow.qtrDpd1To30) || 0;
+        const qtrDpd31To60 = parseFloat(currentRowId === 'qtrDpd31To60' ? currentVal : currentRow.qtrDpd31To60) || 0;
+        const qtrDpd61To90 = parseFloat(currentRowId === 'qtrDpd61To90' ? currentVal : currentRow.qtrDpd61To90) || 0;
+        const qtrDpdAbove90 = parseFloat(currentRowId === 'qtrDpdAbove90' ? currentVal : currentRow.qtrDpdAbove90) || 0;
+
+        const total = qtrDpd0 + qtrDpd1To30 + qtrDpd31To60 + qtrDpd61To90 + qtrDpdAbove90;
+        setFieldValue(`data.${currentIndex}.qtrPos`, total.toFixed(2));
+    };
+
+    const calculationCurrentFyQtr = (setFieldValue: any, values: any, currentIndex: number,
+        currentVal: number, currentRowId: string) => {
+        const currentRow = values.data[currentIndex];
+        const tdpd0 = parseFloat(currentRowId === 'tdpd0' ? currentVal : currentRow.tdpd0) || 0;
+        const tdpd1To30 = parseFloat(currentRowId === 'tdpd1To30' ? currentVal : currentRow.tdpd1To30) || 0;
+        const tdpd31To60 = parseFloat(currentRowId === 'tdpd31To60' ? currentVal : currentRow.tdpd31To60) || 0;
+        const tdpd61To90 = parseFloat(currentRowId === 'tdpd61To90' ? currentVal : currentRow.tdpd61To90) || 0;
+        const tdpdAbove90 = parseFloat(currentRowId === 'tdpdAbove90' ? currentVal : currentRow.tdpdAbove90) || 0;
+
+        const total = tdpd0 + tdpd1To30 + tdpd31To60 + tdpd61To90 + tdpdAbove90;
+        setFieldValue(`data.${currentIndex}.tpos`, total.toFixed(2));
+    };
+
+    const getRowValue = (values: any, index: number, currentRowId: string) => {
+        if (currentRowId === 'tdpd1To30') return values.data[index].tdpd1To30;
+        else if (currentRowId === 'tdpd31To60') return values.data[index].tdpd31To60;
+        else if (currentRowId === 'tdpd61To90') return values.data[index].tdpd61To90;
+        else if (currentRowId === 'tdpdAbove90') return values.data[index].tdpdAbove90;
+        else if (currentRowId === "tdpd0") return values.data[index].tdpd0;
+        else if (currentRowId === "tminus2Loans") return values.data[index].tminus2Loans;
+        else if (currentRowId === "tminus2Pos") return values.data[index].tminus2Pos;
+        else if (currentRowId === "tminus1Loans") return values.data[index].tminus1Loans;
+        else if (currentRowId === "tminus1Pos") return values.data[index].tminus1Pos;
+        else if (currentRowId === "qtrLoans") return values.data[index].qtrLoans;
+        else if (currentRowId === "qtrPos") return values.data[index].qtrPos;
+        else if (currentRowId === "qtrDpd0") return values.data[index].qtrDpd0;
+        else if (currentRowId === "qtrDpd1To30") return values.data[index].qtrDpd1To30;
+        else if (currentRowId === "qtrDpd31To60") return values.data[index].qtrDpd31To60;
+        else if (currentRowId === "qtrDpd61To90") return values.data[index].qtrDpd61To90;
+        else if (currentRowId === "qtrDpdAbove90") return values.data[index].qtrDpdAbove90;
+        else if (currentRowId === "tloans") return values.data[index].tloans;
+        else if (currentRowId === "tpos") return values.data[index].tpos;
+    };
+
+    const handleClickOpenDeleteConfirmation = (item: any, index: number) => {
+        console.log("Opening delete confirmation for:", item, "at index:", index);
+        setDeleteIndex(index);
+        setDeleteSlNo(item?.slNo || null);
+        setOpenDeleteConfirmation(true);
+    };
+
+    const handleConfirmDelete = async (applId: any, index: number) => {
+        handleCloseDeleteConfirmation();
+        try {
+            if (await deletepfCuts({ applId, index }).unwrap()) {
+                setOpenSnackbar(true);
+                setSeverity("success");
+                setSnackMsg("Record Deleted successfully");
+            }
+        } catch (error) {
+            console.error("Error deleting tenure-wise record:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Failed to delete");
+        }
+    };
+
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '') return 0;
+        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
+        return parseFloat(value.toFixed(2)) || 0;
+    };
+
+    const calculatetminus2Loans = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tminus2Loans) || 0);
+        }, 0);
+    };
+
+    const calculatettminus2Pos = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tminus2Pos) || 0);
+        }, 0);
+    };
+
+    const calculatetminus1Loans = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tminus1Loans) || 0);
+        }, 0);
+    };
+
+    const calculatetminus1Pos = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tminus1Pos) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrLoans = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrLoans) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrPos = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrPos) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrDpd0 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrDpd0) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrDpd1To30 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrDpd1To30) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtrDpd31To60 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrDpd31To60) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtrqtrDpd61To90 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrDpd61To90) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtrqtrDpdAbove90 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.qtrDpdAbove90) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtrqtrtloans = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tloans) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtrtpos = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tpos) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqttdpd0 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tdpd0) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtdpd1To30 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tdpd1To30) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtdptdpd31To60 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tdpd31To60) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtdptdpdtdpd61To90 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tdpd61To90) || 0);
+        }, 0);
+    };
+
+    const calculatetqtrqtdptdpdtdtdpdAbove90 = (values: any) => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1?.tdpdAbove90) || 0);
+        }, 0);
+    };
+
+    const [updateCommentByNId] = useUpdateCommentByNIdMutation();
+    const { opensections } = useAppSelector((state) => state.userStore);
+    const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
+    const [getNotiId, setNotiId] = React.useState<any>('');
+    const [openDrawer, setOpenDrawer] = React.useState<any>(false);
+    const toggleDrawer = (newOpen: boolean) => () => {
+        setOpenDrawer(true);
+    };
+    const handleButtonClick = (notfId: any) => {
+        setOpenDrawer(true);
+        setNotiId(notfId);
+    };
+    useEffect(() => {
+        if (opensections && opensections.length > 0) {
+            setOpenSections(opensections);
+        }
+    }, [opensections]);
+
+    const adjustSubsequentMins = (setFieldValue: any, values: any, startIndex: number, newMax: any) => {
+        let prevMax = parseFloat(newMax);
+        if (isNaN(prevMax)) return;
+        for (let i = startIndex + 1; i < values.data.length; i++) {
+            setFieldValue(`data.${i}.minTenureSlab`, prevMax);
+            prevMax = parseFloat(values.data[i].maxTenureSlab);
+            if (isNaN(prevMax)) break;
+        }
+    };
+
+    if (isUploading) return <FullScreenLoaderNoClose />;
+
+    return (
+        <div className="wrap-appraisal-area">
+            {!transactionData ?
+                <Notification /> :
+                <>
+                    <Grid item xs={12} className="opensections-sticky-css">
+                        <Grid
+                            className="pb-0"
+                            item
+                            xs={12}
+                            display="flex"
+                            justifyContent="end">
+                            {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
+                                const matchedItem = getOpenSectionsData.find(
+                                    (item: any) => item?.sectionId === "06" && item?.subSectionId === "02"
+                                );
+                                return matchedItem ? (
+                                    <div className="openSection-item">
+                                        <NotificationSectionWiseButton
+                                            label="Respond"
+                                            handleClick={() => handleButtonClick(matchedItem?.notfId)}
+                                            className="btn-primary-css--"
+                                            notfId={matchedItem?.notfId}
+                                            getOpenSectionsData={getOpenSectionsData}
+
+                                        />
+                                    </div>
+                                ) : null;
+                            })()}
+                            <DrawerResponseComponent
+                                open={openDrawer}
+                                toggleDrawer={toggleDrawer}
+                                notfId={getNotiId}
+                                detailsData={''}
+                                postDataTrigger={updateCommentByNId}
+                                setOpen={setOpenDrawer}
+                            />
+                        </Grid>
+                    </Grid>
+
+                    <div className="custome-form">
+                        <ConfirmationAlertDialog
+                            id={applId as unknown as number}
+                            type={4}
+                            open={openSubmitConfirmation}
+                            handleClose={handleCloseSubmitConfirmation}
+                            handleDelete={handleSubmitConfirmation}
+                            values={formData}
+                        />
+
+                        <ConfirmationAlertDialog
+                            id={applId as unknown as number}
+                            index={deleteIndex}
+                            type={2}
+                            open={openDeleteConfirmation}
+                            handleClose={handleCloseDeleteConfirmation}
+                            handleDelete={handleConfirmDelete}
+                        />
+
+                        <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
+                            <Formik
+                                initialValues={getpFCutsTenurWiseFormData || { data: [] }}
+                                onSubmit={handleSubmit}
+                                enableReinitialize
+                                validationSchema={tenureWiseListingSchema}
+                                validateOnChange={true}
+                                validateOnBlur={true}
+                            >
+                                {({ values, setFieldValue }) => {
+                                    setFieldValueRef.current = setFieldValue;
+                                    return (
+                                        <Form>
+                                            <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                                {values?.data?.[0]?.saveStatus !== "02" &&
+                                                    <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={30000} autoStyle={true} />
+                                                }
+                                                <FieldArray name="data">
+                                                    {({ remove, push }) => (
+                                                        <>
+                                                            {values?.data?.[0]?.saveStatus !== "02" && (
+                                                                <Button
+                                                                    size="small"
+                                                                    className='psn_btn text-capitalize my-2 saveBtn'
+                                                                    color="primary"
+                                                                    style={{ marginLeft: '15px', display: 'block' }}
+                                                                    onClick={() => {
+                                                                        const lastIndex = values.data.length - 1;
+                                                                        let newMin: any = 0;
+                                                                        if (lastIndex >= 0) {
+                                                                            const lastMax = parseFloat(values.data[lastIndex].maxTenureSlab);
+                                                                            if (!isNaN(lastMax)) {
+                                                                                newMin = lastMax;
+                                                                            }
+                                                                        }
+                                                                        push({
+                                                                            minTenureSlab: newMin,
+                                                                            maxTenureSlab: "",
+                                                                            tminus2Loans: "",
+                                                                            tminus2Pos: "",
+                                                                            tminus1Loans: "",
+                                                                            tminus1Pos: "",
+                                                                            qtrLoans: "",
+                                                                            qtrPos: "",
+                                                                            qtrDpd0: "",
+                                                                            qtrDpd1To30: "",
+                                                                            qtrDpd31To60: "",
+                                                                            qtrDpd61To90: "",
+                                                                            qtrDpdAbove90: "",
+                                                                            tloans: "",
+                                                                            tpos: "",
+                                                                            tdpd0: "",
+                                                                            tdpd1To30: "",
+                                                                            tdpd31To60: "",
+                                                                            tdpd61To90: "",
+                                                                            tdpdAbove90: "",
+                                                                            slNo: ""
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    Add <AddCircleIcon />
+                                                                </Button>
+                                                            )}
+                                                            <Table sx={{ minWidth: 650 }} aria-label="simple table" className="smTxt">
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell style={{ width: '7%' }} align='center'>
+                                                                            {values?.data?.[0]?.saveStatus !== "02" && (
+                                                                                <b>Action</b>)}
+                                                                        </TableCell>
+                                                                        <TableCell colSpan={2} align='center'><b>Tenure</b></TableCell>
+                                                                        <TableCell colSpan={2} align='center'><b>FY {transactionData?.lstAudYrTm2}</b></TableCell>
+                                                                        <TableCell colSpan={2} align='center'><b>FY {transactionData?.lstAudYrTm1}</b></TableCell>
+                                                                        <TableCell colSpan={7} align='center'><b>FY {transactionData?.lstAudYrT}</b></TableCell>
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell colSpan={7} align='center'><b>{transactionData?.lstAudQ}</b></TableCell>
+                                                                        }
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b></b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>Min</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>Max</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>No. of Loans</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>POS</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>No. of Loans</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>POS</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>No. of Loans</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>POS</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>{">"}0</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>1-30</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>31-60</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>61-90</b></TableCell>
+                                                                        <TableCell style={{ minWidth: '100px' }}><b>{">"}90</b></TableCell>
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>No. of Loans</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>POS</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>{">"}0</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>1-30</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>31-60</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>61-90</b></TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell style={{ minWidth: '100px' }}><b>{">"}90</b></TableCell>
+                                                                        }
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {values?.data?.map((item: any, index: any) => (
+                                                                        <TableRow key={index}>
+                                                                            <TableCell align="center">
+                                                                                {item?.saveStatus !== "02" && (
+                                                                                    index !== 0 ? (
+                                                                                        <IconButton
+                                                                                            onClick={() =>
+                                                                                                item?.slNo
+                                                                                                    ? handleClickOpenDeleteConfirmation(item, item?.slNo)
+                                                                                                    : remove(index)
+                                                                                            }
+                                                                                            color="error"
+                                                                                        >
+                                                                                            <DeleteIcon />
+                                                                                        </IconButton>
+                                                                                    ) : (
+                                                                                        <IconButton disabled>
+                                                                                            <DeleteIcon />
+                                                                                        </IconButton>
+                                                                                    )
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.minTenureSlab`}
+                                                                                    disabled={true}
+                                                                                    type={'number'}
+                                                                                    allowNegative={false}
+                                                                                    allowDecimal={false}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.maxTenureSlab`}
+                                                                                    onCustomChange={(currentVal: any) => {
+                                                                                        const val = parseFloat(currentVal) || "";
+                                                                                        setFieldValue(`data.${index}.maxTenureSlab`, val);
+                                                                                        adjustSubsequentMins(setFieldValue, values, index, currentVal);
+                                                                                    }}
+                                                                                    type={'number'}
+                                                                                    allowNegative={false}
+                                                                                    allowDecimal={false}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.tminus2Loans`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tminus2Loans')}
+                                                                                    type={'number'}
+                                                                                    allowNegative={false}
+                                                                                    allowDecimal={false}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.tminus2Pos`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tminus2Pos')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.tminus1Loans`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tminus1Loans')}
+                                                                                    type={'number'}
+                                                                                    allowNegative={false}
+                                                                                    allowDecimal={false}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.tminus1Pos`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tminus1Pos')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrLoans`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrLoans')}
+                                                                                    type={'number'}
+                                                                                    allowNegative={false}
+                                                                                    allowDecimal={false}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrPos`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrPos')}
+                                                                                    type={'number'}
+                                                                                    disabled={true}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrDpd0`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrDpd0')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrDpd1To30`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrDpd1To30')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrDpd31To60`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrDpd31To60')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrDpd61To90`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrDpd61To90')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <AdvanceTextBoxField
+                                                                                    name={`data.${index}.qtrDpdAbove90`}
+                                                                                    onCustomChange={(currentVal: any) =>
+                                                                                        calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'qtrDpdAbove90')}
+                                                                                    type={'number'}
+                                                                                    disabled={item?.saveStatus === '02'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tloans`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tloans')}
+                                                                                        type={'number'}
+                                                                                        allowNegative={false}
+                                                                                        allowDecimal={false}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tpos`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tpos')}
+                                                                                        type={'number'}
+                                                                                        disabled={true}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd0`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd0')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd1To30`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd1To30')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd31To60`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd31To60')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpd61To90`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpd61To90')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                            {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                                <TableCell>
+                                                                                    <AdvanceTextBoxField
+                                                                                        name={`data.${index}.tdpdAbove90`}
+                                                                                        onCustomChange={(currentVal: any) =>
+                                                                                            calculation(setFieldValue, values, index, parseFloat(currentVal) || 0, 'tdpdAbove90')}
+                                                                                        type={'number'}
+                                                                                        disabled={item?.saveStatus === '02'}
+                                                                                    />
+                                                                                </TableCell>
+                                                                            }
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                                {values?.data?.length > 0 && (
+                                                                    <TableRow>
+                                                                        <TableCell><b>Sub Total</b></TableCell>
+                                                                        <TableCell><b></b></TableCell>
+                                                                        <TableCell><b></b></TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetminus2Loans(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatettminus2Pos(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetminus1Loans(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetminus1Pos(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrLoans(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrPos(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrDpd0(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrDpd1To30(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrqtrDpd31To60(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrqtrqtrDpd61To90(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <b>
+                                                                                {calculatetqtrqtrqtrDpdAbove90(values).toLocaleString('en-IN', {
+                                                                                    maximumFractionDigits: 2,
+                                                                                    style: 'currency',
+                                                                                    currency: 'INR'
+                                                                                })}
+                                                                            </b>
+                                                                        </TableCell>
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtrqtrtloans(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtrtpos(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqttdpd0(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtdpd1To30(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtdptdpd31To60(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtdptdpdtdpd61To90(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                        {transactionData?.lstAudQ !== 'Not Applicable' &&
+                                                                            <TableCell>
+                                                                                <b>
+                                                                                    {calculatetqtrqtdptdpdtdtdpdAbove90(values).toLocaleString('en-IN', {
+                                                                                        maximumFractionDigits: 2,
+                                                                                        style: 'currency',
+                                                                                        currency: 'INR'
+                                                                                    })}
+                                                                                </b>
+                                                                            </TableCell>
+                                                                        }
+                                                                    </TableRow>
+                                                                )}
+                                                            </Table>
+                                                        </>
+                                                    )}
+                                                </FieldArray>
+                                                {values?.data?.[0]?.saveStatus !== "02" &&
+                                                    <>
+                                                        <Button
+                                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                                            type='submit'
+                                                            onClick={() => handleClickSetAction('01')}
+                                                            variant="contained"
+                                                        >
+                                                            Save <CheckCircleOutlineIcon />
+                                                        </Button>
+                                                        <Button
+                                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                                            type='submit'
+                                                            onClick={() => handleClickSetAction('02')}
+                                                            variant="contained"
+                                                        >
+                                                            Submit <SaveAsIcon />
+                                                        </Button>
+                                                    </>
+                                                }
+                                            </fieldset>
+                                        </Form>
+                                    );
+                                }}
+                            </Formik>
+                        </div>
+                        <OnlineSnackbar
+                            open={openSnackbar}
+                            msg={snackMsg}
+                            severity={severity}
+                            handleSnackClose={() => setOpenSnackbar(false)}
+                        />
+                    </div>
+                </>}
+        </div>
+    );
+};
+
+export default connect((state: any) => {
+    return {
+        applId: state.userStore.applId
+    };
+})(TenureWisePortfolioCuts);
+
