@@ -40,6 +40,326 @@ const QrDisplayPage: React.FC = () => {
       return;
     }
 
+    const processImageData = async () => {
+      try {
+        if (typeof state.qrImageData === 'string') {
+          // Handle base64 string
+          if (state.qrImageData.startsWith('data:image')) {
+            setQrImageUrl(state.qrImageData);
+          } else {
+            setQrImageUrl(`data:image/png;base64,${state.qrImageData}`);
+          }
+        } else if (state.qrImageData instanceof Blob) {
+          // Convert Blob to base64
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              setQrImageUrl(reader.result);
+            } else {
+              setError('Failed to convert QR code image to base64.');
+            }
+            setLoading(false);
+          };
+          reader.onerror = () => {
+            setError('Error reading QR code image.');
+            setLoading(false);
+          };
+          reader.readAsDataURL(state.qrImageData);
+        } else {
+          setError('Unsupported QR code data format.');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error processing QR image:', err);
+        setError('Failed to display QR code image.');
+        setLoading(false);
+      }
+    };
+
+    processImageData();
+  }, [state]);
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/');
+  };
+
+  const handleDownloadQr = () => {
+    if (!qrImageUrl) return;
+    const link = document.createElement('a');
+    link.href = qrImageUrl; // Use the base64 data URL
+    link.download = `${state.eventData.eventName}-qr-code.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleShareQr = async () => {
+    if (!qrImageUrl || !navigator.share || !navigator.canShare()) {
+      handleDownloadQr(); // Fallback to download if sharing is not supported
+      return;
+    }
+
+    try {
+      // Convert base64 to Blob for sharing
+      const base64String = qrImageUrl.split(',')[1]; // Extract base64 data
+      const byteCharacters = atob(base64String);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      const file = new File([blob], `${state.eventData.eventName}-qr.png`, {
+        type: 'image/png',
+      });
+
+      await navigator.share({
+        title: `QR Code for ${state.eventData.eventName}`,
+        text: `Scan this QR code to join the event: ${state.eventData.eventName}`,
+        files: [file],
+      });
+    } catch (err) {
+      console.error('Error sharing:', err);
+      handleDownloadQr(); // Fallback to download on error
+    }
+  };
+
+  const handleScanComplete = () => {
+    navigate('/create-user-event', {
+      state: { eventData: state.eventData },
+    });
+  };
+
+  if (error) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 2,
+        }}
+      >
+        <Container maxWidth="sm">
+          <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+            <Button
+              variant="contained"
+              onClick={() => navigate('/create-event')}
+              fullWidth
+            >
+              Create New Event
+            </Button>
+          </Paper>
+        </Container>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 2,
+      }}
+    >
+      <Container maxWidth="md">
+        <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
+          <Stack spacing={3}>
+            <Box textAlign="center">
+              <Typography variant="h4" color="primary" gutterBottom>
+                <QrCode sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Event QR Code
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary">
+                Share this QR code with attendees to join your event
+              </Typography>
+            </Box>
+
+            <Card variant="outlined">
+              <CardContent>
+                <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+                  <Typography variant="h6" color="primary">
+                    Event Details
+                  </Typography>
+                  <Chip label="Active" color="success" size="small" />
+                </Stack>
+                <Divider sx={{ mb: 2 }} />
+                <Stack spacing={1}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Event Name:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {state?.eventData?.eventName}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Event ID:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {state?.eventData?.eventId}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            <Card variant="outlined">
+              <CardContent>
+                <Box textAlign="center">
+                  {loading ? (
+                    <Stack spacing={2} alignItems="center" py={4}>
+                      <CircularProgress />
+                      <Typography>Loading QR Code...</Typography>
+                    </Stack>
+                  ) : (
+                    <Stack spacing={2} alignItems="center">
+                      <img
+                        src={qrImageUrl}
+                        alt="Event QR Code"
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '300px',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '8px',
+                          padding: '16px',
+                          backgroundColor: 'white',
+                        }}
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Scan this code with your mobile device to join the event
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Button
+                variant="outlined"
+                startIcon={<Download />}
+                onClick={handleDownloadQr}
+                disabled={loading || !qrImageUrl}
+              >
+                Download QR
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<Share />}
+                onClick={handleShareQr}
+                disabled={loading || !qrImageUrl}
+              >
+                Share QR
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={handleScanComplete}
+                disabled={loading}
+                sx={{ flexGrow: 1 }}
+              >
+                Create User Event
+              </Button>
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Button
+                variant="outlined"
+                startIcon={<ArrowBack />}
+                onClick={handleBack}
+                fullWidth
+              >
+                Back
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleBackToDashboard}
+                fullWidth
+              >
+                Back to Dashboard
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+      </Container>
+    </Box>
+  );
+};
+
+export default QrDisplayPage;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useEffect, useState } from 'react';
+import {
+  Box,
+  Button,
+  Typography,
+  Container,
+  Paper,
+  Stack,
+  Card,
+  CardContent,
+  Divider,
+  Chip,
+  Alert,
+  CircularProgress,
+} from '@mui/material';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { QrCode, ArrowBack, Download, Share } from '@mui/icons-material';
+
+interface QrDisplayState {
+  qrImageData: string | Blob;
+  eventData: {
+    eventName: string;
+    eventId: string;
+  };
+}
+
+const QrDisplayPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [qrImageUrl, setQrImageUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const state = location.state as QrDisplayState;
+
+  useEffect(() => {
+    if (!state || !state.qrImageData || !state.eventData) {
+      setError('No QR code data found. Please generate a new QR code.');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (typeof state.qrImageData === 'string') {
         if (state.qrImageData.startsWith('data:image')) {
