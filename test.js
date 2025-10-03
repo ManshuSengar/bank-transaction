@@ -1,3 +1,426 @@
+import React, { useEffect, useState, useRef, useMemo, Suspense, lazy } from "react";
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Paper,
+  TableContainer,
+  tableCellClasses,
+} from "@mui/material";
+import { styled } from "@mui/material/styles";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Slide from "@mui/material/Slide";
+import { TransitionProps } from "@mui/material/transitions";
+import { BankStatement } from "../../models/bankStatement";
+import useToken from "../../Features/Authentication/useToken";
+import * as XLSX from "xlsx";
+
+// Lazy load PDF components only when needed
+const Document = lazy(() => 
+  import('react-pdf').then(module => ({ default: module.Document }))
+);
+const Page = lazy(() => 
+  import('react-pdf').then(module => ({ default: module.Page }))
+);
+
+// Configure worker in a separate utility file
+let workerConfigured = false;
+const configurePdfWorker = async () => {
+  if (!workerConfigured && typeof window !== 'undefined') {
+    const pdfjs = await import('react-pdf/dist/esm/entry.webpack');
+    pdfjs.pdfjs.GlobalWorkerOptions.workerSrc = 
+      `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.pdfjs.version}/pdf.worker.min.js`;
+    workerConfigured = true;
+  }
+};
+
+interface DownloadDocumentsDetailsModalProps {
+  open: boolean;
+  onClose: () => void;
+  docUrl: BankStatement | null;
+}
+
+const Transition = React.forwardRef(function Transition(
+  props: TransitionProps & {
+    children: React.ReactElement<any, any>;
+  },
+  ref: React.Ref<unknown>
+) {
+  return <Slide direction="up" ref={ref} {...props} />;
+});
+
+const DialogCss = styled(Dialog)(({ theme }) => ({
+  "& .MuiDialog-paper": {
+    border: "3px solid #334d59 !important",
+    boxShadow: "8px 10px 20px 5px #334d59",
+  },
+}));
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: "#E6F4FF",
+    color: "#3B415B",
+    borderBottomWidth: 0,
+    padding: "8px",
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14,
+    color: "#24172E",
+    borderBottomWidth: 0,
+    padding: "8px",
+  },
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  "&:nth-of-type(even)": {
+    backgroundColor: "#ebeff2",
+  },
+  "&:last-child td, &:last-child th": {
+    border: 0,
+  },
+}));
+
+const PDFViewer: React.FC<{ url: string }> = ({ url }) => {
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    configurePdfWorker();
+  }, []);
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setError(null);
+  };
+
+  const onDocumentLoadError = (error: Error) => {
+    console.error('PDF load error:', error);
+    setError('Failed to load PDF');
+  };
+
+  if (error) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 3 }}>
+        <Typography color="error">{error}</Typography>
+        <Button href={url} target="_blank" sx={{ mt: 2 }}>
+          Download PDF
+        </Button>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ textAlign: 'center' }}>
+      <Suspense fallback={
+        <Box sx={{ py: 5 }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>Loading PDF viewer...</Typography>
+        </Box>
+      }>
+        <Document
+          file={url}
+          onLoadSuccess={onDocumentLoadSuccess}
+          onLoadError={onDocumentLoadError}
+          loading={
+            <Box sx={{ py: 5 }}>
+              <CircularProgress />
+              <Typography sx={{ mt: 2 }}>Loading PDF...</Typography>
+            </Box>
+          }
+          options={{
+            cMapUrl: 'https://unpkg.com/pdfjs-dist@3.6.172/cmaps/',
+            cMapPacked: true,
+            standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.6.172/standard_fonts/',
+          }}
+        >
+          <Page
+            pageNumber={pageNumber}
+            renderTextLayer={false}
+            renderAnnotationLayer={false}
+          />
+        </Document>
+      </Suspense>
+      {numPages > 0 && (
+        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2, alignItems: 'center' }}>
+          <Button 
+            size="small" 
+            disabled={pageNumber <= 1}
+            onClick={() => setPageNumber(p => p - 1)}
+          >
+            Previous
+          </Button>
+          <Typography variant="body2">
+            Page {pageNumber} of {numPages}
+          </Typography>
+          <Button 
+            size="small"
+            disabled={pageNumber >= numPages}
+            onClick={() => setPageNumber(p => p + 1)}
+          >
+            Next
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const DownloadBankStatementDetailsModal: React.FC<
+  DownloadDocumentsDetailsModalProps
+> = ({ open, onClose, docUrl }) => {
+  const { getToken } = useToken();
+  const [loading, setLoading] = useState(false);
+  const [excelData, setExcelData] = useState<string[][]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const fileExtension = useMemo(() => {
+    if (!docUrl?.name) return "";
+    return docUrl.name.split(".").pop()?.toLowerCase() || "";
+  }, [docUrl?.name]);
+
+  const isPDF = fileExtension === "pdf";
+  const isImage = ["jpg", "jpeg", "png", "gif", "bmp", "webp"].includes(fileExtension);
+  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
+
+  const documentUrl = useMemo(() => {
+    if (!docUrl?.url) return "";
+    return `${docUrl.url}?access_token=${getToken()}`;
+  }, [docUrl?.url, getToken]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isExcel || !documentUrl) {
+      return;
+    }
+
+    setLoading(true);
+    setExcelData([]);
+    setError(null);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    fetch(documentUrl, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((data) => {
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: "",
+        }) as string[][];
+
+        if (json.length === 0) {
+          setError("No data found in the Excel file");
+          return;
+        }
+
+        const maxColumns = Math.max(...json.map((row) => row.length));
+        const normalized = json.map((row) => {
+          const newRow = [...row];
+          while (newRow.length < maxColumns) {
+            newRow.push("");
+          }
+          return newRow;
+        });
+
+        setExcelData(normalized);
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error("Error loading Excel file:", err);
+          setError("Failed to load Excel file");
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [open, isExcel, documentUrl]);
+
+  useEffect(() => {
+    if (!open) {
+      setExcelData([]);
+      setError(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  const handleDialogClose = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    onClose();
+  };
+
+  const renderContent = () => {
+    if (isPDF) {
+      return <PDFViewer url={documentUrl} />;
+    }
+
+    if (isImage) {
+      return (
+        <Box sx={{ textAlign: "center", py: 2 }}>
+          <img
+            src={documentUrl}
+            alt={String(docUrl?.name)}
+            style={{ 
+              maxWidth: "100%", 
+              maxHeight: "70vh",
+              objectFit: "contain"
+            }}
+            onError={() => setError("Failed to load image")}
+          />
+        </Box>
+      );
+    }
+
+    if (isExcel) {
+      if (loading) {
+        return (
+          <Box sx={{ textAlign: "center", py: 5 }}>
+            <CircularProgress />
+            <Typography sx={{ mt: 2 }}>Loading Excel data...</Typography>
+          </Box>
+        );
+      }
+
+      if (error) {
+        return (
+          <Box sx={{ textAlign: "center", py: 5 }}>
+            <Typography color="error">{error}</Typography>
+          </Box>
+        );
+      }
+
+      if (excelData.length === 0) {
+        return (
+          <Box sx={{ textAlign: "center", py: 5 }}>
+            <Typography>No data available</Typography>
+          </Box>
+        );
+      }
+
+      return (
+        <Paper
+          elevation={0}
+          style={{
+            marginBottom: "16px",
+            boxShadow: "none",
+            border: "1px solid #1377FF",
+            borderRadius: "6px",
+            maxHeight: "70vh",
+            overflow: "auto",
+          }}
+        >
+          <TableContainer>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow>
+                  {excelData[0]?.map((cell, index) => (
+                    <StyledTableCell key={`header-${index}`}>
+                      <Typography variant="subtitle2" sx={{ m: 0, fontWeight: 600 }}>
+                        {cell || `Column ${index + 1}`}
+                      </Typography>
+                    </StyledTableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {excelData.slice(1).map((row, rowIndex) => (
+                  <StyledTableRow key={`row-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <StyledTableCell key={`cell-${rowIndex}-${cellIndex}`}>
+                        <Typography variant="body2" sx={{ m: 0 }}>
+                          {cell}
+                        </Typography>
+                      </StyledTableCell>
+                    ))}
+                  </StyledTableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      );
+    }
+
+    return (
+      <Box sx={{ textAlign: "center", py: 5 }}>
+        <Typography variant="body1" gutterBottom>
+          Preview not available for this file type
+        </Typography>
+      </Box>
+    );
+  };
+
+  return (
+    <DialogCss
+      open={open}
+      TransitionComponent={Transition}
+      keepMounted={false}
+      onClose={handleDialogClose}
+      fullWidth={true}
+      maxWidth={"lg"}
+    >
+      <DialogTitle
+        sx={{
+          textAlign: "center",
+          background: "linear-gradient(to top, #b2c7ef, #779de2)",
+          padding: "12px 24px",
+          fontSize: "16px",
+          fontWeight: 700,
+        }}
+      >
+        Document Preview - {docUrl?.name}
+      </DialogTitle>
+      <DialogContent sx={{ px: 3, py: 2 }}>
+        {error && !isExcel && (
+          <Box sx={{ mb: 2, p: 2, bgcolor: "#fff3cd", borderRadius: 1 }}>
+            <Typography color="error">{error}</Typography>
+          </Box>
+        )}
+        {renderContent()}
+      </DialogContent>
+      <DialogActions sx={{ borderTop: "2px solid #334d59", padding: "12px 24px" }}>
+        <Button variant="contained" href={documentUrl} download>
+          Download
+        </Button>
+        <Button onClick={handleDialogClose} variant="outlined">
+          Close
+        </Button>
+      </DialogActions>
+    </DialogCss>
+  );
+};
+
+export default React.memo(DownloadBankStatementDetailsModal);
+
+
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Modal,
