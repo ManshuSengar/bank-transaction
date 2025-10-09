@@ -1,3186 +1,840 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import TitleHeader from "../../Components/titleheader";
 import {
   Box,
+  Grid,
+  Container,  
+  FormControlLabel,
+  Checkbox,
   Typography,
-  CircularProgress,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Paper,
-  TableContainer,
-  tableCellClasses,
+  Snackbar,
+  Button,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Slide from "@mui/material/Slide";
-import { TransitionProps } from "@mui/material/transitions";
-import { BankStatement } from "../../models/bankStatement";
+import { makeStyles } from "@material-ui/core/styles";
 import useToken from "../../Features/Authentication/useToken";
-import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
-import * as XLSX from "xlsx";
-
-// Configure PDF.js worker - CRITICAL: Do this ONCE at module level
-if (typeof window !== 'undefined' && 'Worker' in window) {
-  const pdfjsVersion = pdfjs.version;
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`;
-}
-
-interface DownloadDocumentsDetailsModalProps {
-  open: boolean;
-  onClose: () => void;
-  docUrl: BankStatement | null;
-}
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
-
-const DialogCss = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    border: "3px solid #334d59 !important",
-    boxShadow: "8px 10px 20px 5px #334d59",
-  },
-}));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  [`&.${tableCellClasses.head}`]: {
-    backgroundColor: "#E6F4FF",
-    color: "#3B415B",
-    borderBottomWidth: 0,
-    padding: "8px",
-  },
-  [`&.${tableCellClasses.body}`]: {
-    fontSize: 14,
-    color: "#24172E",
-    borderBottomWidth: 0,
-    padding: "8px",
-  },
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": {
-    backgroundColor: "#ebeff2",
-  },
-  "&:last-child td, &:last-child th": {
-    border: 0,
-  },
-}));
-
-const DownloadBankStatementDetailsModal: React.FC<
-  DownloadDocumentsDetailsModalProps
-> = ({ open, onClose, docUrl }) => {
-  const { getToken } = useToken();
-  const [loading, setLoading] = useState(false);
-  const [excelData, setExcelData] = useState<string[][]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const documentLoadedRef = useRef(false);
-
-  // Memoize file extension calculation
-  const fileExtension = useMemo(() => {
-    if (!docUrl?.name) return "";
-    return docUrl.name.split(".").pop()?.toLowerCase() || "";
-  }, [docUrl?.name]);
-
-  const isPDF = fileExtension === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "bmp", "webp"].includes(fileExtension);
-  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
-
-  // Memoize the document URL with token
-  const documentUrl = useMemo(() => {
-    if (!docUrl?.url) return "";
-    return `${docUrl.url}?access_token=${getToken()}`;
-  }, [docUrl?.url, getToken]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      documentLoadedRef.current = false;
-    };
-  }, []);
-
-  // Load Excel data
-  useEffect(() => {
-    if (!open || !isExcel || !documentUrl) {
-      return;
-    }
-
-    setLoading(true);
-    setExcelData([]);
-    setError(null);
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    fetch(documentUrl, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.arrayBuffer();
-      })
-      .then((data) => {
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          defval: "",
-        }) as string[][];
-
-        if (json.length === 0) {
-          setError("No data found in the Excel file");
-          return;
-        }
-
-        const maxColumns = Math.max(...json.map((row) => row.length));
-        const normalized = json.map((row) => {
-          const newRow = [...row];
-          while (newRow.length < maxColumns) {
-            newRow.push("");
-          }
-          return newRow;
-        });
-
-        setExcelData(normalized);
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          console.error("Error loading Excel file:", err);
-          setError("Failed to load Excel file");
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [open, isExcel, documentUrl]);
-
-  // Reset states when modal closes
-  useEffect(() => {
-    if (!open) {
-      setExcelData([]);
-      setError(null);
-      setLoading(false);
-      setNumPages(0);
-      setPageNumber(1);
-      documentLoadedRef.current = false;
-    }
-  }, [open]);
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    if (!documentLoadedRef.current) {
-      setNumPages(numPages);
-      setPageNumber(1);
-      setError(null);
-      documentLoadedRef.current = true;
-    }
-  };
-
-  const onDocumentLoadError = (error: Error) => {
-    console.error('PDF load error:', error);
-    if (!documentLoadedRef.current) {
-      setError('Failed to load PDF. Please try downloading the file instead.');
-    }
-  };
-
-  const handleDialogClose = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    documentLoadedRef.current = false;
-    onClose();
-  };
-
-  const changePage = (offset: number) => {
-    setPageNumber(prevPageNumber => prevPageNumber + offset);
-  };
-
-  const previousPage = () => changePage(-1);
-  const nextPage = () => changePage(1);
-
-  const renderContent = () => {
-    if (isPDF) {
-      return (
-        <Box sx={{ 
-          textAlign: 'center',
-          '& .react-pdf__Document': {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          },
-          '& .react-pdf__Page': {
-            maxWidth: '100%',
-            boxShadow: '0 0 8px rgba(0, 0, 0, 0.2)',
-            margin: '16px 0',
-          },
-          '& .react-pdf__Page__canvas': {
-            maxWidth: '100%',
-            height: 'auto !important',
-          }
-        }}>
-          {error ? (
-            <Box sx={{ py: 3 }}>
-              <Typography color="error" gutterBottom>{error}</Typography>
-              <Button 
-                variant="contained" 
-                href={documentUrl} 
-                target="_blank"
-                sx={{ mt: 2 }}
-              >
-                Download PDF
-              </Button>
-            </Box>
-          ) : (
-            <>
-              <Document
-                file={documentUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={onDocumentLoadError}
-                loading={
-                  <Box sx={{ py: 5 }}>
-                    <CircularProgress />
-                    <Typography sx={{ mt: 2 }}>Loading PDF...</Typography>
-                  </Box>
-                }
-                error={
-                  <Box sx={{ py: 3 }}>
-                    <Typography color="error">Failed to load PDF</Typography>
-                    <Button 
-                      variant="contained" 
-                      href={documentUrl} 
-                      target="_blank"
-                      sx={{ mt: 2 }}
-                    >
-                      Download PDF
-                    </Button>
-                  </Box>
-                }
-                options={{
-                  cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
-                  cMapPacked: true,
-                  standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/',
-                }}
-              >
-                <Page
-                  pageNumber={pageNumber}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  width={Math.min(window.innerWidth * 0.8, 800)}
-                />
-              </Document>
-              {numPages > 0 && (
-                <Box sx={{ 
-                  mt: 2, 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  gap: 2, 
-                  alignItems: 'center',
-                  pb: 2
-                }}>
-                  <Button 
-                    size="small" 
-                    variant="outlined"
-                    disabled={pageNumber <= 1}
-                    onClick={previousPage}
-                  >
-                    Previous
-                  </Button>
-                  <Typography variant="body2">
-                    Page {pageNumber} of {numPages}
-                  </Typography>
-                  <Button 
-                    size="small"
-                    variant="outlined"
-                    disabled={pageNumber >= numPages}
-                    onClick={nextPage}
-                  >
-                    Next
-                  </Button>
-                </Box>
-              )}
-            </>
-          )}
-        </Box>
-      );
-    }
-
-    if (isImage) {
-      return (
-        <Box sx={{ textAlign: "center", py: 2 }}>
-          <img
-            src={documentUrl}
-            alt={String(docUrl?.name)}
-            style={{ 
-              maxWidth: "100%", 
-              maxHeight: "70vh",
-              objectFit: "contain"
-            }}
-            onError={() => setError("Failed to load image")}
-          />
-        </Box>
-      );
-    }
-
-    if (isExcel) {
-      if (loading) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <CircularProgress />
-            <Typography sx={{ mt: 2 }}>Loading Excel data...</Typography>
-          </Box>
-        );
-      }
-
-      if (error) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <Typography color="error">{error}</Typography>
-          </Box>
-        );
-      }
-
-      if (excelData.length === 0) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <Typography>No data available</Typography>
-          </Box>
-        );
-      }
-
-      return (
-        <Paper
-          elevation={0}
-          style={{
-            marginBottom: "16px",
-            boxShadow: "none",
-            border: "1px solid #1377FF",
-            borderRadius: "6px",
-            maxHeight: "70vh",
-            overflow: "auto",
-          }}
-        >
-          <TableContainer>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow>
-                  {excelData[0]?.map((cell, index) => (
-                    <StyledTableCell key={`header-${index}`}>
-                      <Typography variant="subtitle2" sx={{ m: 0, fontWeight: 600 }}>
-                        {cell || `Column ${index + 1}`}
-                      </Typography>
-                    </StyledTableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {excelData.slice(1).map((row, rowIndex) => (
-                  <StyledTableRow key={`row-${rowIndex}`}>
-                    {row.map((cell, cellIndex) => (
-                      <StyledTableCell key={`cell-${rowIndex}-${cellIndex}`}>
-                        <Typography variant="body2" sx={{ m: 0 }}>
-                          {cell}
-                        </Typography>
-                      </StyledTableCell>
-                    ))}
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      );
-    }
-
-    return (
-      <Box sx={{ textAlign: "center", py: 5 }}>
-        <Typography variant="body1" gutterBottom>
-          Preview not available for this file type
-        </Typography>
-        <Typography variant="caption" color="textSecondary">
-          Supported formats: PDF, Images (JPG, PNG, GIF), Excel (XLS, XLSX, CSV)
-        </Typography>
-      </Box>
-    );
-  };
-
-  return (
-    <DialogCss
-      open={open}
-      TransitionComponent={Transition}
-      keepMounted={false}
-      onClose={handleDialogClose}
-      aria-describedby="document-preview-dialog"
-      fullWidth={true}
-      maxWidth={"lg"}
-      disableAutoFocus
-      disableEnforceFocus
-    >
-      <DialogTitle
-        sx={{
-          textAlign: "center",
-          background: "linear-gradient(to top, #b2c7ef, #779de2)",
-          padding: "12px 24px",
-          fontSize: "16px",
-          fontWeight: 700,
-        }}
-      >
-        Document Preview - {docUrl?.name}
-      </DialogTitle>
-      <DialogContent sx={{ px: 3, py: 2, minHeight: '400px' }}>
-        {renderContent()}
-      </DialogContent>
-      <DialogActions
-        sx={{ 
-          borderTop: "2px solid #334d59", 
-          padding: "12px 24px",
-          justifyContent: "space-between"
-        }}
-      >
-        <Button
-          variant="contained"
-          href={documentUrl}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Download
-        </Button>
-        <Button onClick={handleDialogClose} variant="outlined">
-          Close
-        </Button>
-      </DialogActions>
-    </DialogCss>
-  );
-};
-
-export default React.memo(DownloadBankStatementDetailsModal);
-
-                      # Check current version
-npm list react-pdf
-
-# If you have version 7.x, you need to install pdfjs-dist separately
-npm install pdfjs-dist@3.11.174
-
-# Or uninstall and reinstall with correct versions
-npm uninstall react-pdf
-npm install react-pdf@7.7.1 pdfjs-dist@3.11.174
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useState, useRef, useMemo, Suspense, lazy } from "react";
+import { skipToken } from "@reduxjs/toolkit/dist/query";
+import { useNavigate } from "react-router-dom";
+import { useGetLeadQuery } from "../../slices/leadSlice";
+import AlertError from "../../Components/Framework/AlertError";
+import "../../assets/css/common.css";
+import VerticalStepper from "../../Components/verticalstepper";
+import { useCallback, useEffect, useState } from "react";
+import React from "react";
 import {
-  Box,
-  Typography,
-  CircularProgress,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Paper,
-  TableContainer,
-  tableCellClasses,
-} from "@mui/material";
-import { styled } from "@mui/material/styles";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Slide from "@mui/material/Slide";
-import { TransitionProps } from "@mui/material/transitions";
-import { BankStatement } from "../../models/bankStatement";
-import useToken from "../../Features/Authentication/useToken";
-import * as XLSX from "xlsx";
-
-// Lazy load PDF components only when needed
-const Document = lazy(() => 
-  import('react-pdf').then(module => ({ default: module.Document }))
-);
-const Page = lazy(() => 
-  import('react-pdf').then(module => ({ default: module.Page }))
-);
-
-// Configure worker in a separate utility file
-let workerConfigured = false;
-const configurePdfWorker = async () => {
-  if (!workerConfigured && typeof window !== 'undefined') {
-    const pdfjs = await import('react-pdf/dist/esm/entry.webpack');
-    pdfjs.pdfjs.GlobalWorkerOptions.workerSrc = 
-      `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.pdfjs.version}/pdf.worker.min.js`;
-    workerConfigured = true;
-  }
-};
-
-interface DownloadDocumentsDetailsModalProps {
-  open: boolean;
-  onClose: () => void;
-  docUrl: BankStatement | null;
-}
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
-
-const DialogCss = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    border: "3px solid #334d59 !important",
-    boxShadow: "8px 10px 20px 5px #334d59",
-  },
-}));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  [`&.${tableCellClasses.head}`]: {
-    backgroundColor: "#E6F4FF",
-    color: "#3B415B",
-    borderBottomWidth: 0,
-    padding: "8px",
-  },
-  [`&.${tableCellClasses.body}`]: {
-    fontSize: 14,
-    color: "#24172E",
-    borderBottomWidth: 0,
-    padding: "8px",
-  },
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": {
-    backgroundColor: "#ebeff2",
-  },
-  "&:last-child td, &:last-child th": {
-    border: 0,
-  },
-}));
-
-const PDFViewer: React.FC<{ url: string }> = ({ url }) => {
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    configurePdfWorker();
-  }, []);
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setError(null);
-  };
-
-  const onDocumentLoadError = (error: Error) => {
-    console.error('PDF load error:', error);
-    setError('Failed to load PDF');
-  };
-
-  if (error) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 3 }}>
-        <Typography color="error">{error}</Typography>
-        <Button href={url} target="_blank" sx={{ mt: 2 }}>
-          Download PDF
-        </Button>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ textAlign: 'center' }}>
-      <Suspense fallback={
-        <Box sx={{ py: 5 }}>
-          <CircularProgress />
-          <Typography sx={{ mt: 2 }}>Loading PDF viewer...</Typography>
-        </Box>
-      }>
-        <Document
-          file={url}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading={
-            <Box sx={{ py: 5 }}>
-              <CircularProgress />
-              <Typography sx={{ mt: 2 }}>Loading PDF...</Typography>
-            </Box>
-          }
-          options={{
-            cMapUrl: 'https://unpkg.com/pdfjs-dist@3.6.172/cmaps/',
-            cMapPacked: true,
-            standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.6.172/standard_fonts/',
-          }}
-        >
-          <Page
-            pageNumber={pageNumber}
-            renderTextLayer={false}
-            renderAnnotationLayer={false}
-          />
-        </Document>
-      </Suspense>
-      {numPages > 0 && (
-        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2, alignItems: 'center' }}>
-          <Button 
-            size="small" 
-            disabled={pageNumber <= 1}
-            onClick={() => setPageNumber(p => p - 1)}
-          >
-            Previous
-          </Button>
-          <Typography variant="body2">
-            Page {pageNumber} of {numPages}
-          </Typography>
-          <Button 
-            size="small"
-            disabled={pageNumber >= numPages}
-            onClick={() => setPageNumber(p => p + 1)}
-          >
-            Next
-          </Button>
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-const DownloadBankStatementDetailsModal: React.FC<
-  DownloadDocumentsDetailsModalProps
-> = ({ open, onClose, docUrl }) => {
-  const { getToken } = useToken();
-  const [loading, setLoading] = useState(false);
-  const [excelData, setExcelData] = useState<string[][]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const fileExtension = useMemo(() => {
-    if (!docUrl?.name) return "";
-    return docUrl.name.split(".").pop()?.toLowerCase() || "";
-  }, [docUrl?.name]);
-
-  const isPDF = fileExtension === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "bmp", "webp"].includes(fileExtension);
-  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
-
-  const documentUrl = useMemo(() => {
-    if (!docUrl?.url) return "";
-    return `${docUrl.url}?access_token=${getToken()}`;
-  }, [docUrl?.url, getToken]);
-
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open || !isExcel || !documentUrl) {
-      return;
-    }
-
-    setLoading(true);
-    setExcelData([]);
-    setError(null);
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    fetch(documentUrl, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.arrayBuffer();
-      })
-      .then((data) => {
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          defval: "",
-        }) as string[][];
-
-        if (json.length === 0) {
-          setError("No data found in the Excel file");
-          return;
-        }
-
-        const maxColumns = Math.max(...json.map((row) => row.length));
-        const normalized = json.map((row) => {
-          const newRow = [...row];
-          while (newRow.length < maxColumns) {
-            newRow.push("");
-          }
-          return newRow;
-        });
-
-        setExcelData(normalized);
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          console.error("Error loading Excel file:", err);
-          setError("Failed to load Excel file");
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [open, isExcel, documentUrl]);
-
-  useEffect(() => {
-    if (!open) {
-      setExcelData([]);
-      setError(null);
-      setLoading(false);
-    }
-  }, [open]);
-
-  const handleDialogClose = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    onClose();
-  };
-
-  const renderContent = () => {
-    if (isPDF) {
-      return <PDFViewer url={documentUrl} />;
-    }
-
-    if (isImage) {
-      return (
-        <Box sx={{ textAlign: "center", py: 2 }}>
-          <img
-            src={documentUrl}
-            alt={String(docUrl?.name)}
-            style={{ 
-              maxWidth: "100%", 
-              maxHeight: "70vh",
-              objectFit: "contain"
-            }}
-            onError={() => setError("Failed to load image")}
-          />
-        </Box>
-      );
-    }
-
-    if (isExcel) {
-      if (loading) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <CircularProgress />
-            <Typography sx={{ mt: 2 }}>Loading Excel data...</Typography>
-          </Box>
-        );
-      }
-
-      if (error) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <Typography color="error">{error}</Typography>
-          </Box>
-        );
-      }
-
-      if (excelData.length === 0) {
-        return (
-          <Box sx={{ textAlign: "center", py: 5 }}>
-            <Typography>No data available</Typography>
-          </Box>
-        );
-      }
-
-      return (
-        <Paper
-          elevation={0}
-          style={{
-            marginBottom: "16px",
-            boxShadow: "none",
-            border: "1px solid #1377FF",
-            borderRadius: "6px",
-            maxHeight: "70vh",
-            overflow: "auto",
-          }}
-        >
-          <TableContainer>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow>
-                  {excelData[0]?.map((cell, index) => (
-                    <StyledTableCell key={`header-${index}`}>
-                      <Typography variant="subtitle2" sx={{ m: 0, fontWeight: 600 }}>
-                        {cell || `Column ${index + 1}`}
-                      </Typography>
-                    </StyledTableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {excelData.slice(1).map((row, rowIndex) => (
-                  <StyledTableRow key={`row-${rowIndex}`}>
-                    {row.map((cell, cellIndex) => (
-                      <StyledTableCell key={`cell-${rowIndex}-${cellIndex}`}>
-                        <Typography variant="body2" sx={{ m: 0 }}>
-                          {cell}
-                        </Typography>
-                      </StyledTableCell>
-                    ))}
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      );
-    }
-
-    return (
-      <Box sx={{ textAlign: "center", py: 5 }}>
-        <Typography variant="body1" gutterBottom>
-          Preview not available for this file type
-        </Typography>
-      </Box>
-    );
-  };
-
-  return (
-    <DialogCss
-      open={open}
-      TransitionComponent={Transition}
-      keepMounted={false}
-      onClose={handleDialogClose}
-      fullWidth={true}
-      maxWidth={"lg"}
-    >
-      <DialogTitle
-        sx={{
-          textAlign: "center",
-          background: "linear-gradient(to top, #b2c7ef, #779de2)",
-          padding: "12px 24px",
-          fontSize: "16px",
-          fontWeight: 700,
-        }}
-      >
-        Document Preview - {docUrl?.name}
-      </DialogTitle>
-      <DialogContent sx={{ px: 3, py: 2 }}>
-        {error && !isExcel && (
-          <Box sx={{ mb: 2, p: 2, bgcolor: "#fff3cd", borderRadius: 1 }}>
-            <Typography color="error">{error}</Typography>
-          </Box>
-        )}
-        {renderContent()}
-      </DialogContent>
-      <DialogActions sx={{ borderTop: "2px solid #334d59", padding: "12px 24px" }}>
-        <Button variant="contained" href={documentUrl} download>
-          Download
-        </Button>
-        <Button onClick={handleDialogClose} variant="outlined">
-          Close
-        </Button>
-      </DialogActions>
-    </DialogCss>
-  );
-};
-
-export default React.memo(DownloadBankStatementDetailsModal);
-
-
-import React, { useEffect, useState, useRef, useMemo } from "react";
+  ColorBackButton,
+  SkipColorButton,
+  ColorButton,
+  ColorCancelButton,
+} from "./Buttons";
+import SaveColorButton from "../../Components/Framework/ColorButton";
+import LegalEntity from "./LegalEntity";
+import Lead from "./Lead";
+import { SubmitableForm } from "../../Components/Framework/FormSubmit";
+import { useAppDispatch } from "../../app/hooks";
 import {
-  Modal,
-  Box,
-  Typography,
-  CircularProgress,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Paper,
-  TableContainer,
-  tableCellClasses,
-} from "@mui/material";
-import { styled } from "@mui/material/styles";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Slide from "@mui/material/Slide";
-import { TransitionProps } from "@mui/material/transitions";
-import { BankStatement } from "../../models/bankStatement";
-import useToken from "../../Features/Authentication/useToken";
-import { Document as PdfDocument, Page, pdfjs } from "react-pdf";
-import * as XLSX from "xlsx";
+  StepStatus,
+  setLeadId,
+  updateStepStatus,
+} from "../../slices/localStores/leadStore";
+import LoanDetails from "./LoanDetails";
+import KmpContainer from "./KmpContainer";
+import SecurityDetailsContainer from "./SecurityDetailsContainer";
+import { useParams } from "react-router";
+import Bre from "./Bre";
+import RepaymentSchedule from "./RepaymentSchedule";
+import ReviewAndSubmit from "./ReviewAndSubmit";
+import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
+import { useUpdateLeadMutation } from "../../slices/leadSlice";
+import { useAppSelector } from "../../app/hooks";
+import { Link } from "react-router-dom";
+import SaveIcon from '@mui/icons-material/Save';
+import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
+import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
+import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
+import { Rps } from "../../models/rps";
 
-// CRITICAL FIX: Configure worker only once at module level
-if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-}
-
-interface DownloadDocumentsDetailsModalProps {
-  open: boolean;
-  onClose: () => void;
-  docUrl: BankStatement | null;
-}
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
-
-const DialogCss = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    border: "3px solid #334d59 !important",
-    boxShadow: "8px 10px 20px 5px #334d59",
-  },
-}));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  [`&.${tableCellClasses.head}`]: {
-    backgroundColor: "#E6F4FF",
-    color: "#3B415B",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": {
-      paddingTop: "8px",
-      paddingBottom: "8px",
+const useStyles = makeStyles((theme) => ({
+  browsefilediv: {
+    "& > *": {
+      margin: theme.spacing(1),
+      color: "#A9A9A9 !important",
     },
-  },
-  [`&.${tableCellClasses.body}`]: {
-    fontSize: 14,
-    color: "#24172E",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": {
-      paddingTop: "6px",
-      paddingBottom: "6px",
+
+    "& .MuiButtonBase-root": {
+      "&hover": {
+        color: "#FFFFFF",
+      },
+      "&focus": {
+        color: "#FFFFFF",
+      },
     },
+    display: "flex",
+    alignItems: "center",
+    border: "1px solid #C0C0C0",
+    maxHeight: "52px",
+  },
+  // input: {
+  //   display: "none",
+  // },
+  root: {
+    backgroundColor: "#F5F5F5 !important",
+    minHeight: "100%",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  card: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "32px",
   },
 }));
 
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": {
-    backgroundColor: "#ebeff2",
-  },
-  "&:last-child td, &:last-child th": {
-    border: 0,
-  },
-}));
+const L0Container = () => {
+  const [loadingButton, setLoadingButton] = React.useState(false);
+  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
 
-const DownloadBankStatementDetailsModal: React.FC<
-  DownloadDocumentsDetailsModalProps
-> = ({ open, onClose, docUrl }) => {
-  const { getToken } = useToken();
-  const [loading, setLoading] = useState(false);
-  const [excelData, setExcelData] = useState<string[][]>([]);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const steps = [
+    "LEAD GENERATION",
+    "LEGAL ENTITY",
+    "KEY MANAGEMENT PERSONNEL",
+    "SECURITY DETAILS",
+    "LOAN DETAILS",
+    "BRE",
+    "REPAYMENT SCHEDULE",
+    "REVIEW & SUBMIT",
+  ];
 
-  // Memoize file extension calculation
-  const fileExtension = useMemo(() => {
-    if (!docUrl?.name) return "";
-    return docUrl.name.split(".").pop()?.toLowerCase() || "";
-  }, [docUrl?.name]);
+  const LEAD_GENERATION = 0;
+  const LEGAL_ENTITY = 1;
+  const KEY_MANAGEMENT_PERSONNEL = 2;
+  const SECURITY_DETAILS = 3;
+  // const LOAN_DETAILS = 3;
+  // const FINNANCIAL_AND_OTHER_DOCS = 4;
+  // const BRE = 5;
+  // const REVIEW_AND_SUBMIT = 6;
 
-  const isPDF = fileExtension === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "bmp"].includes(fileExtension);
-  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
+  const dispatch = useAppDispatch();
 
-  // Memoize the document URL with token
-  const documentUrl = useMemo(() => {
-    if (!docUrl?.url) return "";
-    return `${docUrl.url}?access_token=${getToken()}`;
-  }, [docUrl?.url, getToken]);
+  //Checking the status of the stepper.
+  const { stepStatus } = useAppSelector((state) => state.leadStore);
 
-  // Cleanup function
-  useEffect(() => {
-    return () => {
-      // Abort any ongoing fetch requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  // Load Excel data
-  useEffect(() => {
-    if (!open || !isExcel || !documentUrl) {
-      return;
-    }
-
-    setLoading(true);
-    setExcelData([]);
-
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController();
-
-    fetch(documentUrl, { signal: abortControllerRef.current.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.arrayBuffer();
-      })
-      .then((data) => {
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-        }) as string[][];
-
-        const maxColumns = Math.max(...json.map((row) => row.length));
-        const normalized = json.map((row) => {
-          const newRow = [...row];
-          while (newRow.length < maxColumns) {
-            newRow.push("");
-          }
-          return newRow;
-        });
-
-        setExcelData(normalized);
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          console.error("Error loading Excel file:", err);
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [open, isExcel, documentUrl]);
-
-  // Reset states when modal closes
-  useEffect(() => {
-    if (!open) {
-      setExcelData([]);
-      setPdfError(null);
-      setNumPages(null);
-      setLoading(false);
-    }
-  }, [open]);
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setPdfError(null);
-  };
-
-  const onDocumentLoadError = (error: Error) => {
-    console.error("PDF load error:", error);
-    setPdfError("Failed to load PDF. Please try downloading the file instead.");
-  };
-
-  const handleDialogClose = () => {
-    // Abort any ongoing requests
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    onClose();
-  };
-
-  return (
-    <DialogCss
-      open={open}
-      TransitionComponent={Transition}
-      keepMounted
-      onClose={handleDialogClose}
-      aria-describedby="alert-dialog-slide-description"
-      fullWidth={true}
-      maxWidth={"md"}
-      disableAutoFocus
-      disableEnforceFocus
-      ref={dialogRef}
-    >
-      <DialogTitle
-        sx={{
-          textAlign: "center",
-          background: "linear-gradient(to top, #b2c7ef, #779de2)",
-          padding: "6px 24px",
-          fontSize: "16px",
-          fontWeight: 700,
-        }}
-      >
-        {"Document Preview"} - {docUrl?.name}
-      </DialogTitle>
-      <DialogContent sx={{ px: 0 }}>
-        {isPDF ? (
-          <Box sx={{ textAlign: "center" }}>
-            {pdfError ? (
-              <Typography color="error" sx={{ my: 2 }}>
-                {pdfError}
-              </Typography>
-            ) : (
-              <PdfDocument
-                file={documentUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={onDocumentLoadError}
-                loading={
-                  <Box sx={{ my: 3 }}>
-                    <CircularProgress />
-                    <Typography sx={{ mt: 2 }}>Loading PDF...</Typography>
-                  </Box>
-                }
-                error={
-                  <Typography color="error" sx={{ my: 2 }}>
-                    Failed to load PDF
-                  </Typography>
-                }
-              >
-                <Page 
-                  pageNumber={1} 
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-              </PdfDocument>
-            )}
-            {numPages && (
-              <Typography variant="caption" sx={{ mt: 2, display: "block" }}>
-                Page 1 of {numPages}
-              </Typography>
-            )}
-          </Box>
-        ) : isImage ? (
-          <Box sx={{ textAlign: "center" }}>
-            <img
-              src={documentUrl}
-              alt={String(docUrl?.name)}
-              style={{ maxWidth: "100%", maxHeight: "600px" }}
-              onError={(e) => {
-                console.error("Image load error");
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          </Box>
-        ) : isExcel ? (
-          loading ? (
-            <Box sx={{ textAlign: "center", my: 3 }}>
-              <CircularProgress />
-              <Typography sx={{ mt: 2 }}>Loading Excel data...</Typography>
-            </Box>
-          ) : excelData.length > 0 ? (
-            <Paper
-              elevation={0}
-              style={{
-                marginBottom: "24px",
-                boxShadow: "none",
-                border: "1px solid #1377FF",
-                borderRadius: "6px",
-                maxHeight: "600px",
-                overflow: "auto",
-              }}
-            >
-              <TableContainer>
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {excelData[0]?.map((cell, index) => (
-                        <StyledTableCell key={index}>
-                          <Typography
-                            variant="subtitle2"
-                            display="block"
-                            gutterBottom
-                            sx={{ m: 0, p: 0 }}
-                          >
-                            {cell}
-                          </Typography>
-                        </StyledTableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {excelData.slice(1).map((row, rowIndex) => (
-                      <StyledTableRow key={rowIndex}>
-                        {row.map((cell, index) => (
-                          <StyledTableCell key={index}>
-                            <Typography
-                              variant="body1"
-                              display="block"
-                              gutterBottom
-                              sx={{ m: 0, p: 0 }}
-                            >
-                              {cell}
-                            </Typography>
-                          </StyledTableCell>
-                        ))}
-                      </StyledTableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          ) : (
-            <Typography variant="body1" sx={{ textAlign: "center", my: 3 }}>
-              No data available
-            </Typography>
-          )
-        ) : (
-          <Box sx={{ textAlign: "center", my: 3 }}>
-            <Typography variant="body1" gutterBottom>
-              File preview not supported for this file type.
-            </Typography>
-            <Button
-              variant="contained"
-              href={documentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ mt: 2 }}
-            >
-              Download File
-            </Button>
-          </Box>
-        )}
-      </DialogContent>
-      <DialogActions
-        sx={{ borderTop: "2px solid #334d59", padding: "6px 16px" }}
-      >
-        <Button onClick={handleDialogClose}>Close</Button>
-      </DialogActions>
-    </DialogCss>
-  );
-};
-
-export default React.memo(DownloadBankStatementDetailsModal);
-
-
- import React, { useEffect, useState, useRef, useMemo } from "react";
-import {
-  Modal,
-  Box,
-  Typography,
-  CircularProgress,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Paper,
-  TableContainer,
-  tableCellClasses,
-} from "@mui/material";
-import { styled } from "@mui/material/styles";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import Slide from "@mui/material/Slide";
-import { TransitionProps } from "@mui/material/transitions";
-import { BankStatement } from "../../models/bankStatement";
-import useToken from "../../Features/Authentication/useToken";
-import { Document as PdfDocument, Page, pdfjs } from "react-pdf";
-import * as XLSX from "xlsx";
-
-// CRITICAL FIX: Configure worker only once at module level
-if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-}
-
-interface DownloadDocumentsDetailsModalProps {
-  open: boolean;
-  onClose: () => void;
-  docUrl: BankStatement | null;
-}
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
-
-const DialogCss = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    border: "3px solid #334d59 !important",
-    boxShadow: "8px 10px 20px 5px #334d59",
-  },
-}));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  [`&.${tableCellClasses.head}`]: {
-    backgroundColor: "#E6F4FF",
-    color: "#3B415B",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": {
-      paddingTop: "8px",
-      paddingBottom: "8px",
+  const buttons = [
+    {
+      label: "Save Progress and Close",
+      buttonstyle: "secondary_outline",
+      action: () => console.log("New button clicked"),
     },
-  },
-  [`&.${tableCellClasses.body}`]: {
-    fontSize: 14,
-    color: "#24172E",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": {
-      paddingTop: "6px",
-      paddingBottom: "6px",
-    },
-  },
-}));
+  ];
 
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": {
-    backgroundColor: "#ebeff2",
-  },
-  "&:last-child td, &:last-child th": {
-    border: 0,
-  },
-}));
+  const classes = useStyles();
+  const [activeStep, setActiveStep] = useState(LEAD_GENERATION);
+  const [stepsStatus, setStepsStatus] = useState([
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+  ]);
+  const [skipped, setSkipped] = useState(new Set());
+  const [isChecked, setIsChecked] = useState(false);
+  const formToSubmit = React.useRef<SubmitableForm>(null);
+  const [stateAlert, setStateAlert] = useState(false);
+  const [stateAlertMessage, setStateAlertMessage] = useState("");
+  const [completed] = React.useState<{
+    [k: number]: boolean;
+  }>({});
+  // const [completedState] = useState(false);
+  // const [completedStateActiveStep] = useState(-1);
 
-const DownloadBankStatementDetailsModal: React.FC<
-  DownloadDocumentsDetailsModalProps
-> = ({ open, onClose, docUrl }) => {
-  const { getToken } = useToken();
-  const [loading, setLoading] = useState(false);
-  const [excelData, setExcelData] = useState<string[][]>([]);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // const handleComplete = (activeStep:  any) => {
+  //   if(completedStateActiveStep !== -1 && completedState === true) {
+  //     const newCompleted = completed;
+  //     newCompleted[activeStep] = true;
+  //     setCompleted(newCompleted);
+  //   }
+  // };
 
-  // Memoize file extension calculation
-  const fileExtension = useMemo(() => {
-    if (!docUrl?.name) return "";
-    return docUrl.name.split(".").pop()?.toLowerCase() || "";
-  }, [docUrl?.name]);
+  const [updateLeadStatus] = useUpdateLeadMutation();
 
-  const isPDF = fileExtension === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "bmp"].includes(fileExtension);
-  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
-
-  // Memoize the document URL with token
-  const documentUrl = useMemo(() => {
-    if (!docUrl?.url) return "";
-    return `${docUrl.url}?access_token=${getToken()}`;
-  }, [docUrl?.url, getToken]);
-
-  // Cleanup function
-  useEffect(() => {
-    return () => {
-      // Abort any ongoing fetch requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  // Load Excel data
-  useEffect(() => {
-    if (!open || !isExcel || !documentUrl) {
-      return;
-    }
-
-    setLoading(true);
-    setExcelData([]);
-
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController();
-
-    fetch(documentUrl, { signal: abortControllerRef.current.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.arrayBuffer();
-      })
-      .then((data) => {
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-        }) as string[][];
-
-        const maxColumns = Math.max(...json.map((row) => row.length));
-        const normalized = json.map((row) => {
-          const newRow = [...row];
-          while (newRow.length < maxColumns) {
-            newRow.push("");
-          }
-          return newRow;
-        });
-
-        setExcelData(normalized);
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          console.error("Error loading Excel file:", err);
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [open, isExcel, documentUrl]);
-
-  // Reset states when modal closes
-  useEffect(() => {
-    if (!open) {
-      setExcelData([]);
-      setPdfError(null);
-      setNumPages(null);
-      setLoading(false);
-    }
-  }, [open]);
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setPdfError(null);
-  };
-
-  const onDocumentLoadError = (error: Error) => {
-    console.error("PDF load error:", error);
-    setPdfError("Failed to load PDF. Please try downloading the file instead.");
-  };
-
-  const handleDialogClose = () => {
-    // Abort any ongoing requests
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    onClose();
-  };
-
-  return (
-    <DialogCss
-      open={open}
-      TransitionComponent={Transition}
-      keepMounted
-      onClose={handleDialogClose}
-      aria-describedby="alert-dialog-slide-description"
-      fullWidth={true}
-      maxWidth={"md"}
-      disableAutoFocus
-      disableEnforceFocus
-      ref={dialogRef}
-    >
-      <DialogTitle
-        sx={{
-          textAlign: "center",
-          background: "linear-gradient(to top, #b2c7ef, #779de2)",
-          padding: "6px 24px",
-          fontSize: "16px",
-          fontWeight: 700,
-        }}
-      >
-        {"Document Preview"} - {docUrl?.name}
-      </DialogTitle>
-      <DialogContent sx={{ px: 0 }}>
-        {isPDF ? (
-          <Box sx={{ textAlign: "center" }}>
-            {pdfError ? (
-              <Typography color="error" sx={{ my: 2 }}>
-                {pdfError}
-              </Typography>
-            ) : (
-              <PdfDocument
-                file={documentUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={onDocumentLoadError}
-                loading={
-                  <Box sx={{ my: 3 }}>
-                    <CircularProgress />
-                    <Typography sx={{ mt: 2 }}>Loading PDF...</Typography>
-                  </Box>
-                }
-                error={
-                  <Typography color="error" sx={{ my: 2 }}>
-                    Failed to load PDF
-                  </Typography>
-                }
-              >
-                <Page 
-                  pageNumber={1} 
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-              </PdfDocument>
-            )}
-            {numPages && (
-              <Typography variant="caption" sx={{ mt: 2, display: "block" }}>
-                Page 1 of {numPages}
-              </Typography>
-            )}
-          </Box>
-        ) : isImage ? (
-          <Box sx={{ textAlign: "center" }}>
-            <img
-              src={documentUrl}
-              alt={String(docUrl?.name)}
-              style={{ maxWidth: "100%", maxHeight: "600px" }}
-              onError={(e) => {
-                console.error("Image load error");
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          </Box>
-        ) : isExcel ? (
-          loading ? (
-            <Box sx={{ textAlign: "center", my: 3 }}>
-              <CircularProgress />
-              <Typography sx={{ mt: 2 }}>Loading Excel data...</Typography>
-            </Box>
-          ) : excelData.length > 0 ? (
-            <Paper
-              elevation={0}
-              style={{
-                marginBottom: "24px",
-                boxShadow: "none",
-                border: "1px solid #1377FF",
-                borderRadius: "6px",
-                maxHeight: "600px",
-                overflow: "auto",
-              }}
-            >
-              <TableContainer>
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {excelData[0]?.map((cell, index) => (
-                        <StyledTableCell key={index}>
-                          <Typography
-                            variant="subtitle2"
-                            display="block"
-                            gutterBottom
-                            sx={{ m: 0, p: 0 }}
-                          >
-                            {cell}
-                          </Typography>
-                        </StyledTableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {excelData.slice(1).map((row, rowIndex) => (
-                      <StyledTableRow key={rowIndex}>
-                        {row.map((cell, index) => (
-                          <StyledTableCell key={index}>
-                            <Typography
-                              variant="body1"
-                              display="block"
-                              gutterBottom
-                              sx={{ m: 0, p: 0 }}
-                            >
-                              {cell}
-                            </Typography>
-                          </StyledTableCell>
-                        ))}
-                      </StyledTableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          ) : (
-            <Typography variant="body1" sx={{ textAlign: "center", my: 3 }}>
-              No data available
-            </Typography>
-          )
-        ) : (
-          <Box sx={{ textAlign: "center", my: 3 }}>
-            <Typography variant="body1" gutterBottom>
-              File preview not supported for this file type.
-            </Typography>
-            <Button
-              variant="contained"
-              href={documentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ mt: 2 }}
-            >
-              Download File
-            </Button>
-          </Box>
-        )}
-      </DialogContent>
-      <DialogActions
-        sx={{ borderTop: "2px solid #334d59", padding: "6px 16px" }}
-      >
-        <Button onClick={handleDialogClose}>Close</Button>
-      </DialogActions>
-    </DialogCss>
-  );
-};
-
-export default DownloadBankStatementDetailsModal;           
-
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useState, useRef, useMemo } from "react";
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Slide,
-  Button,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Paper,
-  TableContainer,
-  tableCellClasses,
-} from "@mui/material";
-import { styled } from "@mui/material/styles";
-import { TransitionProps } from "@mui/material/transitions";
-import { BankStatement } from "../../models/bankStatement";
-import useToken from "../../Features/Authentication/useToken";
-import { Document as PdfDocument, Page, pdfjs } from "react-pdf";
-import * as XLSX from "xlsx";
-
-// Set the workerSrc to a local file
-pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
-
-interface DownloadDocumentsDetailsModalProps {
-  open: boolean;
-  onClose: () => void;
-  docUrl: BankStatement | null;
-}
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & { children: React.ReactElement<any, any> },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  [`&.${tableCellClasses.head}`]: {
-    backgroundColor: "#E6F4FF",
-    color: "#3B415B",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": { paddingTop: "8px", paddingBottom: "8px" },
-    "@media (min-width: 768px) and (max-width: 1024px)": { paddingTop: "8px", paddingBottom: "8px" },
-    "@media (min-width: 1025px) and (max-width: 1440px)": { paddingTop: "8px", paddingBottom: "8px" },
-    "@media (min-width: 1441px)": { paddingTop: "10px", paddingBottom: "10px" },
-  },
-  [`&.${tableCellClasses.body}`]: {
-    fontSize: 14,
-    color: "#24172E",
-    borderBottomWidth: 0,
-    "@media (max-width: 767px)": { paddingTop: "6px", paddingBottom: "6px" },
-    "@media (min-width: 768px) and (max-width: 1024px)": { paddingTop: "6px", paddingBottom: "6px" },
-    "@media (min-width: 1025px) and (max-width: 1440px)": { paddingTop: "8px", paddingBottom: "8px" },
-    "@media (min-width: 1441px)": { paddingTop: "10px", paddingBottom: "10px" },
-  },
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": { backgroundColor: "#ebeff2" },
-  "&:last-child td, &:last-child th": { border: 0 },
-}));
-
-const DialogCss = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    border: "3px solid #334d59 !important",
-    boxShadow: "8px 10px 20px 5px #334d59",
-  },
-}));
-
-const DownloadBankStatementDetailsModal: React.FC<
-  DownloadDocumentsDetailsModalProps
-> = ({ open, onClose, docUrl }) => {
-  const { getToken } = useToken();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [excelData, setExcelData] = useState<string[][]>([]);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  const stableDocUrl = useMemo(() => docUrl, [docUrl?.url, docUrl?.name]);
-
-  const getFileExtension = (filename: string) => {
-    return filename.split(".").pop()?.toLowerCase() || "";
-  };
-
-  const fileExtension = getFileExtension(String(stableDocUrl?.name || ""));
-  const isPDF = fileExtension === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "bmp"].includes(fileExtension);
-  const isExcel = ["xls", "xlsx", "csv"].includes(fileExtension);
-
-  useEffect(() => {
-    if (stableDocUrl && isExcel) {
-      setLoading(true);
-      setError(null);
-      console.log("Fetching Excel file:", stableDocUrl.url);
-      fetch(`${stableDocUrl?.url}?access_token=${getToken()}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("Failed to fetch Excel file");
-          return res.arrayBuffer();
-        })
-        .then((data) => {
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const json = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
-
-          const maxColumns = Math.max(...json.map((row) => row.length));
-          const normalized = json.map((row) => {
-            const newRow = [...row];
-            while (newRow.length < maxColumns) {
-              newRow.push("");
-            }
-            return newRow;
-          });
-
-          setExcelData(normalized);
-        })
-        .catch((err) => {
-          setError(err.message);
-          console.error("Error loading Excel file:", err);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-  }, [stableDocUrl, getToken]);
-
-  useEffect(() => {
-    if (dialogRef.current) {
-      dialogRef.current.blur();
-    }
-  }, [open]);
-
-  return (
-    <DialogCss
-      open={open}
-      TransitionComponent={Transition}
-      keepMounted
-      onClose={onClose}
-      aria-describedby="alert-dialog-slide-description"
-      fullWidth={true}
-      maxWidth={"md"}
-      disableAutoFocus
-      disableEnforceFocus
-      ref={dialogRef}
-    >
-      <DialogTitle
-        sx={{
-          textAlign: "center",
-          background: "linear-gradient(to top, #b2c7ef, #779de2)",
-          padding: "6px 24px",
-          fontSize: "16px",
-          fontWeight: 700,
-        }}
-      >
-        Document Preview - {stableDocUrl?.name}
-      </DialogTitle>
-      <DialogContent sx={{ px: 0 }}>
-        {error && (
-          <Typography variant="body1" sx={{ textAlign: "center", my: 3, color: "red" }}>
-            {error}
-          </Typography>
-        )}
-        {isPDF ? (
-          <PdfDocument
-            file={`${stableDocUrl?.url}/view?access_token=${getToken()}`}
-            onLoadError={(error) => {
-              console.error("PDF load error:", error);
-              setError("Failed to load PDF");
-            }}
-            onLoadSuccess={(pdf) => {
-              console.log("Loaded PDF:", pdf.numPages);
-              setLoading(false);
-            }}
-          >
-            <Page pageNumber={1} />
-          </PdfDocument>
-        ) : isImage ? (
-          <img
-            src={`${stableDocUrl?.url}?access_token=${getToken()}`}
-            alt={String(stableDocUrl?.name)}
-            style={{ maxWidth: "100%", maxHeight: "600px" }}
-          />
-        ) : isExcel ? (
-          loading ? (
-            <Typography variant="body1" sx={{ textAlign: "center", my: 3 }}>
-              Loading Excel data...
-            </Typography>
-          ) : (
-            <Paper
-              elevation={0}
-              style={{
-                marginBottom: "24px",
-                boxShadow: "none",
-                border: "1px solid #1377FF",
-                borderRadius: "6px",
-              }}
-            >
-              <TableContainer>
-                <Table id="breparameters_table">
-                  <TableHead>
-                    <TableRow>
-                      {excelData[0]?.map((cell, index) => (
-                        <StyledTableCell key={index}>
-                          <Typography
-                            variant="subtitle2"
-                            display="block"
-                            gutterBottom
-                            sx={{ m: 0, p: 0 }}
-                          >
-                            {cell}
-                          </Typography>
-                        </StyledTableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {excelData.slice(1).map((row, rowIndex) => (
-                      <StyledTableRow key={rowIndex}>
-                        {row.map((cell, index) => (
-                          <StyledTableCell key={index}>
-                            <Typography
-                              variant="body1"
-                              display="block"
-                              gutterBottom
-                              sx={{ m: 0, p: 0 }}
-                            >
-                              {cell}
-                            </Typography>
-                          </StyledTableCell>
-                        ))}
-                      </StyledTableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          )
-        ) : (
-          <div>
-            <p>File preview not supported.</p>
-            <a
-              href={`${stableDocUrl?.url}?access_token=${getToken()}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download File
-            </a>
-          </div>
-        )}
-      </DialogContent>
-      <DialogActions
-        sx={{ borderTop: "2px solid #334d59", padding: "6px 16px" }}
-      >
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </DialogCss>
-  );
-};
-
-export default DownloadBankStatementDetailsModal;
-
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Button,
-  Typography,
-  Container,
-  Paper,
-  Stack,
-  Card,
-  CardContent,
-  Divider,
-  Chip,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { QrCode, ArrowBack, Download, Share } from '@mui/icons-material';
-
-interface QrDisplayState {
-  qrImageData: string | Blob;
-  eventData: {
-    eventName: string;
-    eventId: string;
-  };
-}
-
-const QrDisplayPage: React.FC = () => {
+  //On new lead creation the created Lead ID is stored
+  //in the redux store to be used by all components.
+  const { id: leadId } = useParams();
+  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
   const navigate = useNavigate();
-  const location = useLocation();
-  const [qrImageUrl, setQrImageUrl] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const state = location.state as QrDisplayState;
-
+  const { getRoles } = useToken();
+  const setLeadIdRef = useCallback(
+    (id: number) => dispatch(setLeadId(id)),
+    [dispatch]
+  );
   useEffect(() => {
-    if (!state || !state.qrImageData || !state.eventData) {
-      setError('No QR code data found. Please generate a new QR code.');
-      setLoading(false);
-      return;
+    if (leadId) setLeadIdRef(Number(leadId));
+    if(leadDataFetch !== undefined){
+      if(leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")){
+        navigate("/restricted");
+      }
     }
+  }, [leadId, setLeadIdRef, leadDataFetch]);
 
-    const processImageData = async () => {
-      try {
-        if (typeof state.qrImageData === 'string') {
-          // Handle base64 string
-          if (state.qrImageData.startsWith('data:image')) {
-            setQrImageUrl(state.qrImageData);
+  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
+
+  const loanoriginationstep = [
+    Lead,
+    LegalEntity,
+    KmpContainer,
+    SecurityDetailsContainer,
+    LoanDetails,
+    Bre,
+    RepaymentSchedule,
+    ReviewAndSubmit,
+  ];
+
+  // const isStepOptional = (step: any) => {
+  //   if (step === LEGAL_ENTITY) {
+  //     return 1;
+  //   } else if (step === KEY_MANAGEMENT_PERSONNEL) {
+  //     return 1;
+  //   }
+  // };
+
+  const isSaveApplicable = (step: any) => {
+    if (step === KEY_MANAGEMENT_PERSONNEL) {
+      return 1;
+    } else if (step === SECURITY_DETAILS) {
+      return 1;
+    }
+  };
+
+  const isStepSkipped = (step: any) => {
+    return skipped.has(step);
+  };
+
+  const handleSubmitLast = () => {    
+    setLoadingButton(true);
+
+    if (skipped.size > 0) {
+      setStateAlert(true);
+      setStateAlertMessage("Please complete all the steps");
+    } else {
+      if (Number(createdLeadId))
+        updateLeadStatus({
+          id: Number(createdLeadId),
+          leadStatus: "IN_PROCESS",
+          sidbiStatus: "ORIGINATION",
+        }).unwrap().then((data) => {
+          if(data.leadStatus === 'IN_PROCESS') {
+            let newSkipped = skipped;
+            if (isStepSkipped(activeStep)) {
+              newSkipped = new Set(newSkipped.values());
+              newSkipped.delete(activeStep);
+            }
+
+            setActiveStep((prevActiveStep) => prevActiveStep + 1);
+            setSkipped(newSkipped);
+            scrollToTop(); // Scroll to top when Constitution value changes
           } else {
-            setQrImageUrl(`data:image/png;base64,${state.qrImageData}`);
+            alert("Unknown error, please contact support.");
           }
-        } else if (state.qrImageData instanceof Blob) {
-          // Convert Blob to base64
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-              setQrImageUrl(reader.result);
-            } else {
-              setError('Failed to convert QR code image to base64.');
-            }
-            setLoading(false);
-          };
-          reader.onerror = () => {
-            setError('Error reading QR code image.');
-            setLoading(false);
-          };
-          reader.readAsDataURL(state.qrImageData);
-        } else {
-          setError('Unsupported QR code data format.');
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Error processing QR image:', err);
-        setError('Failed to display QR code image.');
-        setLoading(false);
-      }
-    };
-
-    processImageData();
-  }, [state]);
-
-  const handleBack = () => {
-    navigate(-1);
-  };
-
-  const handleBackToDashboard = () => {
-    navigate('/');
-  };
-
-  const handleDownloadQr = () => {
-    if (!qrImageUrl) return;
-    const link = document.createElement('a');
-    link.href = qrImageUrl; // Use the base64 data URL
-    link.download = `${state.eventData.eventName}-qr-code.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleShareQr = async () => {
-    if (!qrImageUrl || !navigator.share || !navigator.canShare()) {
-      handleDownloadQr(); // Fallback to download if sharing is not supported
-      return;
-    }
-
-    try {
-      // Convert base64 to Blob for sharing
-      const base64String = qrImageUrl.split(',')[1]; // Extract base64 data
-      const byteCharacters = atob(base64String);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/png' });
-      const file = new File([blob], `${state.eventData.eventName}-qr.png`, {
-        type: 'image/png',
-      });
-
-      await navigator.share({
-        title: `QR Code for ${state.eventData.eventName}`,
-        text: `Scan this QR code to join the event: ${state.eventData.eventName}`,
-        files: [file],
-      });
-    } catch (err) {
-      console.error('Error sharing:', err);
-      handleDownloadQr(); // Fallback to download on error
+          
+        });
     }
   };
 
-  const handleScanComplete = () => {
-    navigate('/create-user-event', {
-      state: { eventData: state.eventData },
-    });
+  const scrollToTop = () => {
+    const customScrollDiv = document.querySelector(".custom_scroll");
+    if (customScrollDiv) {
+      customScrollDiv.scrollTo({
+        top: 0,
+        behavior: "smooth", // Optional smooth scrolling behavior
+      });
+    }
+  };
+  const [nextProceed, setNextProceed] = useState(false);
+  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
+  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
+    parentId: Number(leadId) || 0,
+    requestValue: {},
   };
 
-  if (error) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 2,
-        }}
-      >
-        <Container maxWidth="sm">
-          <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/create-event')}
-              fullWidth
-            >
-              Create New Event
-            </Button>
-          </Paper>
-        </Container>
-      </Box>
-    );
-  }
-
-  return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 2,
-      }}
-    >
-      <Container maxWidth="md">
-        <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-          <Stack spacing={3}>
-            <Box textAlign="center">
-              <Typography variant="h4" color="primary" gutterBottom>
-                <QrCode sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Event QR Code
-              </Typography>
-              <Typography variant="subtitle1" color="text.secondary">
-                Share this QR code with attendees to join your event
-              </Typography>
-            </Box>
-
-            <Card variant="outlined">
-              <CardContent>
-                <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-                  <Typography variant="h6" color="primary">
-                    Event Details
-                  </Typography>
-                  <Chip label="Active" color="success" size="small" />
-                </Stack>
-                <Divider sx={{ mb: 2 }} />
-                <Stack spacing={1}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Event Name:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {state?.eventData?.eventName}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Event ID:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {state?.eventData?.eventId}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-
-            <Card variant="outlined">
-              <CardContent>
-                <Box textAlign="center">
-                  {loading ? (
-                    <Stack spacing={2} alignItems="center" py={4}>
-                      <CircularProgress />
-                      <Typography>Loading QR Code...</Typography>
-                    </Stack>
-                  ) : (
-                    <Stack spacing={2} alignItems="center">
-                      <img
-                        src={qrImageUrl}
-                        alt="Event QR Code"
-                        style={{
-                          maxWidth: '100%',
-                          maxHeight: '300px',
-                          border: '1px solid #e0e0e0',
-                          borderRadius: '8px',
-                          padding: '16px',
-                          backgroundColor: 'white',
-                        }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        Scan this code with your mobile device to join the event
-                      </Typography>
-                    </Stack>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                variant="outlined"
-                startIcon={<Download />}
-                onClick={handleDownloadQr}
-                disabled={loading || !qrImageUrl}
-              >
-                Download QR
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<Share />}
-                onClick={handleShareQr}
-                disabled={loading || !qrImageUrl}
-              >
-                Share QR
-              </Button>
-              <Button
-                variant="contained"
-                color="success"
-                onClick={handleScanComplete}
-                disabled={loading}
-                sx={{ flexGrow: 1 }}
-              >
-                Create User Event
-              </Button>
-            </Stack>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                variant="outlined"
-                startIcon={<ArrowBack />}
-                onClick={handleBack}
-                fullWidth
-              >
-                Back
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleBackToDashboard}
-                fullWidth
-              >
-                Back to Dashboard
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-      </Container>
-    </Box>
-  );
-};
-
-export default QrDisplayPage;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Button,
-  Typography,
-  Container,
-  Paper,
-  Stack,
-  Card,
-  CardContent,
-  Divider,
-  Chip,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { QrCode, ArrowBack, Download, Share } from '@mui/icons-material';
-
-interface QrDisplayState {
-  qrImageData: string | Blob;
-  eventData: {
-    eventName: string;
-    eventId: string;
-  };
-}
-
-const QrDisplayPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [qrImageUrl, setQrImageUrl] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const state = location.state as QrDisplayState;
-
+  const { data: overall } = useListRpsOverallQuery(rpsInput);
+  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
   useEffect(() => {
-    if (!state || !state.qrImageData || !state.eventData) {
-      setError('No QR code data found. Please generate a new QR code.');
-      setLoading(false);
-      return;
+    if (
+      activeStep === 5 &&
+      ((Array.isArray(overall) && overall.length === 0) ||
+       (Array.isArray(sidbi) && sidbi.length === 0))
+    ) {
+      setNextProceed(true);
+    } if(
+      activeStep === 5 &&
+      ((Array.isArray(overall) && overall.length > 0) ||
+       (Array.isArray(sidbi) && sidbi.length > 0))
+    ){
+      setNextRPSDataProceed(true);
+      
+			const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
+			const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
+			// const repaymentScheduleTableUploadDiv = document.querySelector('.repaymentScheduleTable_upload_div');
+			const stepperNext = document.querySelector('.stepper_next');
+
+			// setIsHeading("Repayment Schedule");
+			// setIsSubHeading(true);
+			if (repaymentScheduleTableParametersDiv) {
+			repaymentScheduleTableParametersDiv.classList.remove('d-none');
+			}
+			if (stepperConfirmRepaymentScheduleTable) {
+			stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
+			}
+    } else {
+      setNextProceed(false);
+    }
+  }, [activeStep, overall, sidbi]);
+  console.log(nextProceed);
+
+  const handleNext = async () => {    
+    setLoadingButtonSaveNext(true);
+
+    let newSkipped = skipped;
+    console.log(activeStep);
+    if (isStepSkipped(activeStep)) {
+      newSkipped = new Set(newSkipped.values());
+      newSkipped.delete(activeStep);
     }
 
-    try {
-      if (typeof state.qrImageData === 'string') {
-        if (state.qrImageData.startsWith('data:image')) {
-          setQrImageUrl(state.qrImageData);
-        } else {
-          setQrImageUrl(`data:image/png;base64,${state.qrImageData}`);
-        }
-      } else if (state.qrImageData instanceof Blob) {
-        const url = URL.createObjectURL(state.qrImageData);
-        setQrImageUrl(url);
-        return () => URL.revokeObjectURL(url);
+    
+
+    if (formToSubmit && formToSubmit.current) {
+      let isValidForm = formToSubmit.current && await formToSubmit.current.isValid();
+      if(isValidForm) {
+        console.log("Calling Submit in next")
+        await formToSubmit.current?.submit();
+        console.log("Submitted in next")
+        let success = await formToSubmit.current?.isValid(true);
+        console.log("is Valid in form submit", success)
+        // if(activeStep === 1){
+  
+        // } else {
+          // let success = await formToSubmit.current?.submit();
+  
+          if (success) {
+            setActiveStep((prevActiveStep) => prevActiveStep + 1);
+            setSkipped(newSkipped);
+            dispatch(
+              updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
+            );
+          }
+  
+          scrollToTop(); // Scroll to top on new step display
+  
+          // Update steps_status array
+          setStepsStatus((prevStepsStatus) => {
+            const newStepsStatus = [...prevStepsStatus];
+            newStepsStatus[activeStep] = "1";
+            return newStepsStatus;
+          });
       } else {
-        const blob = new Blob([state.qrImageData], { type: 'image/png' });
-        const url = URL.createObjectURL(blob);
-        setQrImageUrl(url);
-        return () => URL.revokeObjectURL(url);
+        scrollToTop(); // Scroll to top on new step display
       }
-    } catch (err) {
-      console.error('Error processing QR image:', err);
-      setError('Failed to display QR code image.');
-    } finally {
-      setLoading(false);
+      // }
+      setLoadingButtonSaveNext(false);
+    } else {
+      console.error("There is no form in the current page to submit.");
+
+      //For debugging
+      setActiveStep((prevActiveStep) => prevActiveStep + 1);
+      scrollToTop(); // Scroll to top on new step display
+      setSkipped(newSkipped);
+
+      scrollToTop(); // Scroll to top on new step display
+      
+      // Update steps_status array
+      setStepsStatus((prevStepsStatus) => {
+        const newStepsStatus = [...prevStepsStatus];
+        newStepsStatus[activeStep] = "1";
+        return newStepsStatus;
+      });
+      setLoadingButtonSaveNext(false);
     }
-  }, [state]);
-
-  const handleBack = () => {
-    navigate(-1);
   };
 
-  const handleBackToDashboard = () => {
-    navigate('/');
+  const handleNextNonLinear = async (step: any) => {
+    setActiveStep(step);
+
+		const breParametersDiv = document.querySelector('.bre_parameters_div');
+		const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
+		const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
+		const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
+		const stepperNext = document.querySelector('.stepper_next');
+
+		if (breParametersDiv) {
+			breParametersDiv.classList.add('d-none');
+		}
+		if (stepperConfirmBre) {
+			stepperConfirmBre.classList.add('d-none');
+		}
+		if (repaymentScheduleTableParametersDiv) {
+			repaymentScheduleTableParametersDiv.classList.add('d-none');
+		}
+		if (stepperConfirmRepaymentScheduleTable) {
+			stepperConfirmRepaymentScheduleTable.classList.add('d-none');
+		}
+		if (stepperNext) {
+			stepperNext.classList.remove('d-none');
+		}
   };
 
-  const handleDownloadQr = () => {
-    if (!qrImageUrl) return;
-    const link = document.createElement('a');
-    link.href = qrImageUrl;
-    link.download = `${state.eventData.eventName}-qr-code.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const handleSave = async () => {
+    setLoadingButton(true);
 
-  const handleShareQr = async () => {
-    if (navigator.share && navigator.canShare()) {
-      try {
-        const response = await fetch(qrImageUrl);
-        const blob = await response.blob();
-        const file = new File([blob], `${state.eventData.eventName}-qr.png`, {
-          type: 'image/png',
-        });
+    let newSkipped = skipped;
+    if (isStepSkipped(activeStep)) {
+      newSkipped = new Set(newSkipped.values());
+      newSkipped.delete(activeStep);
+    }
 
-        await navigator.share({
-          title: `QR Code for ${state.eventData.eventName}`,
-          text: `Scan this QR code to join the event: ${state.eventData.eventName}`,
-          files: [file],
-        });
-      } catch (err) {
-        console.error('Error sharing:', err);
-        handleDownloadQr();
+    if (formToSubmit && formToSubmit.current) {
+      let success = await formToSubmit.current?.submit();
+
+      if (success) {
+        // setActiveStep((prevActiveStep) => prevActiveStep + 1);
+        scrollToTop(); // Scroll to top on new step display
+        setSkipped(newSkipped);
+        dispatch(
+          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS, })
+        );
+        setLoadingButton(false);
       }
     } else {
-      handleDownloadQr();
+      console.error("There is no form in the current page to submit.");
+
+      //For debugging
+      // setActiveStep((prevActiveStep) => prevActiveStep + 1);
+      scrollToTop(); // Scroll to top on new step display
+      setSkipped(newSkipped);
+      setLoadingButton(false);
     }
+
+    // Update steps_status array
+    setStepsStatus((prevStepsStatus) => {
+      const newStepsStatus = [...prevStepsStatus];
+      newStepsStatus[activeStep] = "1";
+      return newStepsStatus;
+    });
+    setLoadingButton(false);
+    // handleNext();
   };
 
-  // const handleScanComplete = () => {
-  //   navigate('/qr-scan-success', {
-  //     state: { eventData: state.eventData }
+  const handleBack = () => {
+    setLoadingButton(true);
+    setActiveStep((prevActiveStep) => prevActiveStep - 1);
+    setLoadingButton(false);
+  };
+
+  // const handleSkip = () => {
+  //   if (!isStepOptional(activeStep)) {
+  //     // You probably want to guard against something like this,
+  //     // it should never occur unless someone's actively trying to break something.
+  //     throw new Error("You can't skip a step that isn't optional.");
+  //   }
+
+  //   setSkipped((prevSkipped) => {
+  //     const newSkipped = new Set(prevSkipped.values());
+  //     newSkipped.add(activeStep);
+  //     return newSkipped;
+  //   });
+
+  //   // Update steps_status array
+  //   setStepsStatus((prevStepsStatus) => {
+  //     const newStepsStatus = [...prevStepsStatus];
+  //     newStepsStatus[activeStep] = "2";
+  //     return newStepsStatus;
+  //   });
+
+  //   dispatch(updateStepStatus({ step: activeStep, status: StepStatus.SKIP }));
+
+  //   setActiveStep((prevActiveStep) => prevActiveStep + 1);
+  //   scrollToTop(); // Scroll to top when Constitution value changes
+  // };
+
+  // const handleNextStep = () => {
+  //   setActiveStep((prevActiveStep) => prevActiveStep + 1);
+  //   scrollToTop(); // Scroll to top when Constitution value changes
+  //   // Update steps_status array
+  //   setStepsStatus((prevStepsStatus) => {
+  //     const newStepsStatus = [...prevStepsStatus];
+  //     newStepsStatus[activeStep] = "1";
+  //     return newStepsStatus;
   //   });
   // };
 
-  const handleScanComplete = () => {
-    navigate('/create-user-event', {
-      state: { eventData: state.eventData }
-    });
-  };
-
-
-  
-
-  if (error) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 2,
-        }}
+  const breadcrumbs = [
+    <Link key="1" color="#A9A9A9" to="/">
+      Loan Origination
+    </Link>,
+    <Link key="1" color="#A9A9A9" to="/lead">
+      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead" }
+    </Link>,
+  ];
+  // const stepsSample = [
+  //   {
+  //     name: "Step Name",
+  //     description: "Short step description",
+  //     active: false,
+  //     completed: false,
+  //   },
+  // ];
+  return (
+    <>
+      <Snackbar
+        open={stateAlert}
+        autoHideDuration={3000}
+        onClose={() => setStateAlert(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
-        <Container maxWidth="sm">
-          <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/create-event')}
-              fullWidth
-            >
-              Create New Event
-            </Button>
-          </Paper>
-        </Container>
-      </Box>
-    );
-  }
-
-  return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(to right, #e3f2fd, #fce4ec)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 2,
-      }}
-    >
-      <Container maxWidth="md">
-        <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-          <Stack spacing={3}>
-            <Box textAlign="center">
-              <Typography variant="h4" color="primary" gutterBottom>
-                <QrCode sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Event QR Code
-              </Typography>
-              <Typography variant="subtitle1" color="text.secondary">
-                Share this QR code with attendees to join your event
-              </Typography>
-            </Box>
-
-            <Card variant="outlined">
-              <CardContent>
-                <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-                  <Typography variant="h6" color="primary">
-                    Event Details
-                  </Typography>
-                  <Chip label="Active" color="success" size="small" />
-                </Stack>
-                <Divider sx={{ mb: 2 }} />
-                <Stack spacing={1}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Event Name:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {state?.eventData?.eventName}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Event ID:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {state?.eventData?.eventId}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-
-            <Card variant="outlined">
-              <CardContent>
-                <Box textAlign="center">
-                  {loading ? (
-                    <Stack spacing={2} alignItems="center" py={4}>
-                      <CircularProgress />
-                      <Typography>Loading QR Code...</Typography>
-                    </Stack>
-                  ) : (
-                    <Stack spacing={2} alignItems="center">
-                      <img
-                        src={qrImageUrl}
-                        alt="Event QR Code"
-                        style={{
-                          maxWidth: '100%',
-                          maxHeight: '300px',
-                          border: '1px solid #e0e0e0',
-                          borderRadius: '8px',
-                          padding: '16px',
-                          backgroundColor: 'white',
-                        }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        Scan this code with your mobile device to join the event
-                      </Typography>
-                    </Stack>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                variant="outlined"
-                startIcon={<Download />}
-                onClick={handleDownloadQr}
-                disabled={loading || !qrImageUrl}
-              >
-                Download QR
-              </Button>
-              
-              <Button
-                variant="outlined"
-                startIcon={<Share />}
-                onClick={handleShareQr}
-                disabled={loading || !qrImageUrl}
-              >
-                Share QR
-              </Button>
-              
-              <Button
-                variant="contained"
-                color="success"
-                onClick={handleScanComplete}
-                disabled={loading}
-                sx={{ flexGrow: 1 }}
-              >
-                Create User Event
-              </Button>
-            </Stack>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                variant="outlined"
-                startIcon={<ArrowBack />}
-                onClick={handleBack}
-                fullWidth
-              >
-                Back
-              </Button>
-              
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleBackToDashboard}
-                fullWidth
-              >
-                Back to Dashboard
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-      </Container>
-    </Box>
-  );
-};
-
-export default QrDisplayPage;
-
-import React, { useEffect, useState } from 'react';
-import {
-  Box, TextField, Button, Typography, Container, Paper, Stack,
-  CircularProgress, Alert, RadioGroup, FormControlLabel, Radio,
-  FormControl, FormLabel, Select, MenuItem, IconButton,
-  Modal, Dialog, DialogTitle, DialogContent, DialogActions
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import { useNavigate } from 'react-router-dom';
-import QrApi from 'store/services/qrApi';
-import MemberApi from 'store/services/memberApi';
-
-const CreateQR = () => {
-  const [formData, setFormData] = useState({
-    eventName: '',
-    eventId: '',
-    selectedMember: '',
-    eventOemflg: ''
-  });
-  const [memberList, setMemberList] = useState<any>([]);
-  const [selectionType, setSelectionType] = useState<'eventId' | 'member'>('eventId');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [newOemData, setNewOemData] = useState({
-    oemCode: '',
-    oemNamec: ''
-  });
-  const navigate = useNavigate();
-
-  const sanitizeInput = (value: string): string => {
-    return value.replace(/<[^>]+>|[<>{}?]/g, '');
-  };
-
-  const handleChange:any = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name as string]: typeof value === 'string' ? sanitizeInput(value) : value }));
-    if (error) setError(null);
-  };
-
-  const handleNewOemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewOemData((prev) => ({ ...prev, [name as string]: sanitizeInput(value) }));
-  };
-
-  const validateForm = () => {
-    if (!formData.eventName.trim()) {
-      setError('Event Name is required');
-      return false;
-    }
-    if (formData.eventName.length < 3) {
-      setError('Event Name must be at least 3 characters long');
-      return false;
-    }
-    if (selectionType === 'eventId' && !formData.eventId.trim()) {
-      setError('Event ID is required');
-      return false;
-    }
-    if (selectionType === 'member' && !formData.selectedMember.trim()) {
-      setError('Please select a member');
-      return false;
-    }
-    return true;
-  };
-
-  const validateNewOemForm = () => {
-    if (!newOemData.oemCode.trim()) {
-      setError('OEM Code is required');
-      return false;
-    }
-    if (!newOemData.oemNamec.trim()) {
-      setError('OEM Name is required');
-      return false;
-    }
-    return true;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const payload = {
-        eventName: formData.eventName,
-        eventId: selectionType === 'eventId' ? formData.eventId : formData.selectedMember,
-        eventOemflg: selectionType,
-        oemName: formData.selectedMember || "",
-      };
-      const response = await QrApi.generateQr(payload);
-      navigate('/qr-display', {
-        state: {
-          qrImageData: response?.imageData,
-          eventData: payload,
-        },
-      });
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to generate QR code.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddOemSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateNewOemForm()) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await MemberApi.saveOemMasterDetail(newOemData);
-      setModalOpen(false);
-      setNewOemData({ oemCode: '', oemNamec: '' });
-      await getOemMasterDetail(); 
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to add OEM details.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    getOemMasterDetail();
-  }, []);
-
-  const getOemMasterDetail = async () => {
-    try {
-      const response: any = await MemberApi.getEventDetails();
-      console.log("response", response);
-      setMemberList(response.result);
-    } catch (err) {
-      console.log("err", err);
-      setError('Failed to fetch member list');
-    }
-  };
-
-  const handleBackToDashboard = () => {
-    navigate('/');
-  };
-
-  const handleModalClose = () => {
-    setModalOpen(false);
-    setNewOemData({ oemCode: '', oemNamec: '' });
-    setError(null);
-  };
-
-  return (
-    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to right, #e3f2fd, #fce4ec)', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
-      <Container maxWidth="sm">
-        <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-          <Typography variant="h4" align="center" gutterBottom color="primary">
-            Create QR
-          </Typography>
-          {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-          <form onSubmit={handleSubmit}>
-            <TextField
-              label="Event Name"
-              name="eventName"
-              value={formData.eventName}
-              onChange={handleChange}
-              variant="outlined"
-              fullWidth
-              required
-              disabled={loading}
-              sx={{ mb: 3 }}
-              helperText="Enter a descriptive name for your event"
-            />
-            <FormControl component="fieldset" sx={{ mb: 3 }}>
-              <FormLabel component="legend">Choose Identifier</FormLabel>
-              <RadioGroup
-                row
-                value={selectionType}
-                onChange={(e) => setSelectionType(e.target.value as 'eventId' | 'member')}
-              >
-                <FormControlLabel value="eventId" control={<Radio />} label="Event ID" />
-                <FormControlLabel value="member" control={<Radio />} label="Member" />
-              </RadioGroup>
-            </FormControl>
-            {selectionType === 'eventId' ? (
-              <TextField
-                label="Event ID"
-                name="eventId"
-                value={formData.eventId}
-                onChange={handleChange}
-                variant="outlined"
-                fullWidth
-                required
-                disabled={loading}
-                sx={{ mb: 3 }}
-                helperText="Enter a unique identifier for your event"
-              />
-            ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                <FormControl fullWidth>
-                  <Select
-                    name="selectedMember"
-                    value={formData.selectedMember}
-                    onChange={handleChange}
-                    disabled={loading}
-                    displayEmpty
-                  >
-                    <MenuItem value="" disabled>Select a member</MenuItem>
-                    {memberList?.map((member: any) => (
-                      <MenuItem key={member?.oemCode} value={member?.oemCode}>{member?.oemNamec}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <IconButton
-                  color="primary"
-                  onClick={() => setModalOpen(true)}
-                  disabled={loading}
-                >
-                  <AddIcon />
-                </IconButton>
-              </Box>
-            )}
-            <Stack direction="row" spacing={2}>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={loading}
-                startIcon={loading ? <CircularProgress size={20} /> : null}
-              >
-                {loading ? 'Generating QR...' : 'Generate QR Code'}
-              </Button>
-              <Button
-                variant="outlined"
-                color="secondary"
-                fullWidth
-                onClick={handleBackToDashboard}
-                disabled={loading}
-              >
-                Back to Dashboard
-              </Button>
-            </Stack>
-          </form>
-        </Paper>
-      </Container>
-
-      <Dialog open={modalOpen} onClose={handleModalClose}>
-        <DialogTitle>Add New OEM</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="OEM Code"
-            name="oemCode"
-            value={newOemData.oemCode}
-            onChange={handleNewOemChange}
-            variant="outlined"
-            fullWidth
-            required
-            sx={{ mb: 2, mt: 1 }}
-          />
-          <TextField
-            label="OEM Name"
-            name="oemNamec"
-            value={newOemData.oemNamec}
-            onChange={handleNewOemChange}
-            variant="outlined"
-            fullWidth
-            required
-            sx={{ mb: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleModalClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleAddOemSubmit}
-            variant="contained"
-            color="primary"
-            disabled={loading}
-            startIcon={loading ? <CircularProgress size={20} /> : null}
+        <AlertError
+          icon={false}
+          severity="error"
+          onClose={() => console.log("close")}
+        >
+          {stateAlertMessage}
+        </AlertError>
+      </Snackbar>
+      {activeStep === steps.length ? (
+        <React.Fragment>
+          <Grid
+            item
+            xs={12}
+            sm={8}
+            md={6}
+            component={Paper}
+            elevation={6}
+            square
+            className={classes.root}
+            spacing={0}
+            style={{ alignItems: "center", justifyContent: "center" }}
           >
-            {loading ? 'Adding...' : 'Add OEM'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+            <Box className="login_formBox">
+              <SuccessAnimation />
+              <Typography
+                variant="h5"
+                gutterBottom
+                style={{
+                  marginBottom: "0px",
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                You have successfully created
+                <br />a new lead{" "}
+                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
+              </Typography>
+              <Box component="form" noValidate className="loginformBox">
+                <Grid
+                  container
+                  className="login_forgot_password_grid"
+                  justifyContent="center"
+                  alignItems="center"
+                  sx={{ textAlign: "center", mt: "24px" }}
+                >
+                  <Grid
+                    item
+                    xs={12}
+                    sm={12}
+                    md={10}
+                    lg={10}
+                    xl={12}
+                    className="text-right"
+                  >
+                    <Button component={Link} {...{ 
+                        to: "/",
+                        className: "no-underline login_forgot_password",
+                        style: {
+                          textDecoration: "none",
+                          color: "#A9A9A9",
+                          fontSize: "14px",
+                        }
+                      } as any}>
+                      {"< Back to Dashboard"}
+                    </Button>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Box>
+          </Grid>
+        </React.Fragment>
+      ) : (
+        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
+          <Container maxWidth="xl">
+            <div>
+              <TitleHeader
+                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead" }
+                breadcrumbs={breadcrumbs}
+                button={buttons}
+              />
+            </div>
+
+            <div style={{ marginTop: "1.5em" }}>
+              {/* <div className="stepper" style={{ marginBottom: "1.5em" }}>
+                {stepsSample.map((step, index) => (
+                  <div
+                    className={`step ${step.active ? "active" : ""} ${
+                      completed ? "completed" : ""
+                    }`}
+                  >
+                   <div className="chevronWhite"></div>
+                    <div className="step-content">
+                      <div className="step-name">{step.name}</div>
+                      <div className="step-description">{step.description}</div>
+                    </div>
+                    <div className="chevron"></div>
+                  </div>
+                ))}
+              </div> */}
+              <Box sx={{ width: "100%" }}>
+                <Grid container spacing={3}>
+                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
+                    {leadId && leadId !== "NEW" ? (
+                      <VerticalStepper
+                        activeStep={activeStep}
+                        steps={steps}
+                        stepsStatus={stepsStatus}
+                        setActiveStep={setActiveStep}
+                        nonLinearStatus={true}
+                        // nonLinearStatus={false}
+                        handleNextNonLinear={handleNextNonLinear}
+                        completed={completed}
+                      />
+                    ) : (
+                      <VerticalStepper
+                        activeStep={activeStep}
+                        steps={steps}
+                        stepsStatus={stepsStatus}
+                        setActiveStep={setActiveStep}
+                        nonLinearStatus={false}
+                        handleNextNonLinear={handleNextNonLinear}
+                        completed={completed}
+                      />
+                    )}
+                  </Grid>
+
+                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
+                    <div className="custom_scroll">
+                      <React.Fragment>
+                        {activeStep >= LEAD_GENERATION &&
+                          activeStep < loanoriginationstep.length &&
+                          React.createElement(loanoriginationstep[activeStep], {
+                            ref: formToSubmit,
+                          })}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            flexDirection: "row",
+                            pt: "22px",
+                          }}
+                        >
+                          {activeStep === steps.length - 1 ? (
+                            <Grid
+                              container
+                              spacing={3}
+                              padding={0}
+                              sx={{ mb: "32px" }}
+                            >
+                              <Grid item md={8} xs={12}>
+                                <FormControlLabel
+                                  value="end"
+                                  control={
+                                    <Checkbox
+                                      checked={isChecked}
+                                      onChange={(e) =>
+                                        setIsChecked(e.target.checked)
+                                      }
+                                    />
+                                  }
+                                  label={
+                                    <Typography
+                                      variant="body2"
+                                      gutterBottom
+                                      style={{
+                                        marginTop: "0px",
+                                        marginBottom: "0px",
+                                        fontWeight: "400",
+                                        color: "#3B415B",
+                                      }}
+                                    >
+                                      I agree to the Terms and Condition{" "}
+                                      <b>
+                                        On behalf of the NBFC Authorised Person
+                                      </b>
+                                    </Typography>
+                                  }
+                                  labelPlacement="end"
+                                />
+                              </Grid>
+                              <Grid
+                                item
+                                md={4}
+                                xs={12}
+                                sx={{ textAlign: "right" }}
+                              >
+                                <ColorButton
+                                  variant="contained"
+                                  onClick={handleSubmitLast}
+                                  startIcon={loadingButton? <SpinningDotsWhite /> : ''}
+                                  disabled={!isChecked && !loadingButton}
+                                  className="stepSubmit"
+                                >
+                                  Submit
+                                </ColorButton>
+                              </Grid>
+                            </Grid>
+                          ) : (
+                            <>
+                              <ColorBackButton
+                                color="inherit"
+                                sx={{ mb: "32px" }}
+                                onClick={handleBack}
+                                startIcon={loadingButton? <SpinningDotsWhite /> : ''}
+                                disabled={activeStep === 0 && loadingButton}
+                                className="colorBackButton"
+                              >
+                                Back
+                              </ColorBackButton>
+                              <Box sx={{ flex: "1 1 auto" }} />
+                              {/* {isStepOptional(activeStep) && (
+                                <SkipColorButton
+                                  variant="contained"
+                                  sx={{ mb: "32px", mr: "12px" }}
+                                  onClick={handleSkip}
+                                >
+                                  Skip
+                                </SkipColorButton>
+                              )} */}
+                              {isSaveApplicable(activeStep) ? (
+                                <>
+                                  <SaveColorButton
+                                    variant="contained"
+                                    className="stepper_next"
+                                    onClick={handleSave}
+                                    startIcon={loadingButton? <SpinningDotsWhite /> : ''}
+                                    disabled={loadingButton}
+                                    sx={{ mb: "32px", mr: "12px" }}
+                                  >
+                                    Save
+                                  </SaveColorButton>
+                                  <ColorButton
+                                    variant="contained"
+                                    className="stepper_next"
+                                    onClick={handleNext}
+                                    startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
+                                    disabled={loadingButtonSaveNext}
+                                    sx={{ mb: "32px", mr: "12px" }}
+                                  >
+                                    Next
+                                  </ColorButton>
+                                </>
+                              ) : (
+                                <ColorButton
+                                  variant="contained"
+                                  className="stepper_next"
+                                  onClick={handleNext}
+                                  sx={{ mb: "32px" }}
+                                  startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
+                                  disabled={loadingButtonSaveNext}
+                                >
+                                  Save & Next
+                                </ColorButton>
+                              )}
+                              <ColorButton
+                                variant="contained"
+                                className="stepper_confirmbre d-none"
+                                sx={{ mb: "32px" }}
+                                onClick={handleNext}
+                                startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
+                                disabled={loadingButtonSaveNext}
+                              >
+                                Confirm BRE
+                              </ColorButton>
+                              <ColorButton
+                                variant="contained"
+                                className="stepper_confirmrepaymentschedule d-none"
+                                sx={{ mb: "32px" }}
+                                onClick={handleNext}
+                              >
+                                Confirm Repayment Schedule
+                              </ColorButton>
+                              <ColorCancelButton
+                                variant="contained"
+                                className="d-none"
+                                sx={{ mb: "32px", ml: 1 }}
+                              >
+                                Cancel Application
+                              </ColorCancelButton>
+                            </>
+                          )}
+                        </Box>
+                      </React.Fragment>
+                    </div>
+                  </Grid>
+                </Grid>
+              </Box>
+            </div>
+          </Container>
+        </div>
+      )}
+    </>
   );
 };
 
-export default CreateQR;
+export default L0Container;
 
-import axios, { AxiosResponse, AxiosError } from "axios";
-const API_BASE_URL = `${process.env.REACT_APP_API_BASE_URL}`;
-const REQUEST_TIMEOUT = 30000;
-const axiosInstance = axios.create({
-    baseURL: API_BASE_URL,
-    timeout: REQUEST_TIMEOUT,
-    headers: {
-        'Content-Type': 'application/json',
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
+export enum StepStatus {
+  SUCCESS,
+  ERROR,
+  SKIP,
+}
+
+interface LeadStore {
+  id: number | undefined;
+  stepStatus: StepStatus[];
+}
+
+const initialState: LeadStore = { id: undefined, stepStatus: [] };
+
+export const leadStoreSlice = createSlice({
+  name: "leadStore",
+  initialState,
+  reducers: {
+    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
+      state.id = action.payload;
     },
+    updateStepStatus: (
+      state: LeadStore,
+      action: PayloadAction<{ step: number; status: StepStatus }>
+    ) => {
+      console.log("Updating step status", action.payload);
+      if (
+        action.payload.status === StepStatus.SKIP
+      ) {
+        //If the form is skipped preserve the original status of the form
+        if(!state.stepStatus[action.payload.step]) {
+          state.stepStatus[action.payload.step] = StepStatus.SKIP;
+        }
+      } else {
+        state.stepStatus[action.payload.step] = action.payload.status;
+      }
+      console.log("Step Status")
+      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
+    },
+  },
 });
 
-axiosInstance.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-
-        if (process.env.NODE_ENV === 'development') {
-            console.log('🚀 API Request:', {
-                method: config.method?.toUpperCase(),
-                url: config.url,
-                baseURL: config.baseURL,
-                data: config.data,
-            });
-        }
-
-        return config;
-    },
-    (error: AxiosError) => {
-        console.error('❌ Request interceptor error:', error);
-        return Promise.reject(error);
-    }
-);
-
-axiosInstance.interceptors.response.use(
-    (response: AxiosResponse) => {
-        if (process.env.NODE_ENV === 'development') {
-            console.log('✅ API Response:', {
-                status: response.status,
-                url: response.config.url,
-                data: response.data,
-            });
-        }
-
-        return response;
-    },
-    (error: AxiosError) => {
-        if (process.env.NODE_ENV === 'development') {
-            console.error('❌ API Error:', {
-                message: error.message,
-                status: error.response?.status,
-                url: error.config?.url,
-                data: error.response?.data,
-            });
-        }
-
-        if (error.response?.status === 401) {
-            localStorage.removeItem('authToken');
-            sessionStorage.removeItem('authToken');
-
-            if (typeof window !== 'undefined') {
-                window.location.href = '/login';
-            }
-        }
-
-        const enhancedError = {
-            ...error,
-            message: error.response?.data || error.message || 'An unexpected error occurred',
-            statusCode: error.response?.status,
-            isNetworkError: !error.response,
-        };
-
-        return Promise.reject(enhancedError);
-    }
-);
-
-export interface EventData {
-    eventName: string;
-    eventId: string;
-}
-
-export interface QrCodeResponse {
-    imageData: string | Blob;
-    imageUrl?: string;
-    format?: string;
-    size?: {
-        width: number;
-        height: number;
-    };
-}
-
-export interface ApiResponse<T = any> {
-    data: T;
-    message?: string;
-    status: string;
-    timestamp?: string;
-}
-
-export interface EventApiError {
-    message: string;
-    statusCode?: number;
-    isNetworkError?: boolean;
-    details?: any;
-}
-
-const handleImageResponse = (response: AxiosResponse): QrCodeResponse => {
-    const contentType = response.headers['content-type'];
-
-    if (contentType && contentType.includes('image')) {
-        return {
-            imageData: response.data,
-            format: contentType,
-        };
-    } else if (typeof response.data === 'string') {
-        return {
-            imageData: response.data,
-            format: 'base64',
-        };
-    } else if (response.data && response.data.imageData) {
-        return response.data;
-    }
-
-    return {
-        imageData: response.data,
-    };
-};
-
-export const QrApi = {
-
-    getQrCode: async (
-        data: EventData,
-        options: {
-            width?: number;
-            height?: number;
-            format?: 'png' | 'jpeg' | 'svg';
-        } = {}
-    ): Promise<QrCodeResponse> => {
-        try {
-            if (!data?.eventName?.trim()) {
-                throw new Error('Event name is required');
-            }
-
-            if (!data?.eventId?.trim()) {
-                throw new Error('Event ID is required');
-            }
-
-            const { width = 200, height = 200, format = 'png' } = options;
-
-            const apiUrl = `/qr/genQRCodeByEvent`;
-            const params = new URLSearchParams({
-                eventName: data.eventName.trim(),
-                eventId: data.eventId.trim(),
-                width: width.toString(),
-                height: height.toString(),
-                format: format,
-            });
-
-            const response = await axiosInstance.get(`${apiUrl}?${params.toString()}`, {
-                responseType: 'blob',
-            });
-
-            return handleImageResponse(response);
-        } catch (error) {
-            console.error('EventApi.getQrCode error:', error);
-            throw error;
-        }
-    },
-
-    validateEvent: async (data: EventData): Promise<{ isValid: boolean; message?: string }> => {
-        try {
-            const response = await axiosInstance.post('/event/validate', data);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.validateEvent error:', error);
-            throw error;
-        }
-    },
-
-    getEventDetails: async (eventId: number): Promise<any> => {
-        try {
-            if (!eventId) {
-                throw new Error('Event ID is required');
-            }
-
-            const response = await axiosInstance.get(`/api/getQREventDtls/${eventId}`);
-            return response.data;
-        } catch (error) {
-            console.error('QrApi.getEventDetails error:', error);
-            throw error;
-        }
-    },
-
-    getEventDetailsList: async (): Promise<any> => {
-        try {
-            const response = await axiosInstance.get('/api/getQREventDtlsList');
-            return response.data;
-        } catch (error) {
-            console.error('QrApi.getEventDetailsList error:', error);
-            throw error;
-        }
-    },
-
-    saveEventDetails: async (eventData: any): Promise<any> => {
-        try {
-            const response = await axiosInstance.post('/api/saveQREventDtls', eventData);
-            return response.data;
-        } catch (error) {
-            console.error('QrApi.saveEventDetails error:', error);
-            throw error;
-        }
-    },
-
-    recordQrScan: async (data: EventData & { scannedAt?: Date; userAgent?: string }): Promise<any> => {
-        try {
-            const scanData = {
-                ...data,
-                scannedAt: data.scannedAt || new Date(),
-                userAgent: data.userAgent || navigator.userAgent,
-                timestamp: Date.now(),
-            };
-
-            const response = await axiosInstance.post('/qr/scan', scanData);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.recordQrScan error:', error);
-            throw error;
-        }
-    },
+export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
 
 
-    getQrScanStats: async (eventId: string): Promise<any> => {
-        try {
-            if (!eventId?.trim()) {
-                throw new Error('Event ID is required');
-            }
-
-            const response = await axiosInstance.get(`/qr/stats/${encodeURIComponent(eventId)}`);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.getQrScanStats error:', error);
-            throw error;
-        }
-    },
-
-    
-    generateQr: async (eventData:any): Promise<any> => {
-        try {
-            const response = await axiosInstance.post('/qr/genQR', eventData,{
-                responseType:'blob'
-            });
-            return handleImageResponse(response);
-        } catch (error) {
-            console.error('QrApi.generateQr error:', error);
-            throw error;
-        }
-    },
-
-
-    updateEvent: async (eventId: string, updateData: Partial<EventData>): Promise<any> => {
-        try {
-            if (!eventId?.trim()) {
-                throw new Error('Event ID is required');
-            }
-
-            const response = await axiosInstance.put(`/event/${encodeURIComponent(eventId)}`, updateData);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.updateEvent error:', error);
-            throw error;
-        }
-    },
-
-
-    deleteEvent: async (eventId: string): Promise<any> => {
-        try {
-            if (!eventId?.trim()) {
-                throw new Error('Event ID is required');
-            }
-
-            const response = await axiosInstance.delete(`/event/${encodeURIComponent(eventId)}`);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.deleteEvent error:', error);
-            throw error;
-        }
-    },
-
-
-    getEvents: async (params: {
-        page?: number;
-        limit?: number;
-        search?: string;
-        status?: string;
-    } = {}): Promise<any> => {
-        try {
-            const queryParams = new URLSearchParams();
-
-            Object.entries(params).forEach(([key, value]) => {
-                if (value !== undefined && value !== null && value !== '') {
-                    queryParams.append(key, value.toString());
-                }
-            });
-
-            const response = await axiosInstance.get(`/event/list?${queryParams.toString()}`);
-            return response.data;
-        } catch (error) {
-            console.error('EventApi.getEvents error:', error);
-            throw error;
-        }
-    },
-};
-
-export const handleApiError = (error: any): EventApiError => {
-    if (error.response) {
-        return {
-            message: error.response.data?.message || error.message || 'Server error occurred',
-            statusCode: error.response.status,
-            isNetworkError: false,
-            details: error.response.data,
-        };
-    } else if (error.request) {
-        return {
-            message: 'Network error - please check your internet connection',
-            isNetworkError: true,
-        };
-    } else {
-        return {
-            message: error.message || 'An unexpected error occurred',
-            isNetworkError: false,
-        };
-    }
-};
-
-export { axiosInstance };
-export default QrApi;
-
-i don't want create url of blob as it's restrited so using other method show qr 
