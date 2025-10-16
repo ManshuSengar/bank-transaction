@@ -1,3755 +1,1577 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import TitleHeader from "../../Components/titleheader";
-import {
-  Box,
-  Grid,
-  Container,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Paper,
-  Snackbar,
-  Button,
-} from "@mui/material";
-import { makeStyles } from "@material-ui/core/styles";
-import useToken from "../../Features/Authentication/useToken";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useGetLeadQuery } from "../../slices/leadSlice";
-import AlertError from "../../Components/Framework/AlertError";
-import "../../assets/css/common.css";
-import VerticalStepper from "../../Components/verticalstepper";
-import { useCallback, useEffect, useState } from "react";
-import React from "react";
-import {
-  ColorBackButton,
-  SkipColorButton,
-  ColorButton,
-  ColorCancelButton,
-} from "./Buttons";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-import LegalEntity from "./LegalEntity";
-import Lead from "./Lead";
-import { SubmitableForm } from "../../Components/Framework/FormSubmit";
-import { useAppDispatch } from "../../app/hooks";
-import {
-  StepStatus,
-  setLeadId,
-  updateStepStatus,
-} from "../../slices/localStores/leadStore";
-import LoanDetails from "./LoanDetails";
-import KmpContainer from "./KmpContainer";
-import SecurityDetailsContainer from "./SecurityDetailsContainer";
-import { useParams } from "react-router";
-import Bre from "./Bre";
-import RepaymentSchedule from "./RepaymentSchedule";
-import ReviewAndSubmit from "./ReviewAndSubmit";
-import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
-import { useUpdateLeadMutation } from "../../slices/leadSlice";
-import { useAppSelector } from "../../app/hooks";
-import { Link } from "react-router-dom";
-import SaveIcon from '@mui/icons-material/Save';
-import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
-import { Rps } from "../../models/rps";
+import { FieldArray, Form, Formik } from "formik";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Grid, IconButton, Snackbar } from "@mui/material";
+import { Delete } from '@mui/icons-material';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import { FixedSizeList } from 'react-window';
+import { connect } from 'react-redux';
+import { useDeleteLenderLimitByIdMutation, useGetLenderLimitFormDataQuery, useSaveLenderLimitFormDataMutation } from "../../../features/application-form/capitalResourceForm";
+import AutoSave from "../../../components/framework/AutoSave";
+import { TextBoxField } from "../../../components/framework/TextBoxField";
+import FormLoader from "../../../loader/FormLoader";
+import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+import { useAppSelector } from "../../../app/hooks";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
+import * as Yup from 'yup';
+import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
+import { useGetMaterQuery } from "../../../features/master/api";
+import { modify } from "../../../utlis/helpers";
+import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
+import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
+import DrawerResponseComponent from "../../../components/DrawerComponent/DrawerResponseComponent";
+import Notification from "../../../components/shared/Notification";
 
-const useStyles = makeStyles((theme) => ({
-  browsefilediv: {
-    "& > *": {
-      margin: theme.spacing(1),
-      color: "#A9A9A9 !important",
-    },
-    "& .MuiButtonBase-root": {
-      "&hover": {
-        color: "#FFFFFF",
-      },
-      "&focus": {
-        color: "#FFFFFF",
-      },
-    },
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #C0C0C0",
-    maxHeight: "52px",
-  },
-  root: {
-    backgroundColor: "#F5F5F5 !important",
-    minHeight: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "32px",
-  },
-}));
+interface LenderRow {
+    lenderName: string;
+    lenderType: string | null;
+    limitType: string;
+    sanctionedLimit: number | null;
+    fundingAmtTMinus2: number | null;
+    fundingAmtTMinus1: number | null;
+    fundingAmtT: number | null;
+    avgIntRate: number | null;
+    latestIntRate: number | null;
+    contactDetails: string;
+    ncdOs: string;
+    security: string;
+    slNo: number | null;
+    saveStatus: string;
+    applId: string;
+}
 
-const L0Container = () => {
-  const [loadingButton, setLoadingButton] = React.useState(false);
-  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
+interface FormValues {
+    data: LenderRow[];
+}
 
-  const steps = [
-    "LEAD_GENERATION",
-    "LEGAL_ENTITY",
-    "KEY_MANAGEMENT_PERSONNEL",
-    "SECURITY_DETAILS",
-    "LOAN_DETAILS",
-    "BRE",
-    "REPAYMENT_SCHEDULE",
-    "REVIEW_&_SUBMIT",
-  ];
+interface Props {
+    applId: string;
+    excelData: any[];
+    openSectionsData?: any[];
+}
 
-  const LEAD_GENERATION = 0;
-  const LEGAL_ENTITY = 1;
-  const KEY_MANAGEMENT_PERSONNEL = 2;
-  const SECURITY_DETAILS = 3;
+const LenderLimitOdForm = ({ applId, excelData, openSectionsData }: Props) => {
+    const [addLimitDetails] = useSaveLenderLimitFormDataMutation();
+    // const { data: LimitData, isLoading } = useGetLenderLimitFormDataQuery(applId);
+    const { data: LimitData, isLoading, isError, refetch } = useGetLenderLimitFormDataQuery(applId, { skip: !applId, refetchOnMountOrArgChange: true });
 
-  const dispatch = useAppDispatch();
-  const { stepStatus } = useAppSelector((state) => state.leadStore);
+    const [deleteLimitDetails] = useDeleteLenderLimitByIdMutation();
+    const [index, setIndex] = useState(0);
+    const [openConfirmation, setOpenConfirmation] = useState(false);
+    const [formData, setFormData] = useState<LenderRow[] | null>(null);
+    const [actionVal, setActionVal] = useState<string | null>(null);
+    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+    const [snackMsg, setSnackMsg] = useState<string>("");
+    const [severity, setSeverity] = useState<"success" | "error">("success");
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [snackOpen, setSnackOpen] = useState(false);
+    const [snackMessages, setSnackMessages] = useState<string[]>([]);
+    const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
+    const { transactionData } = useAppSelector((state) => state.userStore);
+    const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
 
-  const buttons = [
-    {
-      label: "Save Progress and Close",
-      buttonstyle: "secondary_outline",
-      action: () => console.log("New button clicked"),
-    },
-  ];
+    const columnWidths = [60, 60, 250, 150, 170, 170, 180, 180, 180, 170, 170, 170, 120, 350];
 
-  const classes = useStyles();
-  const location = useLocation();
-  const { id: leadId } = useParams();
+    useEffect(() => {
+        if (LimitData) {
+            const dataWithApplId: LenderRow[] = LimitData.map((item: any) => ({
+                ...item,
+                applId
+            }));
+            setInitialValues({ data: dataWithApplId });
+        }
+    }, [LimitData, applId]);
 
-  // Initialize states, resetting if coming from dashboard
-  const [activeStep, setActiveStep] = useState(() => {
-    const fromDashboard = location.state?.from === "/" || location.pathname === "/lead";
-    if (fromDashboard) {
-      localStorage.removeItem(`lead_${leadId}_activeStep`);
-      return LEAD_GENERATION;
-    }
-    const savedStep = localStorage.getItem(`lead_${leadId}_activeStep`);
-    return savedStep ? parseInt(savedStep, 10) : LEAD_GENERATION;
-  });
+    useEffect(() => {
+        if (excelData && excelData.length > 0) {
+            let newExcelData=excelData.slice(1);
+            const lenderRows = newExcelData.filter((row: any) => row[2] && row[2] !== 'Total');
+            const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
+                lenderName: excelRow[2]?.toString().trim() || "",
+                limitType: excelRow[3]?.toString().trim() || "",
+                lenderType: excelRow[4]?.toString().trim() || null,   // swap these values
+                sanctionedLimit: parseExcelValue(excelRow[5]),
+                fundingAmtTMinus2: parseExcelValue(excelRow[6]),
+                fundingAmtTMinus1: parseExcelValue(excelRow[7]),
+                fundingAmtT: parseExcelValue(excelRow[8]),
+                avgIntRate: parseExcelValue(excelRow[9]),
+                latestIntRate: parseExcelValue(excelRow[10]),
+                contactDetails: excelRow[11]?.toString().trim() || "",
+                ncdOs: excelRow[12]?.toString().trim() || "",
+                security: excelRow[13]?.toString().trim() || "",
+                slNo: null,
+                saveStatus: '01',
+                applId
+            }));
+            setInitialValues({ data: newData });
+            setOpenSnackbar(true);
+            setSeverity("success");
+            setSnackMsg("Lender data imported successfully");
+        }
+    }, [excelData, applId]);
 
-  const [stepsStatus, setStepsStatus] = useState(() => {
-    const fromDashboard = location.state?.from === "/" || location.pathname === "/lead";
-    if (fromDashboard) {
-      localStorage.removeItem(`lead_${leadId}_stepsStatus`);
-      return ["0", "0", "0", "0", "0", "0", "0", "0"];
-    }
-    const savedStatus = localStorage.getItem(`lead_${leadId}_stepsStatus`);
-    return savedStatus ? JSON.parse(savedStatus) : ["0", "0", "0", "0", "0", "0", "0", "0"];
-  });
+    const parseExcelValue = (value: any): number => {
+        if (value === undefined || value === null || value === '') return 0;
+        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
+        return parseFloat(value) || 0;
+    };
 
-  const [skipped, setSkipped] = useState(new Set());
-  const [isChecked, setIsChecked] = useState(false);
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-  const [stateAlert, setStateAlert] = useState(false);
-  const [stateAlertMessage, setStateAlertMessage] = useState("");
-  const [completed] = React.useState<{
-    [k: number]: boolean;
-  }>({});
+    const extractErrorMessages = (errorResponse: Record<string, string>) => {
+        const allMessages = Object.values(errorResponse)
+            .flatMap(msg => msg.split(',').map(m => m.trim()));
+        return allMessages;
+    };
 
-  const [updateLeadStatus] = useUpdateLeadMutation();
-  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
-  const navigate = useNavigate();
-  const { getRoles } = useToken();
-  const setLeadIdRef = useCallback(
-    (id: number) => dispatch(setLeadId(id)),
-    [dispatch]
-  );
+    const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
+        try {
+            const requestBody = Array.isArray(values) ? values : values.data;
+            setIsUploading(true);
+            if (await addLimitDetails(requestBody).unwrap()) {
+                setOpenSnackbar(true);
+                setIsUploading(false);
+                setSeverity("success");
+                setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
+                setActionVal(null);
+                return true;
+            }
+            return false;
+        }
 
-  // Save activeStep and stepsStatus to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(`lead_${leadId}_activeStep`, activeStep.toString());
-    localStorage.setItem(`lead_${leadId}_stepsStatus`, JSON.stringify(stepsStatus));
-  }, [activeStep, stepsStatus, leadId]);
-
-  // Handle leadId and navigation
-  useEffect(() => {
-    if (leadId) setLeadIdRef(Number(leadId));
-    if (leadDataFetch !== undefined) {
-      if (leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")) {
-        navigate("/restricted");
-      }
-    }
-  }, [leadId, setLeadIdRef, leadDataFetch, navigate, getRoles]);
-
-  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
-
-  const loanoriginationstep = [
-    Lead,
-    LegalEntity,
-    KmpContainer,
-    SecurityDetailsContainer,
-    LoanDetails,
-    Bre,
-    RepaymentSchedule,
-    ReviewAndSubmit,
-  ];
-
-  const isSaveApplicable = (step: any) => {
-    return step === KEY_MANAGEMENT_PERSONNEL || step === SECURITY_DETAILS;
-  };
-
-  const isStepSkipped = (step: any) => {
-    return skipped.has(step);
-  };
-
-  const handleSubmitLast = () => {
-    setLoadingButton(true);
-
-    if (skipped.size > 0) {
-      setStateAlert(true);
-      setStateAlertMessage("Please complete all the steps");
-    } else {
-      if (Number(createdLeadId))
-        updateLeadStatus({
-          id: Number(createdLeadId),
-          leadStatus: "IN_PROCESS",
-          sidbiStatus: "ORIGINATION",
-        })
-          .unwrap()
-          .then((data) => {
-            if (data.leadStatus === "IN_PROCESS") {
-              let newSkipped = skipped;
-              if (isStepSkipped(activeStep)) {
-                newSkipped = new Set(newSkipped.values());
-                newSkipped.delete(activeStep);
-              }
-
-              setActiveStep((prevActiveStep) => prevActiveStep + 1);
-              setSkipped(newSkipped);
-              scrollToTop();
-              // Clear localStorage on successful submission
-              localStorage.removeItem(`lead_${leadId}_activeStep`);
-              localStorage.removeItem(`lead_${leadId}_stepsStatus`);
+        catch (err: any) {
+            console.error(err);
+            setIsUploading(false);
+            if (err.status === 400 && err.message === "Invalid") {
+                const errorMessages = extractErrorMessages(err.customCode);
+                setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
+                setSnackSeverity('error');
+                setSnackOpen(true);
             } else {
-              alert("Unknown error, please contact support.");
+                console.error(err);
             }
-          });
-    }
-  };
-
-  const scrollToTop = () => {
-    const customScrollDiv = document.querySelector(".custom_scroll");
-    if (customScrollDiv) {
-      customScrollDiv.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }
-  };
-
-  const [nextProceed, setNextProceed] = useState(false);
-  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
-  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
-    parentId: Number(leadId) || 0,
-    requestValue: {},
-  };
-
-  const { data: overall } = useListRpsOverallQuery(rpsInput);
-  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
-  useEffect(() => {
-    if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length === 0) ||
-       (Array.isArray(sidbi) && sidbi.length === 0))
-    ) {
-      setNextProceed(true);
-    } else if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length > 0) ||
-       (Array.isArray(sidbi) && sidbi.length > 0))
-    ) {
-      setNextRPSDataProceed(true);
-
-      const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-      const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-      const stepperNext = document.querySelector('.stepper_next');
-
-      if (repaymentScheduleTableParametersDiv) {
-        repaymentScheduleTableParametersDiv.classList.remove('d-none');
-      }
-      if (stepperConfirmRepaymentScheduleTable) {
-        stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
-      }
-    } else {
-      setNextProceed(false);
-    }
-  }, [activeStep, overall, sidbi]);
-
-  const handleNext = async () => {
-    setLoadingButtonSaveNext(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let isValidForm = await formToSubmit.current.isValid();
-      if (isValidForm) {
-        await formToSubmit.current.submit();
-        let success = await formToSubmit.current.isValid(true);
-        if (success) {
-          setActiveStep((prevActiveStep) => prevActiveStep + 1);
-          setSkipped(newSkipped);
-          dispatch(
-            updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-          );
-          setStepsStatus((prevStepsStatus) => {
-            const newStepsStatus = [...prevStepsStatus];
-            newStepsStatus[activeStep] = "1";
-            return newStepsStatus;
-          });
+            return false;
         }
-        scrollToTop();
-      } else {
-        scrollToTop();
-      }
-      setLoadingButtonSaveNext(false);
-    } else {
-      console.error("There is no form in the current page to submit.");
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-      scrollToTop();
-      setLoadingButtonSaveNext(false);
-    }
-  };
+    };
 
-  const handleNextNonLinear = async (step: any) => {
-    setActiveStep(step);
+    const handleClosePop = () => setOpenSnackbar(false);
 
-    const breParametersDiv = document.querySelector('.bre_parameters_div');
-    const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
-    const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-    const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-    const stepperNext = document.querySelector('.stepper_next');
+    const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
+    const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
 
-    if (breParametersDiv) {
-      breParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmBre) {
-      stepperConfirmBre.classList.add('d-none');
-    }
-    if (repaymentScheduleTableParametersDiv) {
-      repaymentScheduleTableParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmRepaymentScheduleTable) {
-      stepperConfirmRepaymentScheduleTable.classList.add('d-none');
-    }
-    if (stepperNext) {
-      stepperNext.classList.remove('d-none');
-    }
-  };
+    const { data: limitTypeData, isLoading: isLimitTypeLoading } = useGetMaterQuery(`refapi/mstr/getLimitType`);
+    const limitTypeOptions = useMemo(() => limitTypeData ? modify("mstr/getLimitType", limitTypeData) : [], [limitTypeData]);
 
-  const handleSave = async () => {
-    setLoadingButton(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let success = await formToSubmit.current.submit();
-      if (success) {
-        scrollToTop();
-        setSkipped(newSkipped);
-        dispatch(
-          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-        );
-        setStepsStatus((prevStepsStatus) => {
-          const newStepsStatus = [...prevStepsStatus];
-          newStepsStatus[activeStep] = "1";
-          return newStepsStatus;
-        });
-      }
-    } else {
-      console.error("There is no form in the current page to submit.");
-      scrollToTop();
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-    }
-    setLoadingButton(false);
-  };
-
-  const handleBack = () => {
-    setLoadingButton(true);
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-    setLoadingButton(false);
-  };
-
-  const breadcrumbs = [
-    <Link key="1" color="#A9A9A9" to="/">
-      Loan Origination
-    </Link>,
-    <Link key="2" color="#A9A9A9" to="/lead">
-      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-    </Link>,
-  ];
-
-  return (
-    <>
-      <Snackbar
-        open={stateAlert}
-        autoHideDuration={3000}
-        onClose={() => setStateAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <AlertError
-          icon={false}
-          severity="error"
-          onClose={() => console.log("close")}
-        >
-          {stateAlertMessage}
-        </AlertError>
-      </Snackbar>
-      {activeStep === steps.length ? (
-        <React.Fragment>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={6}
-            component={Paper}
-            elevation={6}
-            square
-            className={classes.root}
-            spacing={0}
-            style={{ alignItems: "center", justifyContent: "center" }}
-          >
-            <Box className="login_formBox">
-              <SuccessAnimation />
-              <Typography
-                variant="h5"
-                gutterBottom
-                style={{
-                  marginBottom: "0px",
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                You have successfully created
-                <br />a new lead{" "}
-                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
-              </Typography>
-              <Box component="form" noValidate className="loginformBox">
-                <Grid
-                  container
-                  className="login_forgot_password_grid"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ textAlign: "center", mt: "24px" }}
-                >
-                  <Grid
-                    item
-                    xs={12}
-                    sm={12}
-                    md={10}
-                    lg={10}
-                    xl={12}
-                    className="text-right"
-                  >
-                    <Button
-                      component={Link}
-                      to="/"
-                      className="no-underline login_forgot_password"
-                      style={{
-                        textDecoration: "none",
-                        color: "#A9A9A9",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {"< Back to Dashboard"}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-          </Grid>
-        </React.Fragment>
-      ) : (
-        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
-          <Container maxWidth="xl">
-            <div>
-              <TitleHeader
-                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-                breadcrumbs={breadcrumbs}
-                button={buttons}
-              />
-            </div>
-
-            <div style={{ marginTop: "1.5em" }}>
-              <Box sx={{ width: "100%" }}>
-                <Grid container spacing={3}>
-                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
-                    {leadId && leadId !== "NEW" ? (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={true}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    ) : (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    )}
-                  </Grid>
-
-                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
-                    <div className="custom_scroll">
-                      <React.Fragment>
-                        {activeStep >= LEAD_GENERATION &&
-                          activeStep < loanoriginationstep.length &&
-                          React.createElement(loanoriginationstep[activeStep], {
-                            ref: formToSubmit,
-                          })}
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            pt: "22px",
-                          }}
-                        >
-                          {activeStep === steps.length - 1 ? (
-                            <Grid
-                              container
-                              spacing={3}
-                              padding={0}
-                              sx={{ mb: "32px" }}
-                            >
-                              <Grid item md={8} xs={12}>
-                                <FormControlLabel
-                                  value="end"
-                                  control={
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        setIsChecked(e.target.checked)
-                                      }
-                                    />
-                                  }
-                                  label={
-                                    <Typography
-                                      variant="body2"
-                                      gutterBottom
-                                      style={{
-                                        marginTop: "0px",
-                                        marginBottom: "0px",
-                                        fontWeight: "400",
-                                        color: "#3B415B",
-                                      }}
-                                    >
-                                      I agree to the Terms and Condition{" "}
-                                      <b>
-                                        On behalf of the NBFC Authorised Person
-                                      </b>
-                                    </Typography>
-                                  }
-                                  labelPlacement="end"
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                md={4}
-                                xs={12}
-                                sx={{ textAlign: "right" }}
-                              >
-                                <ColorButton
-                                  variant="contained"
-                                  onClick={handleSubmitLast}
-                                  startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                  disabled={!isChecked && !loadingButton}
-                                  className="stepSubmit"
-                                >
-                                  Submit
-                                </ColorButton>
-                              </Grid>
-                            </Grid>
-                          ) : (
-                            <>
-                              <ColorBackButton
-                                color="inherit"
-                                sx={{ mb: "32px" }}
-                                onClick={handleBack}
-                                startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                disabled={activeStep === 0 && loadingButton}
-                                className="colorBackButton"
-                              >
-                                Back
-                              </ColorBackButton>
-                              <Box sx={{ flex: "1 1 auto" }} />
-                              {isSaveApplicable(activeStep) ? (
-                                <>
-                                  <SaveColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleSave}
-                                    startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButton}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Save
-                                  </SaveColorButton>
-                                  <ColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleNext}
-                                    startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButtonSaveNext}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Next
-                                  </ColorButton>
-                                </>
-                              ) : (
-                                <ColorButton
-                                  variant="contained"
-                                  className="stepper_next"
-                                  onClick={handleNext}
-                                  sx={{ mb: "32px" }}
-                                  startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                  disabled={loadingButtonSaveNext}
-                                >
-                                  Save & Next
-                                </ColorButton>
-                              )}
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmbre d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                                startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                disabled={loadingButtonSaveNext}
-                              >
-                                Confirm BRE
-                              </ColorButton>
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmrepaymentschedule d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                              >
-                                Confirm Repayment Schedule
-                              </ColorButton>
-                              <ColorCancelButton
-                                variant="contained"
-                                className="d-none"
-                                sx={{ mb: "32px", ml: 1 }}
-                              >
-                                Cancel Application
-                              </ColorCancelButton>
-                            </>
-                          )}
-                        </Box>
-                      </React.Fragment>
-                    </div>
-                  </Grid>
-                </Grid>
-              </Box>
-            </div>
-          </Container>
-        </div>
-      )}
-    </>
-  );
-};
-
-export default L0Container;
-
-// Redux Slice (unchanged)
-export enum StepStatus {
-  SUCCESS,
-  ERROR,
-  SKIP,
-}
-
-interface LeadStore {
-  id: number | undefined;
-  stepStatus: StepStatus[];
-}
-
-const initialState: LeadStore = { id: undefined, stepStatus: [] };
-
-export const leadStoreSlice = createSlice({
-  name: "leadStore",
-  initialState,
-  reducers: {
-    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
-      state.id = action.payload;
-    },
-    updateStepStatus: (
-      state: LeadStore,
-      action: PayloadAction<{ step: number; status: StepStatus }>
-    ) => {
-      console.log("Updating step status", action.payload);
-      if (action.payload.status === StepStatus.SKIP) {
-        if (!state.stepStatus[action.payload.step]) {
-          state.stepStatus[action.payload.step] = StepStatus.SKIP;
-        }
-      } else {
-        state.stepStatus[action.payload.step] = action.payload.status;
-      }
-      console.log("Step Status");
-      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
-    },
-  },
-});
-
-export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
-
-
-
-
-
-
-
-
-
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import TitleHeader from "../../Components/titleheader";
-import {
-  Box,
-  Grid,
-  Container,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Paper,
-  Snackbar,
-  Button,
-} from "@mui/material";
-import { makeStyles } from "@material-ui/core/styles";
-import useToken from "../../Features/Authentication/useToken";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useGetLeadQuery } from "../../slices/leadSlice";
-import AlertError from "../../Components/Framework/AlertError";
-import "../../assets/css/common.css";
-import VerticalStepper from "../../Components/verticalstepper";
-import { useCallback, useEffect, useState } from "react";
-import React from "react";
-import {
-  ColorBackButton,
-  SkipColorButton,
-  ColorButton,
-  ColorCancelButton,
-} from "./Buttons";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-import LegalEntity from "./LegalEntity";
-import Lead from "./Lead";
-import { SubmitableForm } from "../../Components/Framework/FormSubmit";
-import { useAppDispatch } from "../../app/hooks";
-import {
-  StepStatus,
-  setLeadId,
-  updateStepStatus,
-} from "../../slices/localStores/leadStore";
-import LoanDetails from "./LoanDetails";
-import KmpContainer from "./KmpContainer";
-import SecurityDetailsContainer from "./SecurityDetailsContainer";
-import { useParams } from "react-router";
-import Bre from "./Bre";
-import RepaymentSchedule from "./RepaymentSchedule";
-import ReviewAndSubmit from "./ReviewAndSubmit";
-import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
-import { useUpdateLeadMutation } from "../../slices/leadSlice";
-import { useAppSelector } from "../../app/hooks";
-import { Link } from "react-router-dom";
-import SaveIcon from '@mui/icons-material/Save';
-import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
-import { Rps } from "../../models/rps";
-
-const useStyles = makeStyles((theme) => ({
-  browsefilediv: {
-    "& > *": {
-      margin: theme.spacing(1),
-      color: "#A9A9A9 !important",
-    },
-    "& .MuiButtonBase-root": {
-      "&hover": {
-        color: "#FFFFFF",
-      },
-      "&focus": {
-        color: "#FFFFFF",
-      },
-    },
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #C0C0C0",
-    maxHeight: "52px",
-  },
-  root: {
-    backgroundColor: "#F5F5F5 !important",
-    minHeight: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "32px",
-  },
-}));
-
-const L0Container = () => {
-  const [loadingButton, setLoadingButton] = React.useState(false);
-  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
-
-  const steps = [
-    "LEAD_GENERATION",
-    "LEGAL_ENTITY",
-    "KEY_MANAGEMENT_PERSONNEL",
-    "SECURITY_DETAILS",
-    "LOAN_DETAILS",
-    "BRE",
-    "REPAYMENT_SCHEDULE",
-    "REVIEW_&_SUBMIT",
-  ];
-
-  const LEAD_GENERATION = 0;
-  const LEGAL_ENTITY = 1;
-  const KEY_MANAGEMENT_PERSONNEL = 2;
-  const SECURITY_DETAILS = 3;
-
-  const dispatch = useAppDispatch();
-  const { stepStatus } = useAppSelector((state) => state.leadStore);
-
-  const buttons = [
-    {
-      label: "Save Progress and Close",
-      buttonstyle: "secondary_outline",
-      action: () => console.log("New button clicked"),
-    },
-  ];
-
-  const classes = useStyles();
-  const location = useLocation();
-  const { id: leadId } = useParams();
-
-  // Initialize states, resetting if coming from dashboard
-  const [activeStep, setActiveStep] = useState(() => {
-    const fromDashboard = location.state?.from === "/" || location.pathname === "/lead";
-    if (fromDashboard) {
-      localStorage.removeItem(`lead_${leadId}_activeStep`);
-      return LEAD_GENERATION;
-    }
-    const savedStep = localStorage.getItem(`lead_${leadId}_activeStep`);
-    return savedStep ? parseInt(savedStep, 10) : LEAD_GENERATION;
-  });
-
-  const [stepsStatus, setStepsStatus] = useState(() => {
-    const fromDashboard = location.state?.from === "/" || location.pathname === "/lead";
-    if (fromDashboard) {
-      localStorage.removeItem(`lead_${leadId}_stepsStatus`);
-      return ["0", "0", "0", "0", "0", "0", "0", "0"];
-    }
-    const savedStatus = localStorage.getItem(`lead_${leadId}_stepsStatus`);
-    return savedStatus ? JSON.parse(savedStatus) : ["0", "0", "0", "0", "0", "0", "0", "0"];
-  });
-
-  const [skipped, setSkipped] = useState(new Set());
-  const [isChecked, setIsChecked] = useState(false);
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-  const [stateAlert, setStateAlert] = useState(false);
-  const [stateAlertMessage, setStateAlertMessage] = useState("");
-  const [completed] = React.useState<{
-    [k: number]: boolean;
-  }>({});
-
-  const [updateLeadStatus] = useUpdateLeadMutation();
-  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
-  const navigate = useNavigate();
-  const { getRoles } = useToken();
-  const setLeadIdRef = useCallback(
-    (id: number) => dispatch(setLeadId(id)),
-    [dispatch]
-  );
-
-  // Save activeStep and stepsStatus to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(`lead_${leadId}_activeStep`, activeStep.toString());
-    localStorage.setItem(`lead_${leadId}_stepsStatus`, JSON.stringify(stepsStatus));
-  }, [activeStep, stepsStatus, leadId]);
-
-  // Handle leadId and navigation
-  useEffect(() => {
-    if (leadId) setLeadIdRef(Number(leadId));
-    if (leadDataFetch !== undefined) {
-      if (leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")) {
-        navigate("/restricted");
-      }
-    }
-  }, [leadId, setLeadIdRef, leadDataFetch, navigate, getRoles]);
-
-  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
-
-  const loanoriginationstep = [
-    Lead,
-    LegalEntity,
-    KmpContainer,
-    SecurityDetailsContainer,
-    LoanDetails,
-    Bre,
-    RepaymentSchedule,
-    ReviewAndSubmit,
-  ];
-
-  const isSaveApplicable = (step: any) => {
-    return step === KEY_MANAGEMENT_PERSONNEL || step === SECURITY_DETAILS;
-  };
-
-  const isStepSkipped = (step: any) => {
-    return skipped.has(step);
-  };
-
-  const handleSubmitLast = () => {
-    setLoadingButton(true);
-
-    if (skipped.size > 0) {
-      setStateAlert(true);
-      setStateAlertMessage("Please complete all the steps");
-    } else {
-      if (Number(createdLeadId))
-        updateLeadStatus({
-          id: Number(createdLeadId),
-          leadStatus: "IN_PROCESS",
-          sidbiStatus: "ORIGINATION",
-        })
-          .unwrap()
-          .then((data) => {
-            if (data.leadStatus === "IN_PROCESS") {
-              let newSkipped = skipped;
-              if (isStepSkipped(activeStep)) {
-                newSkipped = new Set(newSkipped.values());
-                newSkipped.delete(activeStep);
-              }
-
-              setActiveStep((prevActiveStep) => prevActiveStep + 1);
-              setSkipped(newSkipped);
-              scrollToTop();
-              // Clear localStorage on successful submission
-              localStorage.removeItem(`lead_${leadId}_activeStep`);
-              localStorage.removeItem(`lead_${leadId}_stepsStatus`);
-            } else {
-              alert("Unknown error, please contact support.");
+    const handleDelete = async (applId: string, index: number) => {
+        handleClose();
+        try {
+            if (await deleteLimitDetails({ applId, index }).unwrap()) {
+                setOpenSnackbar(true);
+                setSeverity("success");
+                setSnackMsg("Record Deleted successfully");
+                return true;
             }
-          });
-    }
-  };
-
-  const scrollToTop = () => {
-    const customScrollDiv = document.querySelector(".custom_scroll");
-    if (customScrollDiv) {
-      customScrollDiv.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }
-  };
-
-  const [nextProceed, setNextProceed] = useState(false);
-  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
-  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
-    parentId: Number(leadId) || 0,
-    requestValue: {},
-  };
-
-  const { data: overall } = useListRpsOverallQuery(rpsInput);
-  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
-  useEffect(() => {
-    if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length === 0) ||
-       (Array.isArray(sidbi) && sidbi.length === 0))
-    ) {
-      setNextProceed(true);
-    } else if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length > 0) ||
-       (Array.isArray(sidbi) && sidbi.length > 0))
-    ) {
-      setNextRPSDataProceed(true);
-
-      const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-      const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-      const stepperNext = document.querySelector('.stepper_next');
-
-      if (repaymentScheduleTableParametersDiv) {
-        repaymentScheduleTableParametersDiv.classList.remove('d-none');
-      }
-      if (stepperConfirmRepaymentScheduleTable) {
-        stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
-      }
-    } else {
-      setNextProceed(false);
-    }
-  }, [activeStep, overall, sidbi]);
-
-  const handleNext = async () => {
-    setLoadingButtonSaveNext(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let isValidForm = await formToSubmit.current.isValid();
-      if (isValidForm) {
-        await formToSubmit.current.submit();
-        let success = await formToSubmit.current.isValid(true);
-        if (success) {
-          setActiveStep((prevActiveStep) => prevActiveStep + 1);
-          setSkipped(newSkipped);
-          dispatch(
-            updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-          );
-          setStepsStatus((prevStepsStatus) => {
-            const newStepsStatus = [...prevStepsStatus];
-            newStepsStatus[activeStep] = "1";
-            return newStepsStatus;
-          });
+            return false;
+        } catch (error: any) {
+            console.error("Error saving compliance position:", error);
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("failed to save : " + error?.message);
+            return false;
         }
-        scrollToTop();
-      } else {
-        scrollToTop();
-      }
-      setLoadingButtonSaveNext(false);
-    } else {
-      console.error("There is no form in the current page to submit.");
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-      scrollToTop();
-      setLoadingButtonSaveNext(false);
-    }
-  };
-
-  const handleNextNonLinear = async (step: any) => {
-    setActiveStep(step);
-
-    const breParametersDiv = document.querySelector('.bre_parameters_div');
-    const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
-    const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-    const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-    const stepperNext = document.querySelector('.stepper_next');
-
-    if (breParametersDiv) {
-      breParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmBre) {
-      stepperConfirmBre.classList.add('d-none');
-    }
-    if (repaymentScheduleTableParametersDiv) {
-      repaymentScheduleTableParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmRepaymentScheduleTable) {
-      stepperConfirmRepaymentScheduleTable.classList.add('d-none');
-    }
-    if (stepperNext) {
-      stepperNext.classList.remove('d-none');
-    }
-  };
-
-  const handleSave = async () => {
-    setLoadingButton(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let success = await formToSubmit.current.submit();
-      if (success) {
-        scrollToTop();
-        setSkipped(newSkipped);
-        dispatch(
-          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-        );
-        setStepsStatus((prevStepsStatus) => {
-          const newStepsStatus = [...prevStepsStatus];
-          newStepsStatus[activeStep] = "1";
-          return newStepsStatus;
-        });
-      }
-    } else {
-      console.error("There is no form in the current page to submit.");
-      scrollToTop();
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-    }
-    setLoadingButton(false);
-  };
-
-  const handleBack = () => {
-    setLoadingButton(true);
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-    setLoadingButton(false);
-  };
-
-  const breadcrumbs = [
-    <Link key="1" color="#A9A9A9" to="/">
-      Loan Origination
-    </Link>,
-    <Link key="2" color="#A9A9A9" to="/lead">
-      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-    </Link>,
-  ];
-
-  return (
-    <>
-      <Snackbar
-        open={stateAlert}
-        autoHideDuration={3000}
-        onClose={() => setStateAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <AlertError
-          icon={false}
-          severity="error"
-          onClose={() => console.log("close")}
-        >
-          {stateAlertMessage}
-        </AlertError>
-      </Snackbar>
-      {activeStep === steps.length ? (
-        <React.Fragment>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={6}
-            component={Paper}
-            elevation={6}
-            square
-            className={classes.root}
-            spacing={0}
-            style={{ alignItems: "center", justifyContent: "center" }}
-          >
-            <Box className="login_formBox">
-              <SuccessAnimation />
-              <Typography
-                variant="h5"
-                gutterBottom
-                style={{
-                  marginBottom: "0px",
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                You have successfully created
-                <br />a new lead{" "}
-                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
-              </Typography>
-              <Box component="form" noValidate className="loginformBox">
-                <Grid
-                  container
-                  className="login_forgot_password_grid"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ textAlign: "center", mt: "24px" }}
-                >
-                  <Grid
-                    item
-                    xs={12}
-                    sm={12}
-                    md={10}
-                    lg={10}
-                    xl={12}
-                    className="text-right"
-                  >
-                    <Button
-                      component={Link}
-                      to="/"
-                      className="no-underline login_forgot_password"
-                      style={{
-                        textDecoration: "none",
-                        color: "#A9A9A9",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {"< Back to Dashboard"}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-          </Grid>
-        </React.Fragment>
-      ) : (
-        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
-          <Container maxWidth="xl">
-            <div>
-              <TitleHeader
-                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-                breadcrumbs={breadcrumbs}
-                button={buttons}
-              />
-            </div>
-
-            <div style={{ marginTop: "1.5em" }}>
-              <Box sx={{ width: "100%" }}>
-                <Grid container spacing={3}>
-                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
-                    {leadId && leadId !== "NEW" ? (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={true}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    ) : (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    )}
-                  </Grid>
-
-                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
-                    <div className="custom_scroll">
-                      <React.Fragment>
-                        {activeStep >= LEAD_GENERATION &&
-                          activeStep < loanoriginationstep.length &&
-                          React.createElement(loanoriginationstep[activeStep], {
-                            ref: formToSubmit,
-                          })}
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            pt: "22px",
-                          }}
-                        >
-                          {activeStep === steps.length - 1 ? (
-                            <Grid
-                              container
-                              spacing={3}
-                              padding={0}
-                              sx={{ mb: "32px" }}
-                            >
-                              <Grid item md={8} xs={12}>
-                                <FormControlLabel
-                                  value="end"
-                                  control={
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        setIsChecked(e.target.checked)
-                                      }
-                                    />
-                                  }
-                                  label={
-                                    <Typography
-                                      variant="body2"
-                                      gutterBottom
-                                      style={{
-                                        marginTop: "0px",
-                                        marginBottom: "0px",
-                                        fontWeight: "400",
-                                        color: "#3B415B",
-                                      }}
-                                    >
-                                      I agree to the Terms and Condition{" "}
-                                      <b>
-                                        On behalf of the NBFC Authorised Person
-                                      </b>
-                                    </Typography>
-                                  }
-                                  labelPlacement="end"
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                md={4}
-                                xs={12}
-                                sx={{ textAlign: "right" }}
-                              >
-                                <ColorButton
-                                  variant="contained"
-                                  onClick={handleSubmitLast}
-                                  startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                  disabled={!isChecked && !loadingButton}
-                                  className="stepSubmit"
-                                >
-                                  Submit
-                                </ColorButton>
-                              </Grid>
-                            </Grid>
-                          ) : (
-                            <>
-                              <ColorBackButton
-                                color="inherit"
-                                sx={{ mb: "32px" }}
-                                onClick={handleBack}
-                                startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                disabled={activeStep === 0 && loadingButton}
-                                className="colorBackButton"
-                              >
-                                Back
-                              </ColorBackButton>
-                              <Box sx={{ flex: "1 1 auto" }} />
-                              {isSaveApplicable(activeStep) ? (
-                                <>
-                                  <SaveColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleSave}
-                                    startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButton}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Save
-                                  </SaveColorButton>
-                                  <ColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleNext}
-                                    startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButtonSaveNext}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Next
-                                  </ColorButton>
-                                </>
-                              ) : (
-                                <ColorButton
-                                  variant="contained"
-                                  className="stepper_next"
-                                  onClick={handleNext}
-                                  sx={{ mb: "32px" }}
-                                  startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                  disabled={loadingButtonSaveNext}
-                                >
-                                  Save & Next
-                                </ColorButton>
-                              )}
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmbre d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                                startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                disabled={loadingButtonSaveNext}
-                              >
-                                Confirm BRE
-                              </ColorButton>
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmrepaymentschedule d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                              >
-                                Confirm Repayment Schedule
-                              </ColorButton>
-                              <ColorCancelButton
-                                variant="contained"
-                                className="d-none"
-                                sx={{ mb: "32px", ml: 1 }}
-                              >
-                                Cancel Application
-                              </ColorCancelButton>
-                            </>
-                          )}
-                        </Box>
-                      </React.Fragment>
-                    </div>
-                  </Grid>
-                </Grid>
-              </Box>
-            </div>
-          </Container>
-        </div>
-      )}
-    </>
-  );
-};
-
-export default L0Container;
-
-// Redux Slice (unchanged)
-export enum StepStatus {
-  SUCCESS,
-  ERROR,
-  SKIP,
-}
-
-interface LeadStore {
-  id: number | undefined;
-  stepStatus: StepStatus[];
-}
-
-const initialState: LeadStore = { id: undefined, stepStatus: [] };
-
-export const leadStoreSlice = createSlice({
-  name: "leadStore",
-  initialState,
-  reducers: {
-    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
-      state.id = action.payload;
-    },
-    updateStepStatus: (
-      state: LeadStore,
-      action: PayloadAction<{ step: number; status: StepStatus }>
-    ) => {
-      console.log("Updating step status", action.payload);
-      if (action.payload.status === StepStatus.SKIP) {
-        if (!state.stepStatus[action.payload.step]) {
-          state.stepStatus[action.payload.step] = StepStatus.SKIP;
-        }
-      } else {
-        state.stepStatus[action.payload.step] = action.payload.status;
-      }
-      console.log("Step Status");
-      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
-    },
-  },
-});
-
-export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import TitleHeader from "../../Components/titleheader";
-import {
-  Box,
-  Grid,
-  Container,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Paper,
-  Snackbar,
-  Button,
-} from "@mui/material";
-import { makeStyles } from "@material-ui/core/styles";
-import useToken from "../../Features/Authentication/useToken";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { useNavigate } from "react-router-dom";
-import { useGetLeadQuery } from "../../slices/leadSlice";
-import AlertError from "../../Components/Framework/AlertError";
-import "../../assets/css/common.css";
-import VerticalStepper from "../../Components/verticalstepper";
-import { useCallback, useEffect, useState } from "react";
-import React from "react";
-import {
-  ColorBackButton,
-  SkipColorButton,
-  ColorButton,
-  ColorCancelButton,
-} from "./Buttons";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-import LegalEntity from "./LegalEntity";
-import Lead from "./Lead";
-import { SubmitableForm } from "../../Components/Framework/FormSubmit";
-import { useAppDispatch } from "../../app/hooks";
-import {
-  StepStatus,
-  setLeadId,
-  updateStepStatus,
-} from "../../slices/localStores/leadStore";
-import LoanDetails from "./LoanDetails";
-import KmpContainer from "./KmpContainer";
-import SecurityDetailsContainer from "./SecurityDetailsContainer";
-import { useParams } from "react-router";
-import Bre from "./Bre";
-import RepaymentSchedule from "./RepaymentSchedule";
-import ReviewAndSubmit from "./ReviewAndSubmit";
-import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
-import { useUpdateLeadMutation } from "../../slices/leadSlice";
-import { useAppSelector } from "../../app/hooks";
-import { Link } from "react-router-dom";
-import SaveIcon from '@mui/icons-material/Save';
-import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
-import { Rps } from "../../models/rps";
-
-const useStyles = makeStyles((theme) => ({
-  browsefilediv: {
-    "& > *": {
-      margin: theme.spacing(1),
-      color: "#A9A9A9 !important",
-    },
-    "& .MuiButtonBase-root": {
-      "&hover": {
-        color: "#FFFFFF",
-      },
-      "&focus": {
-        color: "#FFFFFF",
-      },
-    },
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #C0C0C0",
-    maxHeight: "52px",
-  },
-  root: {
-    backgroundColor: "#F5F5F5 !important",
-    minHeight: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "32px",
-  },
-}));
-
-const L0Container = () => {
-  const [loadingButton, setLoadingButton] = React.useState(false);
-  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
-
-  const steps = [
-    "LEAD_GENERATION",
-    "LEGAL_ENTITY",
-    "KEY_MANAGEMENT_PERSONNEL",
-    "SECURITY_DETAILS",
-    "LOAN_DETAILS",
-    "BRE",
-    "REPAYMENT_SCHEDULE",
-    "REVIEW_&_SUBMIT",
-  ];
-
-  const LEAD_GENERATION = 0;
-  const LEGAL_ENTITY = 1;
-  const KEY_MANAGEMENT_PERSONNEL = 2;
-  const SECURITY_DETAILS = 3;
-
-  const dispatch = useAppDispatch();
-  const { stepStatus } = useAppSelector((state) => state.leadStore);
-
-  const buttons = [
-    {
-      label: "Save Progress and Close",
-      buttonstyle: "secondary_outline",
-      action: () => console.log("New button clicked"),
-    },
-  ];
-
-  const classes = useStyles();
-
-  // Initialize states to default values (reset on every mount)
-  const [activeStep, setActiveStep] = useState(LEAD_GENERATION);
-  const [stepsStatus, setStepsStatus] = useState(["0", "0", "0", "0", "0", "0", "0", "0"]);
-  const [skipped, setSkipped] = useState(new Set());
-  const [isChecked, setIsChecked] = useState(false);
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-  const [stateAlert, setStateAlert] = useState(false);
-  const [stateAlertMessage, setStateAlertMessage] = useState("");
-  const [completed] = React.useState<{
-    [k: number]: boolean;
-  }>({});
-
-  const [updateLeadStatus] = useUpdateLeadMutation();
-  const { id: leadId } = useParams();
-  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
-  const navigate = useNavigate();
-  const { getRoles } = useToken();
-  const setLeadIdRef = useCallback(
-    (id: number) => dispatch(setLeadId(id)),
-    [dispatch]
-  );
-
-  // Handle leadId and navigation
-  useEffect(() => {
-    if (leadId) setLeadIdRef(Number(leadId));
-    if (leadDataFetch !== undefined) {
-      if (leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")) {
-        navigate("/restricted");
-      }
-    }
-  }, [leadId, setLeadIdRef, leadDataFetch, navigate, getRoles]);
-
-  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
-
-  const loanoriginationstep = [
-    Lead,
-    LegalEntity,
-    KmpContainer,
-    SecurityDetailsContainer,
-    LoanDetails,
-    Bre,
-    RepaymentSchedule,
-    ReviewAndSubmit,
-  ];
-
-  const isSaveApplicable = (step: any) => {
-    return step === KEY_MANAGEMENT_PERSONNEL || step === SECURITY_DETAILS;
-  };
-
-  const isStepSkipped = (step: any) => {
-    return skipped.has(step);
-  };
-
-  const handleSubmitLast = () => {
-    setLoadingButton(true);
-
-    if (skipped.size > 0) {
-      setStateAlert(true);
-      setStateAlertMessage("Please complete all the steps");
-    } else {
-      if (Number(createdLeadId))
-        updateLeadStatus({
-          id: Number(createdLeadId),
-          leadStatus: "IN_PROCESS",
-          sidbiStatus: "ORIGINATION",
-        })
-          .unwrap()
-          .then((data) => {
-            if (data.leadStatus === "IN_PROCESS") {
-              let newSkipped = skipped;
-              if (isStepSkipped(activeStep)) {
-                newSkipped = new Set(newSkipped.values());
-                newSkipped.delete(activeStep);
-              }
-
-              setActiveStep((prevActiveStep) => prevActiveStep + 1);
-              setSkipped(newSkipped);
-              scrollToTop();
-            } else {
-              alert("Unknown error, please contact support.");
-            }
-          });
-    }
-  };
-
-  const scrollToTop = () => {
-    const customScrollDiv = document.querySelector(".custom_scroll");
-    if (customScrollDiv) {
-      customScrollDiv.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }
-  };
-
-  const [nextProceed, setNextProceed] = useState(false);
-  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
-  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
-    parentId: Number(leadId) || 0,
-    requestValue: {},
-  };
-
-  const { data: overall } = useListRpsOverallQuery(rpsInput);
-  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
-  useEffect(() => {
-    if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length === 0) ||
-       (Array.isArray(sidbi) && sidbi.length === 0))
-    ) {
-      setNextProceed(true);
-    } else if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length > 0) ||
-       (Array.isArray(sidbi) && sidbi.length > 0))
-    ) {
-      setNextRPSDataProceed(true);
-
-      const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-      const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-      const stepperNext = document.querySelector('.stepper_next');
-
-      if (repaymentScheduleTableParametersDiv) {
-        repaymentScheduleTableParametersDiv.classList.remove('d-none');
-      }
-      if (stepperConfirmRepaymentScheduleTable) {
-        stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
-      }
-    } else {
-      setNextProceed(false);
-    }
-  }, [activeStep, overall, sidbi]);
-
-  const handleNext = async () => {
-    setLoadingButtonSaveNext(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let isValidForm = await formToSubmit.current.isValid();
-      if (isValidForm) {
-        await formToSubmit.current.submit();
-        let success = await formToSubmit.current.isValid(true);
-        if (success) {
-          setActiveStep((prevActiveStep) => prevActiveStep + 1);
-          setSkipped(newSkipped);
-          dispatch(
-            updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-          );
-          setStepsStatus((prevStepsStatus) => {
-            const newStepsStatus = [...prevStepsStatus];
-            newStepsStatus[activeStep] = "1";
-            return newStepsStatus;
-          });
-        }
-        scrollToTop();
-      } else {
-        scrollToTop();
-      }
-      setLoadingButtonSaveNext(false);
-    } else {
-      console.error("There is no form in the current page to submit.");
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-      scrollToTop();
-      setLoadingButtonSaveNext(false);
-    }
-  };
-
-  const handleNextNonLinear = async (step: any) => {
-    setActiveStep(step);
-
-    const breParametersDiv = document.querySelector('.bre_parameters_div');
-    const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
-    const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-    const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-    const stepperNext = document.querySelector('.stepper_next');
-
-    if (breParametersDiv) {
-      breParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmBre) {
-      stepperConfirmBre.classList.add('d-none');
-    }
-    if (repaymentScheduleTableParametersDiv) {
-      repaymentScheduleTableParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmRepaymentScheduleTable) {
-      stepperConfirmRepaymentScheduleTable.classList.add('d-none');
-    }
-    if (stepperNext) {
-      stepperNext.classList.remove('d-none');
-    }
-  };
-
-  const handleSave = async () => {
-    setLoadingButton(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let success = await formToSubmit.current.submit();
-      if (success) {
-        scrollToTop();
-        setSkipped(newSkipped);
-        dispatch(
-          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-        );
-        setStepsStatus((prevStepsStatus) => {
-          const newStepsStatus = [...prevStepsStatus];
-          newStepsStatus[activeStep] = "1";
-          return newStepsStatus;
-        });
-      }
-    } else {
-      console.error("There is no form in the current page to submit.");
-      scrollToTop();
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-    }
-    setLoadingButton(false);
-  };
-
-  const handleBack = () => {
-    setLoadingButton(true);
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-    setLoadingButton(false);
-  };
-
-  const breadcrumbs = [
-    <Link key="1" color="#A9A9A9" to="/">
-      Loan Origination
-    </Link>,
-    <Link key="2" color="#A9A9A9" to="/lead">
-      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-    </Link>,
-  ];
-
-  return (
-    <>
-      <Snackbar
-        open={stateAlert}
-        autoHideDuration={3000}
-        onClose={() => setStateAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <AlertError
-          icon={false}
-          severity="error"
-          onClose={() => console.log("close")}
-        >
-          {stateAlertMessage}
-        </AlertError>
-      </Snackbar>
-      {activeStep === steps.length ? (
-        <React.Fragment>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={6}
-            component={Paper}
-            elevation={6}
-            square
-            className={classes.root}
-            spacing={0}
-            style={{ alignItems: "center", justifyContent: "center" }}
-          >
-            <Box className="login_formBox">
-              <SuccessAnimation />
-              <Typography
-                variant="h5"
-                gutterBottom
-                style={{
-                  marginBottom: "0px",
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                You have successfully created
-                <br />a new lead{" "}
-                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
-              </Typography>
-              <Box component="form" noValidate className="loginformBox">
-                <Grid
-                  container
-                  className="login_forgot_password_grid"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ textAlign: "center", mt: "24px" }}
-                >
-                  <Grid
-                    item
-                    xs={12}
-                    sm={12}
-                    md={10}
-                    lg={10}
-                    xl={12}
-                    className="text-right"
-                  >
-                    <Button
-                      component={Link}
-                      to="/"
-                      className="no-underline login_forgot_password"
-                      style={{
-                        textDecoration: "none",
-                        color: "#A9A9A9",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {"< Back to Dashboard"}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-          </Grid>
-        </React.Fragment>
-      ) : (
-        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
-          <Container maxWidth="xl">
-            <div>
-              <TitleHeader
-                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-                breadcrumbs={breadcrumbs}
-                button={buttons}
-              />
-            </div>
-
-            <div style={{ marginTop: "1.5em" }}>
-              <Box sx={{ width: "100%" }}>
-                <Grid container spacing={3}>
-                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
-                    {leadId && leadId !== "NEW" ? (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={true}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    ) : (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    )}
-                  </Grid>
-
-                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
-                    <div className="custom_scroll">
-                      <React.Fragment>
-                        {activeStep >= LEAD_GENERATION &&
-                          activeStep < loanoriginationstep.length &&
-                          React.createElement(loanoriginationstep[activeStep], {
-                            ref: formToSubmit,
-                          })}
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            pt: "22px",
-                          }}
-                        >
-                          {activeStep === steps.length - 1 ? (
-                            <Grid
-                              container
-                              spacing={3}
-                              padding={0}
-                              sx={{ mb: "32px" }}
-                            >
-                              <Grid item md={8} xs={12}>
-                                <FormControlLabel
-                                  value="end"
-                                  control={
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        setIsChecked(e.target.checked)
-                                      }
-                                    />
-                                  }
-                                  label={
-                                    <Typography
-                                      variant="body2"
-                                      gutterBottom
-                                      style={{
-                                        marginTop: "0px",
-                                        marginBottom: "0px",
-                                        fontWeight: "400",
-                                        color: "#3B415B",
-                                      }}
-                                    >
-                                      I agree to the Terms and Condition{" "}
-                                      <b>
-                                        On behalf of the NBFC Authorised Person
-                                      </b>
-                                    </Typography>
-                                  }
-                                  labelPlacement="end"
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                md={4}
-                                xs={12}
-                                sx={{ textAlign: "right" }}
-                              >
-                                <ColorButton
-                                  variant="contained"
-                                  onClick={handleSubmitLast}
-                                  startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                  disabled={!isChecked && !loadingButton}
-                                  className="stepSubmit"
-                                >
-                                  Submit
-                                </ColorButton>
-                              </Grid>
-                            </Grid>
-                          ) : (
-                            <>
-                              <ColorBackButton
-                                color="inherit"
-                                sx={{ mb: "32px" }}
-                                onClick={handleBack}
-                                startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                disabled={activeStep === 0 && loadingButton}
-                                className="colorBackButton"
-                              >
-                                Back
-                              </ColorBackButton>
-                              <Box sx={{ flex: "1 1 auto" }} />
-                              {isSaveApplicable(activeStep) ? (
-                                <>
-                                  <SaveColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleSave}
-                                    startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButton}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Save
-                                  </SaveColorButton>
-                                  <ColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleNext}
-                                    startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButtonSaveNext}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Next
-                                  </ColorButton>
-                                </>
-                              ) : (
-                                <ColorButton
-                                  variant="contained"
-                                  className="stepper_next"
-                                  onClick={handleNext}
-                                  sx={{ mb: "32px" }}
-                                  startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                  disabled={loadingButtonSaveNext}
-                                >
-                                  Save & Next
-                                </ColorButton>
-                              )}
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmbre d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                                startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                disabled={loadingButtonSaveNext}
-                              >
-                                Confirm BRE
-                              </ColorButton>
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmrepaymentschedule d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                              >
-                                Confirm Repayment Schedule
-                              </ColorButton>
-                              <ColorCancelButton
-                                variant="contained"
-                                className="d-none"
-                                sx={{ mb: "32px", ml: 1 }}
-                              >
-                                Cancel Application
-                              </ColorCancelButton>
-                            </>
-                          )}
-                        </Box>
-                      </React.Fragment>
-                    </div>
-                  </Grid>
-                </Grid>
-              </Box>
-            </div>
-          </Container>
-        </div>
-      )}
-    </>
-  );
-};
-
-export default L0Container;
-
-// Redux Slice (unchanged)
-export enum StepStatus {
-  SUCCESS,
-  ERROR,
-  SKIP,
-}
-
-interface LeadStore {
-  id: number | undefined;
-  stepStatus: StepStatus[];
-}
-
-const initialState: LeadStore = { id: undefined, stepStatus: [] };
-
-export const leadStoreSlice = createSlice({
-  name: "leadStore",
-  initialState,
-  reducers: {
-    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
-      state.id = action.payload;
-    },
-    updateStepStatus: (
-      state: LeadStore,
-      action: PayloadAction<{ step: number; status: StepStatus }>
-    ) => {
-      console.log("Updating step status", action.payload);
-      if (action.payload.status === StepStatus.SKIP) {
-        if (!state.stepStatus[action.payload.step]) {
-          state.stepStatus[action.payload.step] = StepStatus.SKIP;
-        }
-      } else {
-        state.stepStatus[action.payload.step] = action.payload.status;
-      }
-      console.log("Step Status");
-      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
-    },
-  },
-});
-
-export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import TitleHeader from "../../Components/titleheader";
-import {
-  Box,
-  Grid,
-  Container,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Paper,
-  Snackbar,
-  Button,
-} from "@mui/material";
-import { makeStyles } from "@material-ui/core/styles";
-import useToken from "../../Features/Authentication/useToken";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { useNavigate } from "react-router-dom";
-import { useGetLeadQuery } from "../../slices/leadSlice";
-import AlertError from "../../Components/Framework/AlertError";
-import "../../assets/css/common.css";
-import VerticalStepper from "../../Components/verticalstepper";
-import { useCallback, useEffect, useState } from "react";
-import React from "react";
-import {
-  ColorBackButton,
-  SkipColorButton,
-  ColorButton,
-  ColorCancelButton,
-} from "./Buttons";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-import LegalEntity from "./LegalEntity";
-import Lead from "./Lead";
-import { SubmitableForm } from "../../Components/Framework/FormSubmit";
-import { useAppDispatch } from "../../app/hooks";
-import {
-  StepStatus,
-  setLeadId,
-  updateStepStatus,
-} from "../../slices/localStores/leadStore";
-import LoanDetails from "./LoanDetails";
-import KmpContainer from "./KmpContainer";
-import SecurityDetailsContainer from "./SecurityDetailsContainer";
-import { useParams } from "react-router";
-import Bre from "./Bre";
-import RepaymentSchedule from "./RepaymentSchedule";
-import ReviewAndSubmit from "./ReviewAndSubmit";
-import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
-import { useUpdateLeadMutation } from "../../slices/leadSlice";
-import { useAppSelector } from "../../app/hooks";
-import { Link } from "react-router-dom";
-import SaveIcon from '@mui/icons-material/Save';
-import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
-import { Rps } from "../../models/rps";
-
-const useStyles = makeStyles((theme) => ({
-  browsefilediv: {
-    "& > *": {
-      margin: theme.spacing(1),
-      color: "#A9A9A9 !important",
-    },
-    "& .MuiButtonBase-root": {
-      "&hover": {
-        color: "#FFFFFF",
-      },
-      "&focus": {
-        color: "#FFFFFF",
-      },
-    },
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #C0C0C0",
-    maxHeight: "52px",
-  },
-  root: {
-    backgroundColor: "#F5F5F5 !important",
-    minHeight: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "32px",
-  },
-}));
-
-const L0Container = () => {
-  const [loadingButton, setLoadingButton] = React.useState(false);
-  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
-
-  const steps = [
-    "LEAD_GENERATION",
-    "LEGAL_ENTITY",
-    "KEY_MANAGEMENT_PERSONNEL",
-    "SECURITY_DETAILS",
-    "LOAN_DETAILS",
-    "BRE",
-    "REPAYMENT_SCHEDULE",
-    "REVIEW_&_SUBMIT",
-  ];
-
-  const LEAD_GENERATION = 0;
-  const LEGAL_ENTITY = 1;
-  const KEY_MANAGEMENT_PERSONNEL = 2;
-  const SECURITY_DETAILS = 3;
-
-  const dispatch = useAppDispatch();
-  const { stepStatus } = useAppSelector((state) => state.leadStore);
-
-  const buttons = [
-    {
-      label: "Save Progress and Close",
-      buttonstyle: "secondary_outline",
-      action: () => console.log("New button clicked"),
-    },
-  ];
-
-  const classes = useStyles();
-
-  // Initialize activeStep and stepsStatus from localStorage or default values
-  const [activeStep, setActiveStep] = useState(() => {
-    const savedStep = localStorage.getItem(`lead_${leadId}_activeStep`);
-    return savedStep ? parseInt(savedStep, 10) : LEAD_GENERATION;
-  });
-  const [stepsStatus, setStepsStatus] = useState(() => {
-    const savedStatus = localStorage.getItem(`lead_${leadId}_stepsStatus`);
-    return savedStatus ? JSON.parse(savedStatus) : ["0", "0", "0", "0", "0", "0", "0", "0"];
-  });
-  const [skipped, setSkipped] = useState(new Set());
-  const [isChecked, setIsChecked] = useState(false);
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-  const [stateAlert, setStateAlert] = useState(false);
-  const [stateAlertMessage, setStateAlertMessage] = useState("");
-  const [completed] = React.useState<{
-    [k: number]: boolean;
-  }>({});
-
-  const [updateLeadStatus] = useUpdateLeadMutation();
-  const { id: leadId } = useParams();
-  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
-  const navigate = useNavigate();
-  const { getRoles } = useToken();
-  const setLeadIdRef = useCallback(
-    (id: number) => dispatch(setLeadId(id)),
-    [dispatch]
-  );
-
-  // Save activeStep and stepsStatus to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(`lead_${leadId}_activeStep`, activeStep.toString());
-    localStorage.setItem(`lead_${leadId}_stepsStatus`, JSON.stringify(stepsStatus));
-  }, [activeStep, stepsStatus, leadId]);
-
-  // Handle leadId and navigation
-  useEffect(() => {
-    if (leadId) setLeadIdRef(Number(leadId));
-    if (leadDataFetch !== undefined) {
-      if (leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")) {
-        navigate("/restricted");
-      }
-    }
-  }, [leadId, setLeadIdRef, leadDataFetch, navigate, getRoles]);
-
-  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
-
-  const loanoriginationstep = [
-    Lead,
-    LegalEntity,
-    KmpContainer,
-    SecurityDetailsContainer,
-    LoanDetails,
-    Bre,
-    RepaymentSchedule,
-    ReviewAndSubmit,
-  ];
-
-  const isSaveApplicable = (step: any) => {
-    return step === KEY_MANAGEMENT_PERSONNEL || step === SECURITY_DETAILS;
-  };
-
-  const isStepSkipped = (step: any) => {
-    return skipped.has(step);
-  };
-
-  const handleSubmitLast = () => {
-    setLoadingButton(true);
-
-    if (skipped.size > 0) {
-      setStateAlert(true);
-      setStateAlertMessage("Please complete all the steps");
-    } else {
-      if (Number(createdLeadId))
-        updateLeadStatus({
-          id: Number(createdLeadId),
-          leadStatus: "IN_PROCESS",
-          sidbiStatus: "ORIGINATION",
-        })
-          .unwrap()
-          .then((data) => {
-            if (data.leadStatus === "IN_PROCESS") {
-              let newSkipped = skipped;
-              if (isStepSkipped(activeStep)) {
-                newSkipped = new Set(newSkipped.values());
-                newSkipped.delete(activeStep);
-              }
-
-              setActiveStep((prevActiveStep) => prevActiveStep + 1);
-              setSkipped(newSkipped);
-              scrollToTop();
-              // Clear localStorage on successful submission
-              localStorage.removeItem(`lead_${leadId}_activeStep`);
-              localStorage.removeItem(`lead_${leadId}_stepsStatus`);
-            } else {
-              alert("Unknown error, please contact support.");
-            }
-          });
-    }
-  };
-
-  const scrollToTop = () => {
-    const customScrollDiv = document.querySelector(".custom_scroll");
-    if (customScrollDiv) {
-      customScrollDiv.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }
-  };
-
-  const [nextProceed, setNextProceed] = useState(false);
-  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
-  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
-    parentId: Number(leadId) || 0,
-    requestValue: {},
-  };
-
-  const { data: overall } = useListRpsOverallQuery(rpsInput);
-  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
-  useEffect(() => {
-    if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length === 0) ||
-       (Array.isArray(sidbi) && sidbi.length === 0))
-    ) {
-      setNextProceed(true);
-    } else if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length > 0) ||
-       (Array.isArray(sidbi) && sidbi.length > 0))
-    ) {
-      setNextRPSDataProceed(true);
-
-      const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-      const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-      const stepperNext = document.querySelector('.stepper_next');
-
-      if (repaymentScheduleTableParametersDiv) {
-        repaymentScheduleTableParametersDiv.classList.remove('d-none');
-      }
-      if (stepperConfirmRepaymentScheduleTable) {
-        stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
-      }
-    } else {
-      setNextProceed(false);
-    }
-  }, [activeStep, overall, sidbi]);
-
-  const handleNext = async () => {
-    setLoadingButtonSaveNext(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let isValidForm = await formToSubmit.current.isValid();
-      if (isValidForm) {
-        await formToSubmit.current.submit();
-        let success = await formToSubmit.current.isValid(true);
-        if (success) {
-          setActiveStep((prevActiveStep) => prevActiveStep + 1);
-          setSkipped(newSkipped);
-          dispatch(
-            updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-          );
-          setStepsStatus((prevStepsStatus) => {
-            const newStepsStatus = [...prevStepsStatus];
-            newStepsStatus[activeStep] = "1";
-            return newStepsStatus;
-          });
-        }
-        scrollToTop();
-      } else {
-        scrollToTop();
-      }
-      setLoadingButtonSaveNext(false);
-    } else {
-      console.error("There is no form in the current page to submit.");
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-      scrollToTop();
-      setLoadingButtonSaveNext(false);
-    }
-  };
-
-  const handleNextNonLinear = async (step: any) => {
-    setActiveStep(step);
-
-    const breParametersDiv = document.querySelector('.bre_parameters_div');
-    const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
-    const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-    const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-    const stepperNext = document.querySelector('.stepper_next');
-
-    if (breParametersDiv) {
-      breParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmBre) {
-      stepperConfirmBre.classList.add('d-none');
-    }
-    if (repaymentScheduleTableParametersDiv) {
-      repaymentScheduleTableParametersDiv.classList.add('d-none');
-    }
-    if (stepperConfirmRepaymentScheduleTable) {
-      stepperConfirmRepaymentScheduleTable.classList.add('d-none');
-    }
-    if (stepperNext) {
-      stepperNext.classList.remove('d-none');
-    }
-  };
-
-  const handleSave = async () => {
-    setLoadingButton(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let success = await formToSubmit.current.submit();
-      if (success) {
-        scrollToTop();
-        setSkipped(newSkipped);
-        dispatch(
-          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-        );
-        setStepsStatus((prevStepsStatus) => {
-          const newStepsStatus = [...prevStepsStatus];
-          newStepsStatus[activeStep] = "1";
-          return newStepsStatus;
-        });
-      }
-    } else {
-      console.error("There is no form in the current page to submit.");
-      scrollToTop();
-      setSkipped(newSkipped);
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-    }
-    setLoadingButton(false);
-  };
-
-  const handleBack = () => {
-    setLoadingButton(true);
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-    setLoadingButton(false);
-  };
-
-  const breadcrumbs = [
-    <Link key="1" color="#A9A9A9" to="/">
-      Loan Origination
-    </Link>,
-    <Link key="2" color="#A9A9A9" to="/lead">
-      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-    </Link>,
-  ];
-
-  return (
-    <>
-      <Snackbar
-        open={stateAlert}
-        autoHideDuration={3000}
-        onClose={() => setStateAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <AlertError
-          icon={false}
-          severity="error"
-          onClose={() => console.log("close")}
-        >
-          {stateAlertMessage}
-        </AlertError>
-      </Snackbar>
-      {activeStep === steps.length ? (
-        <React.Fragment>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={6}
-            component={Paper}
-            elevation={6}
-            square
-            className={classes.root}
-            spacing={0}
-            style={{ alignItems: "center", justifyContent: "center" }}
-          >
-            <Box className="login_formBox">
-              <SuccessAnimation />
-              <Typography
-                variant="h5"
-                gutterBottom
-                style={{
-                  marginBottom: "0px",
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                You have successfully created
-                <br />a new lead{" "}
-                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
-              </Typography>
-              <Box component="form" noValidate className="loginformBox">
-                <Grid
-                  container
-                  className="login_forgot_password_grid"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ textAlign: "center", mt: "24px" }}
-                >
-                  <Grid
-                    item
-                    xs={12}
-                    sm={12}
-                    md={10}
-                    lg={10}
-                    xl={12}
-                    className="text-right"
-                  >
-                    <Button
-                      component={Link}
-                      to="/"
-                      className="no-underline login_forgot_password"
-                      style={{
-                        textDecoration: "none",
-                        color: "#A9A9A9",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {"< Back to Dashboard"}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-          </Grid>
-        </React.Fragment>
-      ) : (
-        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
-          <Container maxWidth="xl">
-            <div>
-              <TitleHeader
-                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead"}
-                breadcrumbs={breadcrumbs}
-                button={buttons}
-              />
-            </div>
-
-            <div style={{ marginTop: "1.5em" }}>
-              <Box sx={{ width: "100%" }}>
-                <Grid container spacing={3}>
-                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
-                    {leadId && leadId !== "NEW" ? (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={true}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    ) : (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    )}
-                  </Grid>
-
-                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
-                    <div className="custom_scroll">
-                      <React.Fragment>
-                        {activeStep >= LEAD_GENERATION &&
-                          activeStep < loanoriginationstep.length &&
-                          React.createElement(loanoriginationstep[activeStep], {
-                            ref: formToSubmit,
-                          })}
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            pt: "22px",
-                          }}
-                        >
-                          {activeStep === steps.length - 1 ? (
-                            <Grid
-                              container
-                              spacing={3}
-                              padding={0}
-                              sx={{ mb: "32px" }}
-                            >
-                              <Grid item md={8} xs={12}>
-                                <FormControlLabel
-                                  value="end"
-                                  control={
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        setIsChecked(e.target.checked)
-                                      }
-                                    />
-                                  }
-                                  label={
-                                    <Typography
-                                      variant="body2"
-                                      gutterBottom
-                                      style={{
-                                        marginTop: "0px",
-                                        marginBottom: "0px",
-                                        fontWeight: "400",
-                                        color: "#3B415B",
-                                      }}
-                                    >
-                                      I agree to the Terms and Condition{" "}
-                                      <b>
-                                        On behalf of the NBFC Authorised Person
-                                      </b>
-                                    </Typography>
-                                  }
-                                  labelPlacement="end"
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                md={4}
-                                xs={12}
-                                sx={{ textAlign: "right" }}
-                              >
-                                <ColorButton
-                                  variant="contained"
-                                  onClick={handleSubmitLast}
-                                  startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                  disabled={!isChecked && !loadingButton}
-                                  className="stepSubmit"
-                                >
-                                  Submit
-                                </ColorButton>
-                              </Grid>
-                            </Grid>
-                          ) : (
-                            <>
-                              <ColorBackButton
-                                color="inherit"
-                                sx={{ mb: "32px" }}
-                                onClick={handleBack}
-                                startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                disabled={activeStep === 0 && loadingButton}
-                                className="colorBackButton"
-                              >
-                                Back
-                              </ColorBackButton>
-                              <Box sx={{ flex: "1 1 auto" }} />
-                              {isSaveApplicable(activeStep) ? (
-                                <>
-                                  <SaveColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleSave}
-                                    startIcon={loadingButton ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButton}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Save
-                                  </SaveColorButton>
-                                  <ColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleNext}
-                                    startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButtonSaveNext}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Next
-                                  </ColorButton>
-                                </>
-                              ) : (
-                                <ColorButton
-                                  variant="contained"
-                                  className="stepper_next"
-                                  onClick={handleNext}
-                                  sx={{ mb: "32px" }}
-                                  startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                  disabled={loadingButtonSaveNext}
-                                >
-                                  Save & Next
-                                </ColorButton>
-                              )}
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmbre d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                                startIcon={loadingButtonSaveNext ? <SpinningDotsWhite /> : ''}
-                                disabled={loadingButtonSaveNext}
-                              >
-                                Confirm BRE
-                              </ColorButton>
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmrepaymentschedule d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                              >
-                                Confirm Repayment Schedule
-                              </ColorButton>
-                              <ColorCancelButton
-                                variant="contained"
-                                className="d-none"
-                                sx={{ mb: "32px", ml: 1 }}
-                              >
-                                Cancel Application
-                              </ColorCancelButton>
-                            </>
-                          )}
-                        </Box>
-                      </React.Fragment>
-                    </div>
-                  </Grid>
-                </Grid>
-              </Box>
-            </div>
-          </Container>
-        </div>
-      )}
-    </>
-  );
-};
-
-export default L0Container;
-
-// Redux Slice (unchanged)
-export enum StepStatus {
-  SUCCESS,
-  ERROR,
-  SKIP,
-}
-
-interface LeadStore {
-  id: number | undefined;
-  stepStatus: StepStatus[];
-}
-
-const initialState: LeadStore = { id: undefined, stepStatus: [] };
-
-export const leadStoreSlice = createSlice({
-  name: "leadStore",
-  initialState,
-  reducers: {
-    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
-      state.id = action.payload;
-    },
-    updateStepStatus: (
-      state: LeadStore,
-      action: PayloadAction<{ step: number; status: StepStatus }>
-    ) => {
-      console.log("Updating step status", action.payload);
-      if (action.payload.status === StepStatus.SKIP) {
-        if (!state.stepStatus[action.payload.step]) {
-          state.stepStatus[action.payload.step] = StepStatus.SKIP;
-        }
-      } else {
-        state.stepStatus[action.payload.step] = action.payload.status;
-      }
-      console.log("Step Status");
-      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
-    },
-  },
-});
-
-export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
-
-
-
-
-
-
-
-
-
-
-
-
-
-import TitleHeader from "../../Components/titleheader";
-import {
-  Box,
-  Grid,
-  Container,  
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Paper,
-  Snackbar,
-  Button,
-} from "@mui/material";
-import { makeStyles } from "@material-ui/core/styles";
-import useToken from "../../Features/Authentication/useToken";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { useNavigate } from "react-router-dom";
-import { useGetLeadQuery } from "../../slices/leadSlice";
-import AlertError from "../../Components/Framework/AlertError";
-import "../../assets/css/common.css";
-import VerticalStepper from "../../Components/verticalstepper";
-import { useCallback, useEffect, useState } from "react";
-import React from "react";
-import {
-  ColorBackButton,
-  SkipColorButton,
-  ColorButton,
-  ColorCancelButton,
-} from "./Buttons";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-import LegalEntity from "./LegalEntity";
-import Lead from "./Lead";
-import { SubmitableForm } from "../../Components/Framework/FormSubmit";
-import { useAppDispatch } from "../../app/hooks";
-import {
-  StepStatus,
-  setLeadId,
-  updateStepStatus,
-} from "../../slices/localStores/leadStore";
-import LoanDetails from "./LoanDetails";
-import KmpContainer from "./KmpContainer";
-import SecurityDetailsContainer from "./SecurityDetailsContainer";
-import { useParams } from "react-router";
-import Bre from "./Bre";
-import RepaymentSchedule from "./RepaymentSchedule";
-import ReviewAndSubmit from "./ReviewAndSubmit";
-import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
-import { useUpdateLeadMutation } from "../../slices/leadSlice";
-import { useAppSelector } from "../../app/hooks";
-import { Link } from "react-router-dom";
-import SaveIcon from '@mui/icons-material/Save';
-import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { useListRpsOverallQuery, useListRpsSidbiQuery } from "../../slices/rpsListSlice";
-import { Rps } from "../../models/rps";
-
-const useStyles = makeStyles((theme) => ({
-  browsefilediv: {
-    "& > *": {
-      margin: theme.spacing(1),
-      color: "#A9A9A9 !important",
-    },
-
-    "& .MuiButtonBase-root": {
-      "&hover": {
-        color: "#FFFFFF",
-      },
-      "&focus": {
-        color: "#FFFFFF",
-      },
-    },
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #C0C0C0",
-    maxHeight: "52px",
-  },
-  // input: {
-  //   display: "none",
-  // },
-  root: {
-    backgroundColor: "#F5F5F5 !important",
-    minHeight: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "32px",
-  },
-}));
-
-const L0Container = () => {
-  const [loadingButton, setLoadingButton] = React.useState(false);
-  const [loadingButtonSaveNext, setLoadingButtonSaveNext] = React.useState(false);
-
-  const steps = [
-    "LEAD GENERATION",
-    "LEGAL ENTITY",
-    "KEY MANAGEMENT PERSONNEL",
-    "SECURITY DETAILS",
-    "LOAN DETAILS",
-    "BRE",
-    "REPAYMENT SCHEDULE",
-    "REVIEW & SUBMIT",
-  ];
-
-  const LEAD_GENERATION = 0;
-  const LEGAL_ENTITY = 1;
-  const KEY_MANAGEMENT_PERSONNEL = 2;
-  const SECURITY_DETAILS = 3;
-  // const LOAN_DETAILS = 3;
-  // const FINNANCIAL_AND_OTHER_DOCS = 4;
-  // const BRE = 5;
-  // const REVIEW_AND_SUBMIT = 6;
-
-  const dispatch = useAppDispatch();
-
-  //Checking the status of the stepper.
-  const { stepStatus } = useAppSelector((state) => state.leadStore);
-
-  const buttons = [
-    {
-      label: "Save Progress and Close",
-      buttonstyle: "secondary_outline",
-      action: () => console.log("New button clicked"),
-    },
-  ];
-
-  const classes = useStyles();
-  const [activeStep, setActiveStep] = useState(LEAD_GENERATION);
-  const [stepsStatus, setStepsStatus] = useState([
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-  ]);
-  const [skipped, setSkipped] = useState(new Set());
-  const [isChecked, setIsChecked] = useState(false);
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-  const [stateAlert, setStateAlert] = useState(false);
-  const [stateAlertMessage, setStateAlertMessage] = useState("");
-  const [completed] = React.useState<{
-    [k: number]: boolean;
-  }>({});
-  // const [completedState] = useState(false);
-  // const [completedStateActiveStep] = useState(-1);
-
-  
-  // const handleComplete = (activeStep:  any) => {
-  //   if(completedStateActiveStep !== -1 && completedState === true) {
-  //     const newCompleted = completed;
-  //     newCompleted[activeStep] = true;
-  //     setCompleted(newCompleted);
-  //   }
-  // };
-
-  const [updateLeadStatus] = useUpdateLeadMutation();
-
-  //On new lead creation the created Lead ID is stored
-  //in the redux store to be used by all components.
-  const { id: leadId } = useParams();
-  const { data: leadDataFetch } = useGetLeadQuery(Number(leadId) || skipToken);
-  const navigate = useNavigate();
-  const { getRoles } = useToken();
-  const setLeadIdRef = useCallback(
-    (id: number) => dispatch(setLeadId(id)),
-    [dispatch]
-  );
-  useEffect(() => {
-    if (leadId) setLeadIdRef(Number(leadId));
-    if(leadDataFetch !== undefined){
-      if(leadDataFetch?.sidbiStatus !== "CREATION" && getRoles().find((e: string) => e !== "NBFC")){
-        navigate("/restricted");
-      }
-    }
-  }, [leadId, setLeadIdRef, leadDataFetch]);
-
-  const { id: createdLeadId } = useAppSelector((state) => state.leadStore);
-
-  const loanoriginationstep = [
-    Lead,
-    LegalEntity,
-    KmpContainer,
-    SecurityDetailsContainer,
-    LoanDetails,
-    Bre,
-    RepaymentSchedule,
-    ReviewAndSubmit,
-  ];
-
-  // const isStepOptional = (step: any) => {
-  //   if (step === LEGAL_ENTITY) {
-  //     return 1;
-  //   } else if (step === KEY_MANAGEMENT_PERSONNEL) {
-  //     return 1;
-  //   }
-  // };
-
-  const isSaveApplicable = (step: any) => {
-    if (step === KEY_MANAGEMENT_PERSONNEL) {
-      return 1;
-    } else if (step === SECURITY_DETAILS) {
-      return 1;
-    }
-  };
-
-  const isStepSkipped = (step: any) => {
-    return skipped.has(step);
-  };
-
-  const handleSubmitLast = () => {    
-    setLoadingButton(true);
-
-    if (skipped.size > 0) {
-      setStateAlert(true);
-      setStateAlertMessage("Please complete all the steps");
-    } else {
-      if (Number(createdLeadId))
-        updateLeadStatus({
-          id: Number(createdLeadId),
-          leadStatus: "IN_PROCESS",
-          sidbiStatus: "ORIGINATION",
-        }).unwrap().then((data) => {
-          if(data.leadStatus === 'IN_PROCESS') {
-            let newSkipped = skipped;
-            if (isStepSkipped(activeStep)) {
-              newSkipped = new Set(newSkipped.values());
-              newSkipped.delete(activeStep);
-            }
-
-            setActiveStep((prevActiveStep) => prevActiveStep + 1);
-            setSkipped(newSkipped);
-            scrollToTop(); // Scroll to top when Constitution value changes
-          } else {
-            alert("Unknown error, please contact support.");
-          }
-          
-        });
-    }
-  };
-
-  const scrollToTop = () => {
-    const customScrollDiv = document.querySelector(".custom_scroll");
-    if (customScrollDiv) {
-      customScrollDiv.scrollTo({
-        top: 0,
-        behavior: "smooth", // Optional smooth scrolling behavior
-      });
-    }
-  };
-  const [nextProceed, setNextProceed] = useState(false);
-  const [nextRPSDataProceed, setNextRPSDataProceed] = useState(false);
-  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
-    parentId: Number(leadId) || 0,
-    requestValue: {},
-  };
-
-  const { data: overall } = useListRpsOverallQuery(rpsInput);
-  const { data: sidbi } = useListRpsSidbiQuery(rpsInput);
-  useEffect(() => {
-    if (
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length === 0) ||
-       (Array.isArray(sidbi) && sidbi.length === 0))
-    ) {
-      setNextProceed(true);
-    } if(
-      activeStep === 5 &&
-      ((Array.isArray(overall) && overall.length > 0) ||
-       (Array.isArray(sidbi) && sidbi.length > 0))
-    ){
-      setNextRPSDataProceed(true);
-      
-			const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-			const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-			// const repaymentScheduleTableUploadDiv = document.querySelector('.repaymentScheduleTable_upload_div');
-			const stepperNext = document.querySelector('.stepper_next');
-
-			// setIsHeading("Repayment Schedule");
-			// setIsSubHeading(true);
-			if (repaymentScheduleTableParametersDiv) {
-			repaymentScheduleTableParametersDiv.classList.remove('d-none');
-			}
-			if (stepperConfirmRepaymentScheduleTable) {
-			stepperConfirmRepaymentScheduleTable.classList.remove('d-none');
-			}
-    } else {
-      setNextProceed(false);
-    }
-  }, [activeStep, overall, sidbi]);
-  console.log(nextProceed);
-
-  const handleNext = async () => {    
-    setLoadingButtonSaveNext(true);
-
-    let newSkipped = skipped;
-    console.log(activeStep);
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    
-
-    if (formToSubmit && formToSubmit.current) {
-      let isValidForm = formToSubmit.current && await formToSubmit.current.isValid();
-      if(isValidForm) {
-        console.log("Calling Submit in next")
-        await formToSubmit.current?.submit();
-        console.log("Submitted in next")
-        let success = await formToSubmit.current?.isValid(true);
-        console.log("is Valid in form submit", success)
-        // if(activeStep === 1){
-  
-        // } else {
-          // let success = await formToSubmit.current?.submit();
-  
-          if (success) {
-            setActiveStep((prevActiveStep) => prevActiveStep + 1);
-            setSkipped(newSkipped);
-            dispatch(
-              updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS })
-            );
-          }
-  
-          scrollToTop(); // Scroll to top on new step display
-  
-          // Update steps_status array
-          setStepsStatus((prevStepsStatus) => {
-            const newStepsStatus = [...prevStepsStatus];
-            newStepsStatus[activeStep] = "1";
-            return newStepsStatus;
-          });
-      } else {
-        scrollToTop(); // Scroll to top on new step display
-      }
-      // }
-      setLoadingButtonSaveNext(false);
-    } else {
-      console.error("There is no form in the current page to submit.");
-
-      //For debugging
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      scrollToTop(); // Scroll to top on new step display
-      setSkipped(newSkipped);
-
-      scrollToTop(); // Scroll to top on new step display
-      
-      // Update steps_status array
-      setStepsStatus((prevStepsStatus) => {
-        const newStepsStatus = [...prevStepsStatus];
-        newStepsStatus[activeStep] = "1";
-        return newStepsStatus;
-      });
-      setLoadingButtonSaveNext(false);
-    }
-  };
-
-  const handleNextNonLinear = async (step: any) => {
-    setActiveStep(step);
-
-		const breParametersDiv = document.querySelector('.bre_parameters_div');
-		const stepperConfirmBre = document.querySelector('.stepper_confirmbre');
-		const repaymentScheduleTableParametersDiv = document.querySelector('.repaymentScheduleTable_parameters_div');
-		const stepperConfirmRepaymentScheduleTable = document.querySelector('.stepper_confirmrepaymentschedule');
-		const stepperNext = document.querySelector('.stepper_next');
-
-		if (breParametersDiv) {
-			breParametersDiv.classList.add('d-none');
-		}
-		if (stepperConfirmBre) {
-			stepperConfirmBre.classList.add('d-none');
-		}
-		if (repaymentScheduleTableParametersDiv) {
-			repaymentScheduleTableParametersDiv.classList.add('d-none');
-		}
-		if (stepperConfirmRepaymentScheduleTable) {
-			stepperConfirmRepaymentScheduleTable.classList.add('d-none');
-		}
-		if (stepperNext) {
-			stepperNext.classList.remove('d-none');
-		}
-  };
-
-  const handleSave = async () => {
-    setLoadingButton(true);
-
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    if (formToSubmit && formToSubmit.current) {
-      let success = await formToSubmit.current?.submit();
-
-      if (success) {
-        // setActiveStep((prevActiveStep) => prevActiveStep + 1);
-        scrollToTop(); // Scroll to top on new step display
-        setSkipped(newSkipped);
-        dispatch(
-          updateStepStatus({ step: activeStep, status: StepStatus.SUCCESS, })
-        );
-        setLoadingButton(false);
-      }
-    } else {
-      console.error("There is no form in the current page to submit.");
-
-      //For debugging
-      // setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      scrollToTop(); // Scroll to top on new step display
-      setSkipped(newSkipped);
-      setLoadingButton(false);
-    }
-
-    // Update steps_status array
-    setStepsStatus((prevStepsStatus) => {
-      const newStepsStatus = [...prevStepsStatus];
-      newStepsStatus[activeStep] = "1";
-      return newStepsStatus;
+    };
+
+    const handleClickOpen = (index: number) => {
+        setIndex(index);
+        setOpen(true);
+    };
+
+    const calculateSanTotal = (values: FormValues): number => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.sanctionedLimit) || 0);
+        }, 0);
+    };
+
+    const calculateFy2Total = (values: FormValues): number => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtTMinus2) || 0);
+        }, 0);
+    };
+
+    const calculateFy1Total = (values: FormValues): number => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtTMinus1) || 0);
+        }, 0);
+    };
+
+    const calculateFyTotal = (values: FormValues): number => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.fundingAmtT) || 0);
+        }, 0);
+    };
+
+    const calculateNcdTotal = (values: FormValues): number => {
+        return values.data.reduce((total: number, data1: any) => {
+            return total + (parseFloat(data1.ncdOs) || 0);
+        }, 0);
+    };
+
+    const odListingSchema = Yup.object().shape({
+        data: Yup.array().of(
+            Yup.object().shape({
+                lenderName: Yup.string().required('Required'),
+                limitType: Yup.string().required('Required'),
+                lenderType: Yup.string().required('Required'),
+            })
+        ),
     });
-    setLoadingButton(false);
-    // handleNext();
+
+    const handleClose = () => setOpen(false);
+
+    const handleCloseConfirmation = () => {
+        setActionVal(null);
+        setOpenConfirmation(false);
+    };
+
+    const handleSubmitConfirmation = (values: LenderRow[]) => {
+        setOpenConfirmation(false);
+        handleSubmitApis(values);
+    };
+
+    const handleSubmit = async (values: FormValues) => {
+        const finalValue = values.data.map((listData: any, index: number) => ({
+            ...listData,
+            applId,
+            slNo: index + 1,
+            saveStatus: actionVal
+        }));
+        if (actionVal === '02') {
+            setFormData(finalValue);
+            setOpenConfirmation(true);
+        } else {
+            handleSubmitApis(finalValue);
+        }
+        setActionVal(null);
+    };
+
+    const handleClickSetAction = (action: string) => setActionVal(action);
+
+    const handleSnackbarCloseSnack = () => setSnackOpen(false);
+
+
+    const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
+        const { values, setFieldValue } = data;
+        const row = values.data[index];
+        const selectedLimitType = limitTypeOptions.find((option: any) => option.value === row.limitType);
+        const lenderTypeOptionsForRow = selectedLimitType ? selectedLimitType.lenderType.map((type: string) => ({
+            key: type,
+            value: type,
+            label: type
+        })) : [];
+
+        return (
+            <div style={{ ...style, display: 'flex' }} className="div-table-row">
+                {columnWidths.map((width, colIndex) => (
+                    <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
+                        {colIndex === 0 && (
+                            <IconButton
+                                className="text-danger"
+                                disabled={row.saveStatus === '02'}
+                                onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}
+                            >
+                                <Delete />
+                            </IconButton>
+                        )}
+                        {colIndex === 1 && <span>{index + 1}</span>}
+                        {colIndex === 2 && (
+                            <MultipleLenderDropDown
+                                label=""
+                                name={`data.${index}.lenderName`}
+                                domain=""
+                                disabled={row.saveStatus === '02'}
+                                options={bankOptions}
+                                isLoading={isBankMasterLoading}
+                            />
+                        )}                                                                                                                                                                                                                           
+
+                        {colIndex === 3 && (
+                            <Grid item xs={12}>
+                                <EnhancedDropDown
+                                    label=""
+                                    name={`data.${index}.limitType`}
+                                    disabled={row.saveStatus === '02'}
+                                    customOptions={limitTypeOptions}
+                                    domain=""
+                                    onChange={(value: any) => {
+                                        setFieldValue(`data.${index}.lenderType`, '');
+                                    }}
+                                />
+                            </Grid>
+                        )}
+                        {colIndex === 4 && (
+                            <Grid item xs={12}>
+                                <EnhancedDropDown
+                                    label=""
+                                    name={`data.${index}.lenderType`}
+                                    disabled={row.saveStatus === '02'}
+                                    customOptions={lenderTypeOptionsForRow}
+                                    domain=""
+                                />
+                            </Grid>
+                        )}
+
+                        {colIndex === 5 && (
+                            <TextBoxField
+                                name={`data.${index}.sanctionedLimit`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 6 && (
+                            <TextBoxField
+                                name={`data.${index}.fundingAmtTMinus2`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 7 && (
+                            <TextBoxField
+                                name={`data.${index}.fundingAmtTMinus1`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 8 && (
+                            <TextBoxField
+                                name={`data.${index}.fundingAmtT`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 9 && (
+                            <TextBoxField
+                                name={`data.${index}.avgIntRate`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 10 && (
+                            <TextBoxField
+                                name={`data.${index}.latestIntRate`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 11 && (
+                            <TextBoxField
+                                name={`data.${index}.contactDetails`}
+                            />
+                        )}
+                        {colIndex === 12 && (
+                            <TextBoxField
+                                name={`data.${index}.ncdOs`}
+                                type="number"
+                            />
+                        )}
+                        {colIndex === 13 && (
+                            <TextBoxField
+                                name={`data.${index}.security`}
+                            />
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const [updateCommentByNId] = useUpdateCommentByNIdMutation();
+    const { opensections } = useAppSelector((state) => state.userStore);
+    const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
+    const [open, setOpen] = useState<any>(false);
+    const [getNotiId, setNotiId] = useState<any>('');
+    const [openDr, setOpenDr] = useState<any>(false);
+
+    const toggleDrawer = (newOpen: boolean) => () => {
+        setOpenDr(true);
+    };
+    const handleButtonClick = (notfId: any) => {
+        setOpenDr(true);
+        setNotiId(notfId);
+    };
+    useEffect(() => {
+        if (opensections && opensections.length > 0) {
+            setOpenSections(opensections);
+        }
+    }, [opensections]);
+    if (isLoading) return <FormLoader />;
+    if (isUploading) return <FullScreenLoaderNoClose />;
+
+    return (
+        <>
+            {!transactionData ?
+                <Notification /> : <>
+                    <Grid item xs={12} className="opensections-sticky-css">
+                        <Grid
+                            className="pb-0"
+                            item
+                            xs={12}
+                            display="flex"
+                            justifyContent="end">
+                            {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
+                                const matchedItem = getOpenSectionsData.find(
+                                    (item: any) => item?.sectionId === "09" && item?.subSectionId === "03"
+                                );
+                                return matchedItem ? (
+                                    <div className="openSection-item">
+                                        <NotificationSectionWiseButton
+                                            label="Respond"
+                                            handleClick={() => handleButtonClick(matchedItem?.notfId)}
+                                            className="btn-primary-css--"
+                                            notfId={matchedItem?.notfId}
+                                            getOpenSectionsData={getOpenSectionsData}
+                                        />
+                                    </div>
+                                ) : null;
+                            })()}
+                            <DrawerResponseComponent
+                                open={openDr}
+                                toggleDrawer={toggleDrawer}
+                                notfId={getNotiId}
+                                detailsData={''}
+                                postDataTrigger={updateCommentByNId}
+                                setOpen={setOpenDr}
+                            />
+                        </Grid>
+                    </Grid>
+                    <div className="wrap-appraisal-area">
+                        <Snackbar
+                            open={snackOpen}
+                            autoHideDuration={6000}
+                            onClose={handleSnackbarCloseSnack}
+                            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                        >
+                            <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
+                                <ul className="list-unstyled">
+                                    {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => (
+                                        <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
+                                    )) : ''}
+                                </ul>
+                            </Alert>
+                        </Snackbar>
+                        <div className="custome-form">
+                            <ConfirmationAlertDialog
+                                id={1}
+                                type={4}
+                                open={openConfirmation}
+                                handleClose={handleCloseConfirmation}
+                                handleDelete={handleSubmitConfirmation}
+                                values={formData}
+                            />
+                            <ConfirmationAlertDialog
+                                id={2}
+                                index={index}
+                                type={2}
+                                open={open}
+                                handleClose={handleClose}
+                                handleDelete={handleDelete}
+                            />
+                            <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
+                                <Formik
+                                    initialValues={initialValues}
+                                    onSubmit={handleSubmit}
+                                    enableReinitialize={true}
+                                    validationSchema={odListingSchema}
+                                    validateOnChange={true}
+                                    validateOnBlur={true}
+                                >
+                                    {({ values, setFieldValue }) => {
+                                        const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
+                                        const fy2Total = useMemo(() => calculateFy2Total(values), [values]);
+                                        const fy1Total = useMemo(() => calculateFy1Total(values), [values]);
+                                        const fyTotal = useMemo(() => calculateFyTotal(values), [values]);
+                                        const ncdTotal = useMemo(() => calculateNcdTotal(values), [values]);
+                                        const itemCount = values.data.length;
+                                        const ITEM_SIZE = 50;
+                                        const MAX_HEIGHT = 500;
+                                        const calculatedHeight = Math.min(itemCount * ITEM_SIZE, MAX_HEIGHT);
+
+                                        return (
+                                            <Form>
+                                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                                                    {values?.data?.[0]?.saveStatus !== "02" && (
+                                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
+                                                    )}
+                                                    <FieldArray name="data">
+                                                        {({ push }) => (
+                                                            <>
+                                                                {values?.data?.[0]?.saveStatus !== "02" && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        size='small'
+                                                                        className='psn_btn text-capitalize my-2 saveBtn'
+                                                                        variant="contained"
+                                                                        color="primary"
+                                                                        style={{ marginLeft: '15px', display: 'block' }}
+                                                                        onClick={() =>
+                                                                            push({
+                                                                                applId: applId,
+                                                                                slNo: values.data.length,
+                                                                                limitType: '',
+                                                                                lenderType: null,
+                                                                                sanctionedLimit: null,
+                                                                                lenderName: '',
+                                                                                fundingAmtTMinus2: null,
+                                                                                fundingAmtTMinus1: null,
+                                                                                fundingAmtT: null,
+                                                                                avgIntRate: null,
+                                                                                latestIntRate: null,
+                                                                                ncdOs: '',
+                                                                                contactDetails: '',
+                                                                                security: '',
+                                                                                saveStatus: ''
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        Add <AddCircleIcon />
+                                                                    </Button>
+                                                                )}
+                                                                <div className="table-ui div-table">
+                                                                    <div style={{ display: 'flex' }} className="div-table-row div-table-header">
+                                                                        {columnWidths.map((width, i) => (
+                                                                            <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
+                                                                                {i === 0 && <b>Action</b>}
+                                                                                {i === 1 && <b style={{ minWidth: '50px', display: 'inline-block' }}>Sr. No.</b>}
+                                                                                {i === 2 && <b>Name of the Bank/ lender</b>}
+                                                                                {i === 3 && <b>Limit Type</b>}
+                                                                                {i === 4 && <b>Type of FI</b>}
+                                                                                {i === 5 && <b>Sanctioned Limit</b>}
+                                                                                {i === 6 && <b>Funding received in FY-{transactionData?.lstAudYrTm2}</b>}
+                                                                                {i === 7 && <b>Funding received in FY-{transactionData?.lstAudYrTm1}</b>}
+                                                                                {i === 8 && <b>Funding received in FY-{transactionData?.lstAudYrT}</b>}
+                                                                                {i === 9 && <b>Avg rate of interest</b>}
+                                                                                {i === 10 && <b>Latest rate of interest</b>}
+                                                                                {i === 11 && <b>Contact details of lenders</b>}
+                                                                                {i === 12 && <b>NCD – o/s</b>}
+                                                                                {i === 13 && <b>Security</b>}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                    {values.data.length > 0 ? (
+                                                                        <div style={{ flex: 1 }}>
+                                                                            <FixedSizeList
+                                                                                className="table-list-container"
+                                                                                height={calculatedHeight}
+                                                                                itemCount={values.data.length}
+                                                                                itemSize={ITEM_SIZE}
+                                                                                width="100%"
+                                                                                itemData={{ values, setFieldValue }}
+                                                                            >
+                                                                                {renderRow}
+                                                                            </FixedSizeList>
+                                                                        </div>
+                                                                    ) : null}
+                                                                    <div style={{ display: 'flex' }} className="div-table-row">
+                                                                        <div style={{ width: `${columnWidths[0]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[1]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[2]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[3]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[4]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell"><b>Total</b></div>
+                                                                        <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                                                            <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                                                        </div>
+                                                                        <div style={{ width: `${columnWidths[6]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                                                            <b>{fy2Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                                                        </div>
+                                                                        <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                                                            <b>{fy1Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                                                        </div>
+                                                                        <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                                                            <b>{fyTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                                                        </div>
+                                                                        <div style={{ width: `${columnWidths[9]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[10]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[11]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                        <div style={{ width: `${columnWidths[12]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                                                            <b>{ncdTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                                                        </div>
+                                                                        <div style={{ width: `${columnWidths[13]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                                                    </div>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </FieldArray>
+                                                </fieldset>
+                                                {values?.data?.[0]?.saveStatus !== "02" && (
+                                                    <>
+                                                        <Button
+                                                            className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                                                            type='submit'
+                                                            onClick={() => handleClickSetAction('01')}
+                                                            variant="contained"
+                                                        >
+                                                            Save <CheckCircleOutlineIcon />
+                                                        </Button>
+                                                        <Button
+                                                            className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                                                            type='submit'
+                                                            onClick={() => handleClickSetAction('02')}
+                                                            variant="contained"
+                                                        >
+                                                            Submit <SaveAsIcon />
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </Form>
+                                        );
+                                    }}
+                                </Formik>
+                            </div>
+                            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
+                        </div>
+                    </div></>}
+        </>
+    );
+};
+
+export default connect((state: any) => ({
+    applId: state.userStore.applId
+}))(LenderLimitOdForm);
+
+
+
+import { FieldArray, Form, Formik } from "formik";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Alert, Button, Grid, IconButton, Snackbar, Table, TableCell, TableHead, TableRow } from "@mui/material";
+import { Delete } from '@mui/icons-material';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import { FixedSizeList } from 'react-window';
+import { connect } from 'react-redux';
+import { useDeleteLenderTermLoanByIdMutation, useGetLenderTermLoanFormDataQuery, useSaveLenderTermLoanFormDataMutation } from "../../../features/application-form/capitalResourceForm";
+import AutoSave from "../../../components/framework/AutoSave";
+import { TextBoxField } from "../../../components/framework/TextBoxField";
+import FormLoader from "../../../loader/FormLoader";
+import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
+import { AdvanceDatePickerField } from "../../../components/framework/EnhancedComponents";
+import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
+import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
+import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
+import { AdvanceTextBoxField } from "../../../components/framework/AdvanceTextBoxField";
+import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
+import { useGetMaterQuery } from "../../../features/master/api";
+import { modify } from "../../../utlis/helpers";
+import * as Yup from 'yup';
+import { parse, differenceInDays, isValid, format } from 'date-fns';
+
+import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
+import DrawerResponseComponent from "../../../components/DrawerComponent/DrawerResponseComponent";
+import { useGetBriefApplDetailsDataQuery, useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
+import Notification from "../../../components/shared/Notification";
+import { useAppSelector } from "../../../app/hooks";
+interface LenderRow {
+  lenderName: string;
+  lenderType: string | null;
+  sancDt: string | null;
+  sancAmt: number | null;
+  disbDt: string | null;
+  disbAmt: number | null;
+  undrawnSanc: number | null;
+  outstandingAmt: number | null;
+  totalExposure: number | null;
+  intRate: number | null;
+  tenure: number | null;
+  contactDetails: string | null;
+  acr: number | null;
+  security: string;
+  corpGuarantee: string;
+  persGuarantee: string;
+  collSecurity: string;
+  majorCovenants: string;
+  slNo: number | null;
+  saveStatus: string;
+  applId: string;
+}
+
+interface FormValues {
+  data: LenderRow[];
+}
+
+interface Props {
+  applId: string;
+  excelData: any[];
+  openSectionsData?: any[];
+}
+
+const LenderTermLoanForm = ({ applId, excelData, openSectionsData }: Props) => {
+  const { data: appDetails } = useGetBriefApplDetailsDataQuery(applId as any, { skip: !applId, refetchOnMountOrArgChange: true });
+  const [addLimitTlDetails] = useSaveLenderTermLoanFormDataMutation();
+  const [deleteLimitTlDetails] = useDeleteLenderTermLoanByIdMutation();
+  const { data: LimitTlData, isLoading, isError, refetch } = useGetLenderTermLoanFormDataQuery(applId, { skip: !applId, refetchOnMountOrArgChange: true });
+
+  const [index, setIndex] = useState(0);
+  const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
+  const [openConfirmation, setOpenConfirmation] = useState(false);
+  const [formData, setFormData] = useState<LenderRow[] | null>(null);
+  const [actionVal, setActionVal] = useState<string | null>(null);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [snackOpen, setSnackOpen] = useState(false);
+  const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
+  const [snackMessages, setSnackMessages] = useState<string[]>([]);
+
+
+  const columnWidths = [60, 60, 250, 150, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 350, 350, 350, 350];
+
+  const formatDate = (str: string | null): string => {
+    if (!str) return "";
+    if (typeof str === "string") return str;
+    const date = new Date(str);
+    const mnth = ("0" + (date.getMonth() + 1)).slice(-2);
+    const day = ("0" + date.getDate()).slice(-2);
+    return [day, mnth, date.getFullYear()].join("-");
   };
 
-  const handleBack = () => {
-    setLoadingButton(true);
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-    setLoadingButton(false);
+  useEffect(() => {
+    if (LimitTlData) {
+      const dataWithApplId: LenderRow[] = LimitTlData.map((item: any) => ({ ...item, applId }));
+      setInitialValues({ data: dataWithApplId });
+    }
+  }, [LimitTlData, applId]);
+
+  useEffect(() => {
+    if (excelData && excelData.length > 0) {
+      setIsProcessing(true);
+      const lenderRows = excelData.filter((row: any, idx: number) => idx !== 0 && row[2] !== 'Total');
+      const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
+        lenderName: excelRow[2]?.toString().trim() || "",
+        lenderType: excelRow[3]?.toString().trim() || null,
+        sancDt: formatDate(excelRow[4]),
+        sancAmt: parseExcelValue(excelRow[5]),
+        disbDt: formatDate(excelRow[6]),
+        disbAmt: parseExcelValue(excelRow[7]),
+        undrawnSanc: parseExcelValue(excelRow[8]),
+        outstandingAmt: parseExcelValue(excelRow[9]),
+        totalExposure: calculateTotalExposure(parseExcelValue(excelRow[8]), parseExcelValue(excelRow[9])),
+        intRate: parseExcelValue(excelRow[11]),
+        tenure: parseExcelValue(excelRow[12]),
+        contactDetails: excelRow[13]?.toString().trim() || null,
+        acr: parseExcelValue(excelRow[14]),
+        security: excelRow[15]?.toString().trim() || "",
+        corpGuarantee: excelRow[16]?.toString().trim() || "",
+        persGuarantee: excelRow[17]?.toString().trim() || "",
+        collSecurity: excelRow[18]?.toString().trim() || "",
+        majorCovenants: excelRow[19]?.toString().trim() || "",
+        slNo: null,
+        saveStatus: '01',
+        applId,
+      }));
+      setTimeout(() => {
+        setInitialValues({ data: newData });
+        setIsProcessing(false);
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Lender data imported successfully");
+      }, 0);
+    }
+  }, [excelData, applId]);
+
+  const parseExcelValue = (value: any): number => {
+    if (value === undefined || value === null || value === '') return 0;
+    if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
+    return parseFloat(value) || 0;
   };
 
-  // const handleSkip = () => {
-  //   if (!isStepOptional(activeStep)) {
-  //     // You probably want to guard against something like this,
-  //     // it should never occur unless someone's actively trying to break something.
-  //     throw new Error("You can't skip a step that isn't optional.");
-  //   }
+  const extractErrorMessages = (errorResponse: Record<string, string>): string[] => {
+    return Object.values(errorResponse).flatMap(msg => msg.split(',').map(m => m.trim()));
+  };
 
-  //   setSkipped((prevSkipped) => {
-  //     const newSkipped = new Set(prevSkipped.values());
-  //     newSkipped.add(activeStep);
-  //     return newSkipped;
-  //   });
+  const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
+    try {
+      const requestBody = Array.isArray(values) ? values : values.data;
+      setIsUploading(true);
+      if (await addLimitTlDetails(requestBody).unwrap()) {
+        setIsUploading(false);
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
+        setActionVal(null);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      setIsUploading(false);
+      if (err.status === 400 && err.message === "Invalid") {
+        const errorMessages = extractErrorMessages(err.customCode);
+        setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
+        setSnackSeverity('error');
+        setSnackOpen(true);
+      } else {
+        console.error(err);
+      }
+      return false;
+    }
+  };
 
-  //   // Update steps_status array
-  //   setStepsStatus((prevStepsStatus) => {
-  //     const newStepsStatus = [...prevStepsStatus];
-  //     newStepsStatus[activeStep] = "2";
-  //     return newStepsStatus;
-  //   });
+  const handleClosePop = () => setOpenSnackbar(false);
 
-  //   dispatch(updateStepStatus({ step: activeStep, status: StepStatus.SKIP }));
+  const handleDelete = async (applId: string, index: number) => {
+    handleClose();
+    try {
+      if (await deleteLimitTlDetails({ applId, index }).unwrap()) {
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Record Deleted successfully");
+      }
+    } catch (error) {
+      console.error("Error deleting record:", error);
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to delete");
+    }
+  };
 
-  //   setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  //   scrollToTop(); // Scroll to top when Constitution value changes
-  // };
+  const handleClickOpen = (index: number) => {
+    setIndex(index);
+    setOpen(true);
+  };
 
-  // const handleNextStep = () => {
-  //   setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  //   scrollToTop(); // Scroll to top when Constitution value changes
-  //   // Update steps_status array
-  //   setStepsStatus((prevStepsStatus) => {
-  //     const newStepsStatus = [...prevStepsStatus];
-  //     newStepsStatus[activeStep] = "1";
-  //     return newStepsStatus;
-  //   });
-  // };
+  const calculateSanTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.sancAmt as any) || 0), 0);
+  const calculateDisbTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.disbAmt as any) || 0), 0);
+  const calculateUndrawnSanctionTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.undrawnSanc as any) || 0), 0);
+  const calculateOutStTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.outstandingAmt as any) || 0), 0);
+  const calculateExpoTotal = (values: FormValues): number => values.data.reduce((total, data1) => total + (parseFloat(data1.totalExposure as any) || 0), 0);
 
-  const breadcrumbs = [
-    <Link key="1" color="#A9A9A9" to="/">
-      Loan Origination
-    </Link>,
-    <Link key="1" color="#A9A9A9" to="/lead">
-      {leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead" }
-    </Link>,
-  ];
-  // const stepsSample = [
-  //   {
-  //     name: "Step Name",
-  //     description: "Short step description",
-  //     active: false,
-  //     completed: false,
-  //   },
-  // ];
+  //appDetails
+  //sancDt, sancAmt, undrawnSanc, disbDt, disbAmt, outstandingAmt, totalExposure, intRate, tenure, acr, security, corpGuarantee, persGuarantee, collSecurity, majorCovenants
+
+  //  const termLoanListingSchema = Yup.object().shape({
+  //   data: Yup.array().of(
+  //     Yup.object().shape({
+  //       lenderName: Yup.string().min(3, 'Lender Name must be at least 3 characters').max(255, 'Lender Name cannot exceed 255 characters').required('Required'),
+  //       contactDetails: Yup.string().max(100, 'contact Detail cannot exceed 100 characters'),
+  //       lenderType: Yup.string().max(255, 'Lender Type cannot exceed 255 characters').required('Required'),
+  //       acr: Yup.string().required('Required').matches(/^[0-9.]+$/, 'ACR must be a number').test('positive', 'ACR must be between 0-2', val => val ? Number(val) > 0 && Number(val) <= 2 : false),
+  //       sancAmt: Yup.number().required('Required'),
+  //       disbAmt: Yup.number().required('Required').test('is-not-greater-than-value1', 'Disbursement Amt. cannot be greater than Sanction Amt.', function (value) {
+  //         const { sancAmt } = this.parent;
+  //         return value <= sancAmt;
+  //       }),
+  //     })
+  //   ),
+  // });
+
+  // Changes on 13/10/2025 
+  // If date of disbursement – applicationSubmitDate <=180 days, all fields are to be entered mandatorily
+
+
+
+
+  const handleClose = () => setOpen(false);
+  const handleCloseConfirmation = () => {
+    setActionVal(null);
+    setOpenConfirmation(false);
+  };
+  const handleSubmitConfirmation = (values: LenderRow[]) => {
+    setOpenConfirmation(false);
+    handleSubmitApis(values);
+  };
+  const handleSubmit = async (values: FormValues) => {
+    const finalValue = values.data.map((listData, index) => ({
+      ...listData,
+      applId,
+      slNo: index + 1,
+      saveStatus: actionVal || '',
+    }));
+    if (actionVal === '02') {
+      setFormData(finalValue);
+      setOpenConfirmation(true);
+    } else {
+      handleSubmitApis(finalValue);
+    }
+    setActionVal(null);
+  };
+
+  const handleClickSetAction = (action: string) => setActionVal(action);
+
+  const calculateTotalExposure = (outstandingAmt: number | null, undrawnSanc: number | null): number => {
+    const outstanding = parseFloat(outstandingAmt?.toString() || '0') || 0;
+    const undrawn = parseFloat(undrawnSanc?.toString() || '0') || 0;
+    return outstanding + undrawn;
+  };
+
+  const handleFieldChange = useCallback((index: number, field: string, value: any, setFieldValue: any, values: FormValues) => {
+    setFieldValue(`data.${index}.${field}`, value);
+    if (field === 'outstandingAmt' || field === 'undrawnSanc') {
+      const currentRow = values.data[index];
+      const outstandingAmt = field === 'outstandingAmt' ? value : currentRow.outstandingAmt;
+      const undrawnSanc = field === 'undrawnSanc' ? value : currentRow.undrawnSanc;
+      const newTotalExposure = calculateTotalExposure(outstandingAmt, undrawnSanc);
+      setFieldValue(`data.${index}.totalExposure`, newTotalExposure);
+    }
+  }, []);
+
+  const handleSnackbarCloseSnack = () => setSnackOpen(false);
+
+  const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
+  const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
+
+  const { data: lenderTypeData, isLoading: isLenderTypeLoading } = useGetMaterQuery(`refapi/mstr/getLenderType`);
+  const lenderTypeOptions = useMemo(() => lenderTypeData ? modify("mstr/getLenderType", lenderTypeData) : [], [lenderTypeData]);
+
+  // const handleDisbDateChange = (newDate: Date | null, index: number, setFieldValue: (field: string, value: any) => void) => {
+  //   // console.log(index, 'index', 'field value =>', `data[${index}].disbDt`);
+  //   console.log('newDate', newDate);
+  // }
+  const handleDisbDateChange = (
+    date: Date | null,
+    index: number,
+    setFieldValue: any,
+    validateForm: any
+  ) => {
+    if (!date) return;
+
+    const formatted = format(date, 'dd-MM-yyyy');
+    setFieldValue(`data.${index}.disbDt`, [formatted]); // store array format
+
+    // ✅ Trigger full revalidation after date change
+    setTimeout(() => validateForm(), 0);
+  };
+
+  // Utility: safely parse the API date (handles multiple formats)
+  const parseAppSubmitDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+
+    // Try parsing with expected format
+    let parsed = parse(dateStr, 'yyyy-MM-dd HH:mm:ss.S', new Date());
+    if (!isValid(parsed)) {
+      // Try fallback format (in case backend returns slightly different)
+      parsed = parse(dateStr, 'yyyy-MM-dd HH:mm:ss', new Date());
+    }
+    if (!isValid(parsed)) {
+      // Try final fallback
+      parsed = new Date(dateStr);
+    }
+
+    return isValid(parsed) ? parsed : null;
+  };
+
+  const appSubmitDt: any = parseAppSubmitDate(appDetails?.submitDate);
+  console.log('appSubmitDt', appSubmitDt);
+
+  // Helper: check if disbDt - submitDate <= 180
+const isWithin180Days = (disbDtArray: any | string, submitDateStr?: any): boolean => {
+  try {
+    if (!disbDtArray || !submitDateStr) return false;
+
+    const disbStr = Array.isArray(disbDtArray) ? disbDtArray[0] : disbDtArray;
+    if (!disbStr) return false;
+
+    // Try multiple formats for flexibility
+    const disbDate = parse(disbStr, 'dd-MM-yyyy', new Date());
+    const cleanSubmitDate = submitDateStr?.split('.')[0] || submitDateStr;
+    const submitDate = parse(cleanSubmitDate, 'yyyy-MM-dd HH:mm:ss', new Date());
+
+    if (!isValid(disbDate) || !isValid(submitDate)) return false;
+
+    const diff = differenceInDays(disbDate, submitDate);
+    console.log('diff', diff);
+    return diff <= 180;
+  } catch (err) {
+    console.error('isWithin180Days error:', err);
+    return false;
+  }
+};
+
+  // ✅ Term Loan Schema
+  const termLoanListingSchema = (appSubmitDtStr: string) =>
+    Yup.object().shape({
+      data: Yup.array().of(
+        Yup.object().shape({
+          // Always required
+          lenderName: Yup.string()
+            .min(3, 'Lender Name must be at least 3 characters')
+            .max(255, 'Lender Name cannot exceed 255 characters')
+            .required('Required'),
+          lenderType: Yup.string()
+            .max(255, 'Lender Type cannot exceed 255 characters')
+            .required('Required'),
+          acr: Yup.string()
+            .required('Required')
+            .matches(/^[0-9.]+$/, 'ACR must be a number')
+            .test('positive', 'ACR must be between 0-2', val =>
+              val ? Number(val) > 0 && Number(val) <= 2 : false
+            ),
+          sancAmt: Yup.number().required('Required'),
+          disbAmt: Yup.number()
+            .required('Required')
+            .test(
+              'is-not-greater-than-value1',
+              'Disbursement Amt. cannot be greater than Sanction Amt.',
+              function (value) {
+                const { sancAmt } = this.parent;
+                return value <= sancAmt;
+              }
+            ),
+
+          // Conditionally required only if disbDt - submitDate <= 180
+          sancDt: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Sanction Date is required')
+              : schema.notRequired()
+          ),
+          undrawnSanc: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Undrawn Sanction is required')
+              : schema.notRequired()
+          ),
+          outstandingAmt: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Outstanding Amount is required')
+              : schema.notRequired()
+          ),
+          totalExposure: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Total Exposure is required')
+              : schema.notRequired()
+          ),
+          intRate: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Interest Rate is required')
+              : schema.notRequired()
+          ),
+          tenure: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Tenure is required')
+              : schema.notRequired()
+          ),
+          contactDetails: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Contact Detail is required')
+              : schema.notRequired()
+          ),
+          security: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Security is required')
+              : schema.notRequired()
+          ),
+          corpGuarantee: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Corporate Guarantee is required')
+              : schema.notRequired()
+          ),
+          persGuarantee: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Personal Guarantee is required')
+              : schema.notRequired()
+          ),
+          collSecurity: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Collateral Security is required')
+              : schema.notRequired()
+          ),
+          majorCovenants: Yup.string().when('disbDt', (disbDt:any, schema:any) =>
+            isWithin180Days(disbDt, appSubmitDtStr)
+              ? schema.required('Major Covenants are required')
+              : schema.notRequired()
+          ),
+        })
+      ),
+    });
+
+
+
+  const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any, validateForm: any, validateField: any } }) => {
+    const { values, setFieldValue, validateForm, validateField } = data;
+    const row = values.data[index];
+    return (
+      <div style={{ ...style, display: 'flex' }} className="div-table-row">
+        {columnWidths.map((width, colIndex) => (
+          <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
+            {colIndex === 0 && (
+              <IconButton className="text-danger" disabled={row.saveStatus === '02'} onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}>
+                <Delete />
+              </IconButton>
+            )}
+            {colIndex === 1 && <p>{index + 1}</p>}
+            {colIndex === 2 && (
+              <MultipleLenderDropDown
+                label=""
+                name={`data.${index}.lenderName`}
+                domain=""
+                disabled={row.saveStatus === '02'}
+                options={bankOptions}
+                isLoading={isBankMasterLoading}
+              />
+            )}
+            {colIndex === 3 && (
+              <EnhancedDropDown
+                label=""
+                name={`data.${index}.lenderType`}
+                disabled={row.saveStatus === '02'}
+                customOptions={lenderTypeOptions}
+                domain=""
+              />
+            )}
+            {colIndex === 4 && (
+              <AdvanceDatePickerField
+                label=""
+                name={`data.${index}.sancDt`}
+                disableFuture={true}
+
+              />
+            )}
+
+
+            {colIndex === 5 && (
+              <AdvanceTextBoxField
+                label=""
+                name={`data.${index}.sancAmt`}
+                type="number"
+                onCustomChange={(value: any) => {
+                  handleFieldChange(index, 'sancAmt', value, setFieldValue, values);
+                  const disbAmt = values.data[index].disbAmt || 0;
+                  setFieldValue(`data.${index}.undrawnSanc`, value - disbAmt);
+                }}
+              />
+            )}
+            {colIndex === 6 && (
+              <>
+                {/* <AdvanceDatePickerField
+                  label=""
+                  name={`data.${index}.disbDt`}
+                  disableFuture={true}
+                  onChange={date => {
+                    console.log('index', index, 'date', date);
+                    handleDisbDateChange(date, index, setFieldValue)
+                  }}
+                  onDateChange={date => {
+                    console.log('index', index, 'date', date);
+                    handleDisbDateChange(date, index, setFieldValue)
+                  }}
+                /> */}
+
+                <AdvanceDatePickerField
+                  key={index}
+                  label=""
+                  name={`data.${index}.disbDt`}
+                  disableFuture={true}
+                  onChange={(date) => {
+                    //handleDisbDateChange(date, index, setFieldValue, validateForm)
+                    const formatted = date
+                      ? `${date.getDate().toString().padStart(2, '0')}-${(
+                        date.getMonth() + 1
+                      )
+                        .toString()
+                        .padStart(2, '0')}-${date.getFullYear()}`
+                      : '';
+                    console.log('formatted', formatted);
+                    // setFieldValue(`data.${index}.disbDt`, [formatted]);
+                    // validate only conditional fields for this row
+                    validateField(`data.${index}.sancDt`);
+                    validateField(`data.${index}.undrawnSanc`);
+                    validateField(`data.${index}.outstandingAmt`);
+                    validateField(`data.${index}.totalExposure`);
+                    validateField(`data.${index}.intRate`);
+                    validateField(`data.${index}.tenure`);
+                    validateField(`data.${index}.contactDetails`);
+                    validateField(`data.${index}.security`);
+                    validateField(`data.${index}.corpGuarantee`);
+                    validateField(`data.${index}.persGuarantee`);
+                    validateField(`data.${index}.collSecurity`);
+                    validateField(`data.${index}.majorCovenants`);
+                  }
+                  }
+                  onDateChange={(date) => {
+                    //handleDisbDateChange(date, index, setFieldValue, validateForm)
+                    const formatted = date
+                      ? `${date.getDate().toString().padStart(2, '0')}-${(
+                        date.getMonth() + 1
+                      )
+                        .toString()
+                        .padStart(2, '0')}-${date.getFullYear()}`
+                      : '';
+                    console.log('formatted', formatted);
+                    // setFieldValue(`data.${index}.disbDt`, [formatted]);
+                    // validate only conditional fields for this row
+                    validateField(`data.${index}.sancDt`);
+                    validateField(`data.${index}.undrawnSanc`);
+                    validateField(`data.${index}.outstandingAmt`);
+                    validateField(`data.${index}.totalExposure`);
+                    validateField(`data.${index}.intRate`);
+                    validateField(`data.${index}.tenure`);
+                    validateField(`data.${index}.contactDetails`);
+                    validateField(`data.${index}.security`);
+                    validateField(`data.${index}.corpGuarantee`);
+                    validateField(`data.${index}.persGuarantee`);
+                    validateField(`data.${index}.collSecurity`);
+                    validateField(`data.${index}.majorCovenants`);
+
+                  }
+                  }
+                />
+              </>
+            )}
+
+            {colIndex === 7 && (
+              <AdvanceTextBoxField
+                label=""
+                name={`data.${index}.disbAmt`}
+                type="number"
+                onCustomChange={(value: any) => {
+                  handleFieldChange(index, 'disbAmt', value, setFieldValue, values);
+                  const sancAmt = values.data[index].sancAmt || 0;
+                  setFieldValue(`data.${index}.undrawnSanc`, sancAmt - value);
+                }}
+              />
+            )}
+            {colIndex === 8 && (
+              <AdvanceTextBoxField
+                label=""
+                name={`data.${index}.undrawnSanc`}
+                disabled={true}
+                type="number"
+              />
+            )}
+            {colIndex === 9 && (
+              <AdvanceTextBoxField
+                label=""
+                name={`data.${index}.outstandingAmt`}
+                type="number"
+                onCustomChange={(value: any) => handleFieldChange(index, 'outstandingAmt', value, setFieldValue, values)}
+              />
+            )}
+            {colIndex === 10 && (
+              <AdvanceTextBoxField
+                label=""
+                name={`data.${index}.totalExposure`}
+                type="number"
+                disabled={true}
+              />
+            )}
+            {colIndex === 11 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.intRate`}
+                type="number"
+              />
+            )}
+            {colIndex === 12 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.tenure`}
+                type="number"
+              />
+            )}
+            {colIndex === 13 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.contactDetails`}
+              />
+            )}
+            {colIndex === 14 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.acr`}
+                type="number"
+              />
+            )}
+            {colIndex === 15 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.security`}
+              />
+            )}
+            {colIndex === 16 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.corpGuarantee`}
+              />
+            )}
+            {colIndex === 17 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.persGuarantee`}
+              />
+            )}
+            {colIndex === 18 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.collSecurity`}
+              />
+            )}
+            {colIndex === 19 && (
+              <TextBoxField
+                label=""
+                name={`data.${index}.majorCovenants`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const [updateCommentByNId] = useUpdateCommentByNIdMutation();
+  const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
+  const [open, setOpen] = useState<any>(false);
+  const [getNotiId, setNotiId] = useState<any>('');
+  const { opensections } = useAppSelector((state: any) => state.userStore);
+  const [openDr, setOpenDr] = useState<any>(false);
+
+  const toggleDrawer = (newOpen: boolean) => () => {
+    setOpenDr(true);
+  };
+  const handleButtonClick = (notfId: any) => {
+    setOpenDr(true);
+    setNotiId(notfId);
+  };
+  useEffect(() => {
+    if (opensections && opensections.length > 0) {
+      setOpenSections(opensections);
+    }
+  }, [opensections]);
+
+  if (isLoading || isProcessing) return <FormLoader />;
+  if (isUploading) return <FullScreenLoaderNoClose />;
+
   return (
     <>
-      <Snackbar
-        open={stateAlert}
-        autoHideDuration={3000}
-        onClose={() => setStateAlert(false)}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <AlertError
-          icon={false}
-          severity="error"
-          onClose={() => console.log("close")}
+      <Grid item xs={12} className="opensections-sticky-css">
+        <Grid
+          className="pb-0"
+          item
+          xs={12}
+          display="flex"
+          justifyContent="end">
+          {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
+            const matchedItem = getOpenSectionsData.find(
+              (item: any) => item?.sectionId === "09" && item?.subSectionId === "02"
+            );
+            return matchedItem ? (
+              <div className="openSection-item">
+                <NotificationSectionWiseButton
+                  label="Respond"
+                  handleClick={() => handleButtonClick(matchedItem?.notfId)}
+                  className="btn-primary-css--"
+                  notfId={matchedItem?.notfId}
+                  getOpenSectionsData={getOpenSectionsData}
+
+                />
+              </div>
+            ) : null;
+          })()}
+          <DrawerResponseComponent
+            open={openDr}
+            toggleDrawer={toggleDrawer}
+            notfId={getNotiId}
+            detailsData={''}
+            postDataTrigger={updateCommentByNId}
+            setOpen={setOpenDr}
+          />
+        </Grid>
+      </Grid>
+      <div className="wrap-appraisal-area">
+        <Snackbar
+          open={snackOpen}
+          autoHideDuration={6000}
+          onClose={handleSnackbarCloseSnack}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
-          {stateAlertMessage}
-        </AlertError>
-      </Snackbar>
-      {activeStep === steps.length ? (
-        <React.Fragment>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={6}
-            component={Paper}
-            elevation={6}
-            square
-            className={classes.root}
-            spacing={0}
-            style={{ alignItems: "center", justifyContent: "center" }}
-          >
-            <Box className="login_formBox">
-              <SuccessAnimation />
-              <Typography
-                variant="h5"
-                gutterBottom
-                style={{
-                  marginBottom: "0px",
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                You have successfully created
-                <br />a new lead{" "}
-                <span style={{ color: "#1377FF" }}>#{createdLeadId}</span>
-              </Typography>
-              <Box component="form" noValidate className="loginformBox">
-                <Grid
-                  container
-                  className="login_forgot_password_grid"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ textAlign: "center", mt: "24px" }}
-                >
-                  <Grid
-                    item
-                    xs={12}
-                    sm={12}
-                    md={10}
-                    lg={10}
-                    xl={12}
-                    className="text-right"
-                  >
-                    <Button component={Link} {...{ 
-                        to: "/",
-                        className: "no-underline login_forgot_password",
-                        style: {
-                          textDecoration: "none",
-                          color: "#A9A9A9",
-                          fontSize: "14px",
-                        }
-                      } as any}>
-                      {"< Back to Dashboard"}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-          </Grid>
-        </React.Fragment>
-      ) : (
-        <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
-          <Container maxWidth="xl">
-            <div>
-              <TitleHeader
-                title={leadId && leadId !== "NEW" ? "Edit New Lead" : "Create New Lead" }
-                breadcrumbs={breadcrumbs}
-                button={buttons}
-              />
-            </div>
+          <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
+            <ul className="list-unstyled">
+              {snackMessages.map((msg, i) => (
+                <li key={i} className="text-danger">{`(${i + 1}) ${msg}`}</li>
+              ))}
+            </ul>
+          </Alert>
+        </Snackbar>
 
-            <div style={{ marginTop: "1.5em" }}>
-              {/* <div className="stepper" style={{ marginBottom: "1.5em" }}>
-                {stepsSample.map((step, index) => (
-                  <div
-                    className={`step ${step.active ? "active" : ""} ${
-                      completed ? "completed" : ""
-                    }`}
-                  >
-                   <div className="chevronWhite"></div>
-                    <div className="step-content">
-                      <div className="step-name">{step.name}</div>
-                      <div className="step-description">{step.description}</div>
-                    </div>
-                    <div className="chevron"></div>
-                  </div>
-                ))}
-              </div> */}
-              <Box sx={{ width: "100%" }}>
-                <Grid container spacing={3}>
-                  <Grid item xl={3} lg={3.5} md={4} xs={4}>
-                    {leadId && leadId !== "NEW" ? (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={true}
-                        // nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    ) : (
-                      <VerticalStepper
-                        activeStep={activeStep}
-                        steps={steps}
-                        stepsStatus={stepsStatus}
-                        setActiveStep={setActiveStep}
-                        nonLinearStatus={false}
-                        handleNextNonLinear={handleNextNonLinear}
-                        completed={completed}
-                      />
-                    )}
-                  </Grid>
+        <ConfirmationAlertDialog
+          id={1}
+          type={4}
+          open={openConfirmation}
+          handleClose={handleCloseConfirmation}
+          handleDelete={handleSubmitConfirmation}
+          values={formData}
+        />
+        <div className="custome-form">
+          <ConfirmationAlertDialog
+            id={2}
+            index={index}
+            type={2}
+            open={open}
+            handleClose={handleClose}
+            handleDelete={handleDelete}
+          />
+          <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
+            <Formik
+              initialValues={initialValues}
+              onSubmit={handleSubmit}
+              enableReinitialize={true}
+              validationSchema={termLoanListingSchema(appDetails?.submitDate)}
+              // context={{ appSubmitDt: appDetails?.submitDate }}
+              validateOnChange={true}
+              validateOnBlur={true}
+            >
+              {({ values, errors, setFieldValue, validateForm, validateField }) => {
 
-                  <Grid item xl={9} lg={8.5} md={8} xs={8}>
-                    <div className="custom_scroll">
-                      <React.Fragment>
-                        {activeStep >= LEAD_GENERATION &&
-                          activeStep < loanoriginationstep.length &&
-                          React.createElement(loanoriginationstep[activeStep], {
-                            ref: formToSubmit,
-                          })}
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            pt: "22px",
-                          }}
+
+                const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
+                const disbTotal = useMemo(() => calculateDisbTotal(values), [values]);
+                const undrawnTotal = useMemo(() => calculateUndrawnSanctionTotal(values), [values]);
+                const outStTotal = useMemo(() => calculateOutStTotal(values), [values]);
+                const expoTotal = useMemo(() => calculateExpoTotal(values), [values]);
+                const itemCount = values.data.length;
+                const ITEM_SIZE = 50;
+                const MAX_HEIGHT = 500; // You can adjust this based on your layout
+                const calculatedHeight = Math.min(itemCount * ITEM_SIZE, MAX_HEIGHT);
+
+                return (
+                  <Form>
+                    <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
+                      {values?.data?.[0]?.saveStatus !== "02" && (
+                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
+                      )}
+                      <FieldArray name="data">
+                        {({ push }) => (
+                          <>
+                            {values?.data?.[0]?.saveStatus !== "02" && (
+                              <Button
+                                type="button"
+                                size='small'
+                                className='psn_btn text-capitalize my-2 saveBtn'
+                                variant="contained"
+                                color="primary"
+                                style={{ marginLeft: '15px', display: 'block' }}
+                                onClick={() =>
+                                  push({
+                                    applId,
+                                    slNo: values.data.length,
+                                    lenderName: '',
+                                    lenderType: null,
+                                    sancDt: null,
+                                    sancAmt: null,
+                                    disbDt: null,
+                                    disbAmt: null,
+                                    undrawnSanc: null,
+                                    outstandingAmt: null,
+                                    totalExposure: null,
+                                    intRate: null,
+                                    tenure: null,
+                                    contactDetails: null,
+                                    acr: null,
+                                    security: '',
+                                    corpGuarantee: '',
+                                    persGuarantee: '',
+                                    collSecurity: '',
+                                    majorCovenants: '',
+                                    saveStatus: ''
+                                  })
+                                }
+                              >
+                                Add <AddCircleIcon />
+                              </Button>
+                            )}
+                            <div className="table-ui div-table">
+                              <div style={{ display: 'flex' }} className="div-table-row div-table-header">
+                                {columnWidths.map((width, i) => (
+                                  <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
+                                    {i === 0 && <b>Action</b>}
+                                    {i === 1 && <b style={{ minWidth: '50px', display: 'inline-block' }}>Sr. No.</b>}
+                                    {i === 2 && <b>Name of the Bank/ lender</b>}
+                                    {i === 3 && <b>Institution Type</b>}
+                                    {i === 4 && <b>Date of Sanction</b>}
+                                    {i === 5 && <b>Sanctioned Amount (In ₹ crore)</b>}
+                                    {i === 6 && <b>Date of Disbursement</b>}
+                                    {i === 7 && <b>Amount Disbursement (In ₹ crore)</b>}
+                                    {i === 8 && <b>Undrawn Sanction</b>}
+                                    {i === 9 && <b>Amount Outstanding (In ₹ crore)</b>}
+                                    {i === 10 && <b>Total Exposure</b>}
+                                    {i === 11 && <b>Interest rate (%)</b>}
+                                    {i === 12 && <b>Tenure(in months)</b>}
+                                    {i === 13 && <b>Contact Details of Lenders</b>}
+                                    {i === 14 && <b>ACR</b>}
+                                    {i === 15 && <b>Security</b>}
+                                    {i === 16 && <b>Any Corporate Guarantee given for others</b>}
+                                    {i === 17 && <b>Any personal guarantee of promoters / founders / directors given to others</b>}
+                                    {i === 18 && <b>Any collateral security provided to any lender</b>}
+                                    {i === 19 && <b>Major Covenants</b>}
+                                  </div>
+                                ))}
+                              </div>
+                              {values.data.length > 0 ? <div style={{ flex: 1 }}>
+                                <FixedSizeList
+                                  className="table-list-container"
+                                  //height={300}
+                                  height={calculatedHeight}
+                                  itemCount={values.data.length}
+                                  itemSize={ITEM_SIZE}
+                                  width="100%"
+                                  itemData={{ values, setFieldValue, validateForm, validateField }}
+                                >
+                                  {renderRow}
+                                </FixedSizeList> </div> : ''}
+
+                              <div style={{ display: 'flex' }} className="div-table-row">
+                                <div style={{ width: `${columnWidths[0]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                <div style={{ width: `${columnWidths[1]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                <div style={{ width: `${columnWidths[2]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                <div style={{ width: `${columnWidths[3]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                <div style={{ width: `${columnWidths[4]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell"><b>Total</b></div>
+                                <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                  <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                </div>
+                                <div style={{ width: `${columnWidths[6]}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                                <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                  <b>{disbTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                </div>
+                                <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                  <b>{undrawnTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                </div>
+                                <div style={{ width: `${columnWidths[9]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                  <b>{outStTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                </div>
+                                <div style={{ width: `${columnWidths[10]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
+                                  <b>{expoTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
+                                </div>
+                                <div style={{ width: `${columnWidths.slice(11).reduce((a, b) => a + b, 0)}px`, flexShrink: 0 }} className="div-table-cell"></div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </FieldArray>
+                    </fieldset>
+                    {values?.data?.[0]?.saveStatus !== "02" && (
+                      <>
+                        <Button
+                          className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
+                          type='submit'
+                          onClick={() => handleClickSetAction('01')}
+                          variant="contained"
                         >
-                          {activeStep === steps.length - 1 ? (
-                            <Grid
-                              container
-                              spacing={3}
-                              padding={0}
-                              sx={{ mb: "32px" }}
-                            >
-                              <Grid item md={8} xs={12}>
-                                <FormControlLabel
-                                  value="end"
-                                  control={
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        setIsChecked(e.target.checked)
-                                      }
-                                    />
-                                  }
-                                  label={
-                                    <Typography
-                                      variant="body2"
-                                      gutterBottom
-                                      style={{
-                                        marginTop: "0px",
-                                        marginBottom: "0px",
-                                        fontWeight: "400",
-                                        color: "#3B415B",
-                                      }}
-                                    >
-                                      I agree to the Terms and Condition{" "}
-                                      <b>
-                                        On behalf of the NBFC Authorised Person
-                                      </b>
-                                    </Typography>
-                                  }
-                                  labelPlacement="end"
-                                />
-                              </Grid>
-                              <Grid
-                                item
-                                md={4}
-                                xs={12}
-                                sx={{ textAlign: "right" }}
-                              >
-                                <ColorButton
-                                  variant="contained"
-                                  onClick={handleSubmitLast}
-                                  startIcon={loadingButton? <SpinningDotsWhite /> : ''}
-                                  disabled={!isChecked && !loadingButton}
-                                  className="stepSubmit"
-                                >
-                                  Submit
-                                </ColorButton>
-                              </Grid>
-                            </Grid>
-                          ) : (
-                            <>
-                              <ColorBackButton
-                                color="inherit"
-                                sx={{ mb: "32px" }}
-                                onClick={handleBack}
-                                startIcon={loadingButton? <SpinningDotsWhite /> : ''}
-                                disabled={activeStep === 0 && loadingButton}
-                                className="colorBackButton"
-                              >
-                                Back
-                              </ColorBackButton>
-                              <Box sx={{ flex: "1 1 auto" }} />
-                              {/* {isStepOptional(activeStep) && (
-                                <SkipColorButton
-                                  variant="contained"
-                                  sx={{ mb: "32px", mr: "12px" }}
-                                  onClick={handleSkip}
-                                >
-                                  Skip
-                                </SkipColorButton>
-                              )} */}
-                              {isSaveApplicable(activeStep) ? (
-                                <>
-                                  <SaveColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleSave}
-                                    startIcon={loadingButton? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButton}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Save
-                                  </SaveColorButton>
-                                  <ColorButton
-                                    variant="contained"
-                                    className="stepper_next"
-                                    onClick={handleNext}
-                                    startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
-                                    disabled={loadingButtonSaveNext}
-                                    sx={{ mb: "32px", mr: "12px" }}
-                                  >
-                                    Next
-                                  </ColorButton>
-                                </>
-                              ) : (
-                                <ColorButton
-                                  variant="contained"
-                                  className="stepper_next"
-                                  onClick={handleNext}
-                                  sx={{ mb: "32px" }}
-                                  startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
-                                  disabled={loadingButtonSaveNext}
-                                >
-                                  Save & Next
-                                </ColorButton>
-                              )}
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmbre d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                                startIcon={loadingButtonSaveNext? <SpinningDotsWhite /> : ''}
-                                disabled={loadingButtonSaveNext}
-                              >
-                                Confirm BRE
-                              </ColorButton>
-                              <ColorButton
-                                variant="contained"
-                                className="stepper_confirmrepaymentschedule d-none"
-                                sx={{ mb: "32px" }}
-                                onClick={handleNext}
-                              >
-                                Confirm Repayment Schedule
-                              </ColorButton>
-                              <ColorCancelButton
-                                variant="contained"
-                                className="d-none"
-                                sx={{ mb: "32px", ml: 1 }}
-                              >
-                                Cancel Application
-                              </ColorCancelButton>
-                            </>
-                          )}
-                        </Box>
-                      </React.Fragment>
-                    </div>
-                  </Grid>
-                </Grid>
-              </Box>
-            </div>
-          </Container>
+                          Save <CheckCircleOutlineIcon />
+                        </Button>
+                        <Button
+                          className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
+                          type='submit'
+                          onClick={() => handleClickSetAction('02')}
+                          variant="contained"
+                        >
+                          Submit <SaveAsIcon />
+                        </Button>
+                      </>
+                    )}
+                  </Form>
+                );
+              }}
+            </Formik>
+          </div>
+          <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
         </div>
-      )}
+      </div>
     </>
   );
 };
 
-export default L0Container;
-
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-
-export enum StepStatus {
-  SUCCESS,
-  ERROR,
-  SKIP,
-}
-
-interface LeadStore {
-  id: number | undefined;
-  stepStatus: StepStatus[];
-}
-
-const initialState: LeadStore = { id: undefined, stepStatus: [] };
-
-export const leadStoreSlice = createSlice({
-  name: "leadStore",
-  initialState,
-  reducers: {
-    setLeadId: (state: LeadStore, action: PayloadAction<number>) => {
-      state.id = action.payload;
-    },
-    updateStepStatus: (
-      state: LeadStore,
-      action: PayloadAction<{ step: number; status: StepStatus }>
-    ) => {
-      console.log("Updating step status", action.payload);
-      if (
-        action.payload.status === StepStatus.SKIP
-      ) {
-        //If the form is skipped preserve the original status of the form
-        if(!state.stepStatus[action.payload.step]) {
-          state.stepStatus[action.payload.step] = StepStatus.SKIP;
-        }
-      } else {
-        state.stepStatus[action.payload.step] = action.payload.status;
-      }
-      console.log("Step Status")
-      console.log(state.stepStatus?.map((item: any, index: number) => console.log(index, item)));
-    },
-  },
-});
-
-export const { setLeadId, updateStepStatus } = leadStoreSlice.actions;
-
-
+export default connect((state: any) => ({
+  applId: state.userStore.applId
+}))(LenderTermLoanForm);
