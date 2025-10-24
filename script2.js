@@ -641,3 +641,904 @@ export default connect((state: any) => ({
     applId: state.userStore.applId
 }))(LenderLimitOdForm);
 
+
+
+import { STATUS } from "./constants";
+// Helper function
+export function showFileFromByteArray(byteArray: string, mimeType: string) {
+  const byteCharacters = atob(byteArray);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray1 = new Uint8Array(byteNumbers);
+  const file = new Blob([byteArray1], { type: mimeType });
+  const fileURL = URL.createObjectURL(file);
+  window.open(fileURL);
+}
+
+
+export const getTime = (): number => {
+  return new Date().getTime();
+};
+
+export const modify = (domain: string, masterData: any) => {
+  let master: any = [];
+  switch (domain) {
+    case "mstr/businessNature":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.natCd,
+          value: item.natDesc,
+        }));
+
+      return master;
+    case "mstr/getKmpType": master =
+      masterData &&
+      masterData.map((item: any) => ({
+        key: item.slNo,
+        value: item.particulars,
+      }));
+
+      return master;
+
+    case "mstr/getNbfcMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.nbfcCifCd,
+          value: `${item.nbfcName}-${item.nbfcCifCd}-${item.nbfcId}-${item.nbfcPanNo}`,
+          label: item.nbfcName,
+        }));
+      return master;
+
+    case "mstr/loanPurpose":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.purCd,
+          value: item.purDesc,
+        }));
+      return master;
+    case "mir/getMirPnfList":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.mirId,
+          value: `${item.customerDetails}-${item.mirValidTo}-${item.mirRefNO}-${item.cifCd}`,
+          label: `${item.customerDetails}-${item.mirValidTo}`,
+        }));
+      return master;
+
+    case "mstr/getScheme":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.schCd,
+          value: `${item.schLongName}`,
+        }));
+      return master;
+
+    case "mstr/getCovenantMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.covenant}`,
+          label: `${item.covenant}`,
+        }));
+      return master;
+
+    case "mstr/getApprlCoventOpertr":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.operator}`,
+          label: `${item.operator}`,
+        }));
+      return master;
+
+    case "mstr/getBenchMark":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.BRM_RATE_ID,
+          value: `${item.BRM_RATE_ID}`,
+          label: `${item.BRM_RATE_NAME}`
+        }));
+      return master;
+
+    case "committee/getAllCommitteeMasters":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.commId,
+          value: `${item.commId}`,
+          label: `${item.commName}`,
+        }));
+
+      return master;
+
+    case "committee/getAllMemberRoles":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.roleId,
+          value: `${item.roleName}`,
+        }));
+
+      return master;
+
+    case "minutes/getAllUsers":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.userId,
+          value: `${item.userName}-${item.userEmpId}-${item.userDesgn}`,
+          label: `${item.userName}`,
+        }));
+
+      return master;
+
+
+    case "mstr/getFundMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.fundCode,
+          value: `${item.fundDesc}`,
+        }));
+      return master;
+
+    case "mstr/getStockExchange":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.slNo,
+          value: item.exchangeType,
+          label: item?.exchangeType,
+        }));
+      return master;
+
+    case "mstr/getRatingAgency":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.agencyDet,
+          value: `${item.agencyDet}`,
+          label: item.agencyDet
+        }));
+      return master;
+
+    case "mstr/getRatingCode":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.ratingDet,
+          value: `${item.ratingDet}`,
+          label: item.ratingDet
+        }));
+      return master;
+
+    case "mstr/getAppraGradingCovent":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.gradingValue}`,
+          label: `${item.gradingValue}`,
+        }));
+      return master;
+
+    case "committee/getLosAgendaPurpose":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.prpsCd,
+          value: `${item.prpsDesc}`,
+        }));
+      return master;
+
+    case "minutes/getAgendaStatusMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.statusCd,
+          value: `${item.statusDesc}`,
+        }));
+      return master;
+
+
+    case "minutes/getNBFCApprovedUsersData":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.applId,
+          value: `${item.nbfcName}`,
+        }));
+      return master;
+
+    case "appl/getProdMstr":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.prodId,
+          value: item.prodId,
+          label: item?.prodDesc,
+        }));
+      return master;
+
+    case "appl/getProdSchemeMstr":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.schCd,
+          value: item.schCd,
+          label: item?.schLongName,
+        }));
+      return master;
+
+    case "appl/getProdAssistType":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.assistType,
+          value: item.assistType,
+          label: item?.assistType,
+        }));
+      return master;
+
+
+
+    case `dueDiligence/parentOrHolding`:
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.ddId,
+          value: item.ddId,
+          label: item?.entityName,
+        }));
+      return master;
+
+    case "mstr/getConstitution":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item.id,
+          label: item?.name,
+        }));
+      return master;
+
+    case "mstr/getclassification":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.classCd,
+          value: item.classCd,
+          label: item?.classDesc,
+        }));
+      return master;
+
+    case "mstr/getLenderType":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.slNo,
+          value: item.particulars,
+          label: item?.particulars,
+        }));
+      return master;
+
+    case "mstr/getBorrowParticulars":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.slNo,
+          value: item.particulars,
+          label: item?.particulars,
+        }));
+      return master;
+
+
+    case "mstr/getIndividualParticular":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.slNo,
+          value: item.particulars,
+          label: item?.particulars,
+        }));
+      return master;
+
+    case "mstr/getBankMasters":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item.bankName,
+          label: item?.bankName,
+          bankTag:item?.bankTag,
+          tag:item?.tag,
+        }));
+      return master;
+
+    case "mstr/getStateMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.stateCode,
+          value: item.stateName,
+          label: item?.stateName,
+        }));
+      return master;
+
+    case "mstr/getKmpDesignation":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.slNo,
+          value: item.desgnDesc,
+          label: item?.desgnDesc,
+        }));
+      return master;
+
+    case "mstr/getPortfolioTrnxMaster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item.constTypes,
+          label: item?.constTypes,
+        }));
+      return master;
+
+    case "mstr/getNbfcLayerTypes":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.nbfcLayerId,
+          value: item.nbfcLayerId,
+          label: item?.nbfcLayerName,
+        }));
+      return master;
+
+    case "mstr/getNbfcTypes":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.nbfcTypeId,
+          value: item?.nbfcTypeId,
+          label: item?.nbfcTypeName,
+        }));
+      return master;
+
+    case "mstr/getAuditedYears":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item?.year,
+          label: item?.year,
+        }));
+      return master;
+
+    case "mstr/getYearMaster":
+      master = masterData?.map((item: any) => ({
+        key: item?.slNo,
+        value: item.periodName,
+        label: item?.periodName,
+      }));
+      return master;
+
+    case "appl/getIndvShareDetails":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item?.value,
+          label: item?.value,
+        }));
+      return master;
+
+    case "mstr/getUnauditedQuarter":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item?.id,
+          value: item?.qtrName,
+          label: item?.qtrName,
+        }));
+      return master;
+
+    case "mstr/getRepayFreq":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.slNo}`,
+          label: `${item.particulars}`,
+        }));
+      return master;
+
+    case "mstr/getProduct":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.prodId,
+          value: `${item.prodId}`,
+          label: `${item.prodDesc}`,
+        }));
+      return master;
+
+    case "mstr/getFacilityTypeMstr":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.slNo}`,
+          label: `${item.facilityType}`,
+        }));
+      return master;
+
+    case "mstr/getResetClauseMstr":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.slNo}`,
+          label: item.resetClauseDesc
+        }));
+      return master;
+
+    case "mstr/getPastAsationMster":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.id,
+          value: `${item.id}`,
+          label: item.particulars
+        }));
+      return master;
+
+    case "mstr/getProdCutType":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.id,
+          value: `${item.id}`,
+          label: item.product
+        }));
+      return master;
+
+    case "mstr/getLimitType":
+      master =
+        masterData &&
+        masterData.map((item: any) => ({
+          key: item.slNo,
+          value: `${item.particulars}`,
+          label: item.particulars,
+          lenderType:item.lenderType,
+        }));
+      return master;
+
+    default:
+  }
+};
+
+export const statusCode: any = (status: any) => {
+  return STATUS[status];
+};
+
+export const getStatusCodeValue: any = (value: any) => {
+  const object = STATUS;
+  return Object.keys(object).find((key) => object[key] === value);
+};
+
+// Defined the function to check if string is checkSplittable 
+export const checkSplittable = (inputString: string) => {
+  return inputString.length % 4 !== 0 ? false : (() => {
+    const regex = new RegExp(`.{${inputString.length / 4}}`, 'g');
+    const segments = inputString.match(regex);
+    return segments && new Set(segments).size === 4;
+  })();
+};
+//End checkSplittable 
+
+import React, { useMemo } from "react";
+import { KeyValuePair } from "../../../components/framework/KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import { Autocomplete, TextField, Grid } from "@mui/material";
+import { useGetMaterQuery } from "../../../features/master/api";
+import { modify } from "../../../utlis/helpers";
+import SelectLoader from "../../../loader/SelectLoader";
+
+export const MultipleLenderDropDown = (props: {
+  label?: string;
+  name: string;
+  domain: string;
+  disabled?: boolean;
+  options?: any[];
+  isLoading?: boolean;
+  onSelect?: (selected: any) => void; 
+}) => {
+  const {
+    handleBlur,
+    values,
+    touched,
+    errors,
+    setFieldValue
+  } = useFormikContext<KeyValuePair>() || {};
+
+  const {
+    data: masterData,
+    isLoading: isMasterLoadingInternal,
+    error: masterError,
+  } = props.options
+    ? { data: props.options, isLoading: false, error: null }
+    : useGetMaterQuery(`refapi/${props.domain}`, {
+        refetchOnMountOrArgChange: true
+      });
+
+  const options = useMemo(() => {
+    if (props.options) {
+      return props.options.map((item: any) => ({
+        key: item.key,
+        value: item.value,
+        label: item.label || item.value,
+        tag: item.tag, 
+        bankTag: item.bankTag 
+      }));
+    }
+
+    return modify(props.domain, masterData)?.map((item: any) => ({
+      key: item.key,
+      value: props.domain !== "mir/getMirPnfList" ? item.value : item.key,
+      label: item.label || item.value,
+      tag: item?.tag, 
+      bankTag: item?.bankTag 
+    })) || [];
+  }, [masterData, props.domain, props.options]);
+
+  const currentValue = useMemo(() => {
+    return options.find(
+      (option: any) => option.value === getIn(values, props.name)
+    ) || null;
+  }, [options, values, props.name]);
+
+  const isLoading = props.isLoading !== undefined
+    ? props.isLoading
+    : isMasterLoadingInternal;
+
+  if (isLoading) return <SelectLoader />;
+
+  return (
+    <Grid item xs={12}>
+      <Autocomplete
+        sx={{
+          "& .MuiOutlinedInput-root": {
+            paddingRight: "20px!important",
+            paddingLeft: "0px!important",
+            paddingTop: "0px!important",
+            paddingBottom: "0px!important",
+          },
+        }}
+        fullWidth
+        options={options}
+        value={currentValue}
+        disabled={props?.disabled}
+        loading={isLoading}
+        onChange={(_, newValue) => {
+          setFieldValue(props.name, newValue ? newValue.value : null);
+          if (props.onSelect) {
+            props.onSelect(newValue); 
+          }
+        }}
+        onBlur={handleBlur}
+        getOptionLabel={(option) => option.label}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            name={props.name}
+            label={props.label}
+            variant="outlined"
+            sx={{
+              padding: 0
+            }}
+          />
+        )}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        filterOptions={(options, { inputValue }) =>
+          options.filter(option =>
+            option.label.toLowerCase().includes(inputValue.toLowerCase())
+          )
+        }
+      />
+      <Grid item xs={12}>
+        <Typography
+          color="error"
+          variant="subtitle2"
+          gutterBottom
+          component="span"
+          className="mybooking_error"
+        >
+          {getIn(errors, props.name) &&
+            JSON.stringify(getIn(errors, props.name)).replaceAll('"', "")
+          }
+        </Typography>
+      </Grid>
+    </Grid>
+  );
+};
+
+import { KeyValuePair } from "./KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import Select from "@mui/material/Select";
+import { useGetMaterQuery, useLazyGetMasterByIdQuery } from "../../features/master/api";
+import { modify } from "../../utlis/helpers";
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import { useEffect, useState } from "react";
+import SelectLoader from "../../loader/SelectLoader";
+import { Backdrop, CircularProgress } from "@mui/material";
+
+interface EnhancedDropDownProps {
+    label?: string;
+    name: string;
+    domain: string;
+    disabled?: boolean;
+    dependsOn?: any;
+    onChange?: (value: any) => void;
+    onValueChange?: (value: any) => void;
+    customOptions?: Array<{ key: string, value: string, label: string }>;
+    valueKey?: string;
+    labelKey?: string;
+    query?: string;
+    basePath?: string
+}
+
+export const EnhancedDropDown =
+    ({
+        basePath = "refapi",
+        ...props
+    }: EnhancedDropDownProps) => {
+        const formik = useFormikContext<KeyValuePair>();
+        const {
+            handleBlur,
+            values,
+            touched,
+            errors,
+            setFieldValue,
+            setFieldTouched
+        } = formik || {};
+
+        const [dependMasterdata, setDependMasterData] = useState<any>();
+        const {
+            data: masterData,
+            isLoading
+        } = useGetMaterQuery(`${basePath}/${props.domain}`, {
+            skip: Boolean(props.dependsOn),
+            refetchOnMountOrArgChange: true
+        });
+
+        // const [dependsOnData] = useLazyGetMasterByIdQuery();
+
+        const [dependsOnData, { data, isFetching, isLoading: isMstrLoading, error }] = useLazyGetMasterByIdQuery();
+
+
+        const handleChange = async (event: any) => {
+            const value = event.target.value;
+            await setFieldValue(props.name, value);
+            await setFieldTouched(props.name, true, false);
+
+            if (props.onChange) {
+                props.onChange(value);
+            }
+            if (props.onValueChange) {
+                props.onValueChange(value);
+            }
+        };
+
+        const dependentValue: any = getIn(values, props.dependsOn);
+
+        const dependData = async () => {
+            let options: any = [];
+            if (props.dependsOn) {
+                if (getIn(values, props.dependsOn)) {
+                    try {
+                        const dependMasterData = await dependsOnData(
+                            `${basePath}/${props.domain}?${props?.query}=${dependentValue}`
+                        ).unwrap();
+                        options = modify(`${props.domain}`, dependMasterData);
+                        return options;
+                    } catch (error) {
+                        return [];
+                    }
+                }
+                return options;
+            }
+            return [];
+        };
+
+        const getOptions = () => {
+            if (props.customOptions) {
+                return props.customOptions;
+            }
+            return modify(props.domain, masterData);
+        };
+
+        useEffect(() => {
+            dependData()
+                .then((options: any) => {
+                    setDependMasterData(options);
+                })
+                .catch(() => {
+                    setDependMasterData([]);
+                });
+        }, [props?.dependsOn, dependentValue]);
+
+        // if (isLoading) return <SelectLoader />;
+
+        return (
+            <>
+                {/* <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={isLoading || isFetching || isMstrLoading}>
+                    <div style={{ textAlign: 'center' }}>
+                        <CircularProgress color="inherit" />
+                        <Typography variant="h6" sx={{ mt: 2 }}>
+                            Loading, please wait...
+                        </Typography>
+                    </div>
+                </Backdrop> */}
+                <FormControl fullWidth>
+                    <InputLabel
+                        className="select-label"
+                        id={`label-id-${props.name}`}
+                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                    >
+                        {props.label}
+                    </InputLabel>
+                    <Select
+                        labelId={`label-id-${props.name}`}
+                        id={`id-${props.name}`}
+                        value={getIn(values, props.name) || ''}
+                        disabled={props.disabled}
+                        name={props.name}
+                        label={props.label}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+                        size="small"
+                    >
+                        {(!props?.dependsOn ? getOptions() : dependMasterdata)?.map((item: any) => (
+                            <MenuItem
+                                value={item.value}
+                                key={item.key}
+                            >
+                                {item.label}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <div className="mt-0 position-relative">
+                    <Typography
+                        color="error"
+                        variant="subtitle2"
+                        gutterBottom
+                        component="span"
+                        className="mybooking_error"
+                    >
+                        {getIn(touched, props.name) && getIn(errors, props.name) &&
+                            JSON.stringify(getIn(errors, props.name)).replaceAll('"', '')}
+                    </Typography>
+                </div>
+            </>
+        );
+    };
+
+
+bank master data --> "data": [
+        {
+            "bankName": "Axis Bank Ltd.",
+            "tag": "Private Sector Bank",
+            "bankTag": "TL"
+        },
+        {
+            "bankName": "Bandhan Bank Ltd.",
+            "tag": "Private Sector Bank",
+            "bankTag": "TL"
+        },
+        {
+            "bankName": "CSB Bank Limited",
+            "tag": "Private Sector Bank",
+            "bankTag": "TL"
+        },
+        {
+            "bankName": "City Union Bank Ltd.",
+            "tag": "Private Sector Bank",
+            "bankTag": "TL"
+        },
+        {
+            "bankName": "DCB Bank Ltd.",
+            "tag": "Private Sector Bank",
+            "bankTag": "TL"
+        },]
+
+
+    
+"data": [
+        {
+            "particulars": "CC",
+            "slNo": 1,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank"
+            ]
+        },
+        {
+            "particulars": "WC",
+            "slNo": 2,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank"
+            ]
+        },
+        {
+            "particulars": "OD",
+            "slNo": 3,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank"
+            ]
+        },
+        {
+            "particulars": "NCD",
+            "slNo": 4,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank",
+                "NBFC / FI",
+                "Others-NCD"
+            ]
+        },
+        {
+            "particulars": "Commercial Paper",
+            "slNo": 5,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank",
+                "NBFC/FI",
+                "Others-Commercial Paper "
+            ]
+        },
+        {
+            "particulars": "Sub-debt (including perpetual debt)",
+            "slNo": 6,
+            "lenderType": [
+                "Public Sector Bank",
+                "Private Sector Bank",
+                "Foreign Bank",
+                "NBFC/FI",
+                "Others-Sub-debt (including perpetual debt) "
+            ]
+        }
+    ],
+    "message": "Success",
+    "status": 200
+}
+
+
+now there is some changes limit type will come first 
+limit type data now added new field lenderType so in name of bank now only those value will come which is present in lenderType  so we have to check tag basically made the changes according to that 
+apart from this there is one more changes Funding received in FY 2022
+Funding received in FY 2023
+Funding received in FY 2024 and Avg rate of interest remove all these field and validation of these field also and give me complete and proper code 
