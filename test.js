@@ -1,3 +1,70 @@
+//solution 
+if(formToSubmit.current) 
+        {
+          let isValidToSubmit = await formToSubmit.current.isValid();
+
+          if(isValidToSubmit) {
+            // Get current form values
+            const values = formToSubmit.current.getValues() as KeyManagemetPersonnel;
+
+            // Prepare fraud check input
+            const fraudInput: RequestWithParentId<KeyManagemetPersonnel> = {
+              parentId: leadId || 0,
+              requestValue: values,
+            };
+
+            try {
+              // Call fraud check API
+              const fraudResult = await checkKmpFraud(fraudInput).unwrap();
+
+              if (fraudResult.isFraud) {
+                setValidationMessage(fraudResult.message || "This is a fraud case. Cannot proceed.");
+                return false;
+              }
+            } catch (fraudError) {
+              console.error("Fraud check error:", fraudError);
+              setValidationMessage("Error during fraud check. Please try again.");
+              return false;
+            }
+
+            // Proceed with submit if no fraud
+            await formToSubmit.current.submit();
+            let response = await validateAllKmps();
+            console.log("validateAllKmps: ", response);
+            return response;
+          } else {
+            return false;
+          }
+        }
+      } 
+
+      return false;
+		},
+  
+		//2. Check is dirty
+		isDirty() {
+      if(formToSubmit.current) 
+      {
+        return formToSubmit.current.isDirty();
+      }
+
+      return false;
+    },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useEffect, useState } from "react";
 import { SubmitableForm } from "../../Components/Framework/FormSubmit";
 import {
