@@ -1308,9 +1308,204 @@ export const checkSplittable = (inputString: string) => {
 };
 //End checkSplittable 
 
+
+import React from 'react';
+import Grid from "@mui/material/Grid";
+import { KeyValuePair } from "./KeyValuePair";
+import { getIn, useFormikContext } from "formik";
+import Typography from "@mui/material/Typography";
+import { removeRestrictedCharacters } from '../../utlis/input';
+import { InputAdornment, Tooltip, IconButton } from '@mui/material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RedditTextField from './RedditTextField';
+
+
+interface AdvanceTextBoxFieldProps {
+  id?: number;
+  label?: string;
+  name: string;
+  disabled?: boolean;
+  type?: string;
+  value?: string;
+  readonly?: boolean;
+  restrictedCharacters?: string;
+  placeholder?: string;
+  tooltip?: string;
+  required?: boolean;
+  maxLength?: number;
+  minLength?: number;
+  startAdornment?: React.ReactNode;
+  endAdornment?: React.ReactNode;
+  multiline?: boolean;
+  rows?: number;
+  maxRows?: number;
+  validation?: {
+    pattern?: RegExp;
+    customValidation?: (value: string) => string | undefined;
+  };
+  transformValue?: (value: string) => string;
+  onCustomChange?: any;
+  fullWidth?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  InputProps?: any;
+  allowNegative?: boolean;
+  allowDecimal?: boolean;
+  decimalPlaces?: number;
+}
+
+export const AdvanceTextBoxField: React.FC<AdvanceTextBoxFieldProps> = ({
+  label = "",
+  name,
+  disabled = false,
+  type = 'text',
+  readonly = false,
+  restrictedCharacters = "<>{}",
+  placeholder,
+  tooltip,
+  required = false,
+  maxLength,
+  minLength,
+  startAdornment,
+  endAdornment,
+  multiline = false,
+  rows,
+  maxRows,
+  validation,
+  transformValue,
+  onCustomChange,
+  fullWidth = true,
+  className,
+  style,
+  allowNegative = false,
+  allowDecimal = true,
+  decimalPlaces = 2,
+  ...props
+}) => {
+  const { handleChange, handleBlur, values, touched, errors, setFieldValue } =
+    useFormikContext<KeyValuePair>() || {};
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    let { value } = event.target;
+
+    if (restrictedCharacters) {
+      value = removeRestrictedCharacters(value, restrictedCharacters);
+    }
+
+    if (transformValue) {
+      value = transformValue(value);
+    }
+
+    if (type === 'number') {
+      let regex = allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/;
+      if (!allowDecimal) {
+        regex = /^\d*$/;
+      }
+      if (allowNegative && !allowDecimal) {
+        regex = /^-?\d*$/;
+      }
+      if (!regex.test(value) && value !== '') {
+        return;
+      }
+      if (value !== '' && value !== '-' && allowDecimal && value.includes('.')) {
+        const parts = value.split('.');
+        if (parts[1] && parts[1].length > decimalPlaces) {
+          const rounded = Number(parseFloat(value).toFixed(decimalPlaces));
+          value = rounded.toString();
+        }
+      }
+    }
+
+    if (validation?.pattern && !validation.pattern.test(value)) {
+      return;
+    }
+    setFieldValue(name, value);
+    if (onCustomChange) {
+      onCustomChange(value);
+    }
+  };
+  const labelStyles = {
+    '& .MuiInputLabel-shrink': {
+      background: '#fff',
+      padding: '0 8px',
+    },
+  };
+
+  const getErrorMessage = () => {
+    if (getIn(touched, name) && getIn(errors, name)) {
+      return JSON.stringify(getIn(errors, name)).replaceAll('"', "");
+    }
+    return "";
+  };
+
+  return (
+    <Grid item xs={12} style={style}>
+      <Grid item xs={12}>
+        <RedditTextField
+          label={label}
+          className={`${name} ${className || ''}`}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          value={getIn(values, name)}
+          name={name}
+          size="small"
+          disabled={disabled}
+          type={type}
+          placeholder={placeholder}
+          required={required}
+          sx={labelStyles}
+          inputProps={{
+            readOnly: readonly,
+            maxLength: maxLength,
+            minLength: minLength,
+            inputMode: type === 'number' ? 'decimal' : 'text',
+            pattern: type === 'number' ? undefined : undefined
+          }}
+          multiline={multiline}
+          rows={rows}
+          maxRows={maxRows}
+          fullWidth={fullWidth}
+          InputProps={{
+            startAdornment: startAdornment && (
+              <InputAdornment position="start">{startAdornment}</InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                {tooltip && (
+                  <Tooltip title={tooltip}>
+                    <IconButton size="small">
+                      <HelpOutlineIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {endAdornment}
+              </InputAdornment>
+            ),
+          }}
+          {...props}
+        />
+      </Grid>
+      <Grid item xs={12}>
+        <Typography
+          color="error"
+          variant="subtitle2"
+          gutterBottom
+          component="span"
+          className="mybooking_error"
+        >
+          {getErrorMessage()}
+        </Typography>
+      </Grid>
+    </Grid>
+  );
+};
+
+
+instead of textfield use AdvanceTextField
+
 in limitType one new field added  totalExposure based on that total exposure value will be populated suppose if totalExposure is AO means Amount Outstanding value will come in total exposure and  SL Sanctioned Limit value will come in totalExposure and totalExposure will be now disbaled field 
 
 
-
+give me complete and proper code 
 
 
