@@ -1,3 +1,585 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Grid,
+  Divider,
+  Button,
+  Tooltip,
+  Tabs,
+  Tab,
+  Box,
+  Fade,
+  Alert,
+  Snackbar,
+  Typography
+} from '@mui/material';
+import { Formik, Form, FormikProps } from 'formik';
+import ErrorMessageGlobal from '../../../components/framework/ErrorMessageGlobal';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { PnfTextBoxField } from "../components/PnfTextBoxField";
+import { defaultPnfInformation, pnfInformationSchema } from '../../../models/pnf/pnf';
+import {
+  useAddPnfMutation,
+  useGetPnfQuery,
+  useGetPnfEmailStatusQuery,
+  useLazyPnfReportQuery,
+  useLazyGetPnfQuery
+} from '../../../features/pnf/api';
+import { useAppDispatch, useAppSelector } from '../../../app/hooks';
+import { setDrawerState, setPnfStatus } from '../../../features/lead/leadSlice';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { AiOutlineArrowLeft, AiOutlineFilePdf } from "react-icons/ai";
+import { MirPnfDropdown } from "../components/MirPnfDropdown"; // NEW
+import Section from '../../nbfc/Section';
+import Workflow from '../../workflow/Workflow';
+import { TabPanelProps } from "../../../models/tabPanel";
+import SaveAsIcon from '@mui/icons-material/SaveAs';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { UploadAPI } from '../../../features/upload/upload';
+import BrowserUpdatedIcon from '@mui/icons-material/BrowserUpdated';
+import MultiFileUpload from '../../marketIntelligenceSheet/components/MultipleFileUpload';
+import { useGetOldWorkflowDetailsQuery, useLazyGetWorkflowDetailsQuery } from '../../../features/workflow/api';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { OldWorkFlowMain } from '../../workflow/OldWorkFlowMain';
+import { PANInputField } from '../../../components/framework/PANInputField';
+import AutoSave from '../../../components/framework/AutoSave';
+import { TextAreaField } from '../../../components/framework/TextAreaAuto';
+import Cookies from 'js-cookie';
+import { setPNFIdData } from '../../../features/user/userSlice';
+import FullScreenLoaderNoClose from '../../../components/common/FullScreenLoaderNoClose';
+
+function CustomTabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      className="wrap-tab-container py-2"
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box>{children}</Box>}
+    </div>
+  );
+}
+
+function a11yProps(index: number) {
+  return {
+    id: `simple-tab-${index}`,
+    'aria-controls': `simple-tabpanel-${index}`,
+  };
+}
+
+const PnfForm = () => {
+  const { pnfId } = useAppSelector((state: any) => state.userStore);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
+  const [value, setValue] = useState(0);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackMsg, setSnackMsg] = useState("");
+  const [severity, setSeverity] = useState<"success" | "error">("success");
+  const [isManualSave, setIsManualSave] = useState(false);
+  const [newFiles, setNewFiles] = useState<any>([]);
+  const [isNew, setIsNew] = useState<boolean>(true);
+
+  const { data: initialData, isLoading: isInitialLoading, refetch: refetchPnfData } = useGetPnfQuery(pnfId, {
+    skip: !pnfId,
+    refetchOnMountOrArgChange: true
+  });
+
+  const { userData } = useAppSelector((state: any) => state.userStore);
+  const { data: oldWorkflowDetails } = useGetOldWorkflowDetailsQuery(
+    { formId: pnfId, formType: "PNF" },
+    { skip: !pnfId, refetchOnMountOrArgChange: true }
+  );
+
+  const [getPnfData] = useLazyGetPnfQuery();
+  const [checkWorkFlow] = useLazyGetWorkflowDetailsQuery();
+  const [generateReport] = useLazyPnfReportQuery();
+  const [addPnf] = useAddPnfMutation();
+
+  const loginCookiesData = JSON.parse(Cookies.get("user") || "{}");
+
+  useEffect(() => {
+    if (location.pathname.includes('pnf')) {
+      dispatch(setDrawerState(false));
+    }
+    if (location?.state?.id) {
+      dispatch(setPNFIdData(location.state.id));
+    }
+  }, [location, dispatch]);
+
+  const handleButtonClick = async (
+    status: "01" | "02",
+    formikProps: FormikProps<any>
+  ) => {
+    const { values, validateForm, setSubmitting } = formikProps;
+    setIsManualSave(true);
+
+    const errors = await validateForm();
+    if (Object.keys(errors).length > 0) {
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Please fix form errors.");
+      setSubmitting(false);
+      setIsManualSave(false);
+      return;
+    }
+
+    try {
+      if (status === "02") {
+        const workflowDetails = await checkWorkFlow({ formId: pnfId, formType: "PNF" }).unwrap();
+        if (!workflowDetails || workflowDetails.length < 2) {
+          setOpenSnackbar(true);
+          setSeverity("error");
+          setSnackMsg("Please assign workflow before submitting.");
+          setSubmitting(false);
+          setIsManualSave(false);
+          return;
+        }
+      }
+
+      let responseId = pnfId;
+      const payload = {
+        ...values,
+        pnfId: pnfId || undefined,
+        status,
+        makerId: userData?.userId,
+        pnfDoc: newFiles
+      };
+
+      const response: any = pnfId
+        ? await addPnf({ ...payload, pnfId }).unwrap()
+        : await addPnf(payload).unwrap();
+
+      responseId = response?.pnfId;
+      if (!pnfId) {
+        dispatch(setPNFIdData(responseId));
+      }
+
+      for (const file of newFiles) {
+        await UploadAPI.updateDoc({ pnfId: responseId, slNo: file.slNo }, "/pnf/updatePnfDoc");
+      }
+      await getPnfData(responseId).unwrap();
+
+      setIsNew(false);
+      dispatch(setPnfStatus(status));
+
+      setOpenSnackbar(true);
+      setSeverity("success");
+      setSnackMsg(status === "01" ? "Saved as draft!" : "PNF Submitted Successfully!");
+
+    } catch (error: any) {
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg(error?.data?.message || "Operation failed.");
+    } finally {
+      setSubmitting(false);
+      setIsManualSave(false);
+    }
+  };
+
+  const handleAutoSave = async (values: any) => {
+    try {
+      let responseId = pnfId;
+      const payload = {
+        ...values,
+        pnfId: pnfId || undefined,
+        status: "01",
+        makerId: userData?.userId,
+        pnfDoc: newFiles
+      };
+
+      const response: any = pnfId
+        ? await addPnf({ ...payload, pnfId }).unwrap()
+        : await addPnf(payload).unwrap();
+
+      responseId = response?.pnfId;
+      if (!pnfId) dispatch(setPNFIdData(responseId));
+
+      for (const file of newFiles) {
+        await UploadAPI.updateDoc({ pnfId: responseId, slNo: file.slNo }, "/pnf/updatePnfDoc");
+      }
+
+      setIsNew(false);
+      return true;
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      return false;
+    }
+  };
+
+  const handleViewReport = async () => {
+    try {
+      const reportData: any = await generateReport(pnfId).unwrap();
+      const byteCharacters = atob(reportData?.repData);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url);
+    } catch (error) {
+      setOpenSnackbar(true);
+      setSeverity("error");
+      setSnackMsg("Failed to generate report.");
+    }
+  };
+
+  useEffect(() => {
+    if (value === 0 && pnfId) refetchPnfData();
+  }, [value, pnfId, refetchPnfData]);
+
+  if (isManualSave) return <FullScreenLoaderNoClose />;
+
+  return (
+    <Grid container className="los_mainwra">
+      <Grid item xs={12} className="los_rgtdata">
+        <div className="wrap-appraisal-area">
+          <Section>
+            <Box className="wrap-tabs" sx={{ width: '100%' }}>
+              <Box className="tab-with-btn ps-0" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                <Tooltip arrow TransitionComponent={Fade} TransitionProps={{ timeout: 600 }} title="Back to PNF Dashboard" placement="top">
+                  <Button variant="outlined" color="inherit" size="small" onClick={() => navigate("/los/pnf-dashboard")}>
+                    <AiOutlineArrowLeft className="me-0" /> Back
+                  </Button>
+                </Tooltip>
+                <Tabs className="tabs-header" value={value} onChange={(_, v) => setValue(v)} aria-label="pnf tabs">
+                  <Tab className="tab-ui" label="PNF Form" {...a11yProps(0)} />
+                  <Tab className="tab-ui" label="Workflow" {...a11yProps(1)} />
+                  {oldWorkflowDetails?.length > 0 && <Tab className="tab-ui" label="Workflow History" {...a11yProps(2)} />}
+                </Tabs>
+              </Box>
+
+              <CustomTabPanel value={value} index={0}>
+                <ErrorMessageGlobal status={null} />
+                <Section>
+                  <div className='custome-form'>
+                    <div className='d-flex justify-content-end mb-3'>
+                      {pnfId ? (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          className="text-capitalize shadow-none search-color"
+                          onClick={handleViewReport}
+                          startIcon={<AiOutlineFilePdf />}
+                        >
+                          View Report
+                        </Button>
+                      ) : (
+                        <Button variant="contained" size="small" disabled>
+                          <AiOutlineFilePdf /> &nbsp;Fill details to view report
+                        </Button>
+                      )}
+                    </div>
+
+                    <Formik
+                      initialValues={initialData || defaultPnfInformation}
+                      validationSchema={pnfInformationSchema}
+                      onSubmit={() => { }}
+                      enableReinitialize
+                    >
+                      {formikProps => {
+                        const { values, isSubmitting } = formikProps;
+                        const canEdit = (values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker";
+
+                        // Email check inside Formik
+                        const { data: emailValue, isFetching: checkingEmail } = useGetPnfEmailStatusQuery(
+                          { id: values.nominationEmailId, pnfId },
+                          { skip: !values.nominationEmailId || !pnfId }
+                        );
+
+                        const isEmailDuplicate = emailValue === true;
+                        const blockSave = isSubmitting || isEmailDuplicate;
+
+                        return (
+                          <Form>
+                            {canEdit && (
+                              <AutoSave
+                                debounceMs={5000}
+                                handleSubmit={async (vals) => {
+                                  if (isEmailDuplicate) return false;
+                                  return handleAutoSave(vals);
+                                }}
+                                values={values}
+                              />
+                            )}
+
+                            <Grid container spacing={2} padding={4} className='form-grid pt-0 pb-0'>
+                              <Grid item xs={12}>
+                                <Divider className='mt-0 mb-3' textAlign="left">
+                                  <span className='seperator-ui'>MIR Details</span>
+                                </Divider>
+                              </Grid>
+
+                              <Grid item xs={12} sm={6} md={3} lg={4}>
+                                <MirPnfDropdown
+                                  label="Select MIR: *"
+                                  name="mirId"
+                                  disabled={!canEdit}
+                                />
+                              </Grid>
+
+                              <Grid item xs={12} sm={6} md={3} lg={4}>
+                                <TextBoxField label="Name of Borrower: *" name="customerName" disabled={!canEdit} />
+                              </Grid>
+
+                              <Grid item xs={12} sm={6} md={3} lg={4}>
+                                <PANInputField label="PAN" name="pan" isRequired disabled={!canEdit} />
+                              </Grid>
+
+                              <Grid item xs={12}>
+                                <TextAreaField
+                                  label="Nature of Business: *"
+                                  name="businessNature"
+                                  disabled={!canEdit}
+                                  maxLength={500}
+                                  restrictedCharacters="¿"
+                                />
+                              </Grid>
+
+                              <Grid item xs={12}>
+                                <Divider className='mt-4 mb-3' textAlign="left">
+                                  <span className='seperator-ui'>Details of Nominated Personnel</span>
+                                </Divider>
+                                <Alert severity="warning" className='mb-3'>
+                                  <strong>Note:</strong> User ID will be generated from the <strong>Official Email Id</strong> field.
+                                </Alert>
+                              </Grid>
+
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField label="Name *" name="nominationName" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField label="Type of Employee" name="nominationType" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField label="Designation *" name="nominationDesgn" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField label="Employee ID *" name="nominationEmpId" disabled={!canEdit} />
+                              </Grid>
+
+                              <Grid item xs={12} lg={2}>
+                                <PnfTextBoxField
+                                  name="nominationEmailId"
+                                  label="Official Email Id *"
+                                  disabled={!canEdit}
+                                />
+                                {checkingEmail ? (
+                                  <Typography variant="caption" color="textSecondary">Checking...</Typography>
+                                ) : isEmailDuplicate ? (
+                                  <Typography color="error" variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                                    This email is already in use.
+                                  </Typography>
+                                ) : null}
+                              </Grid>
+
+                              <Grid item xs={12} lg={2}>
+                                <TextBoxField label="Mobile No *" name="nominationMobileNo" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={2}>
+                                <PANInputField label="PAN Number *" name="nominationPan" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Authorized By" name="nominationAuthBy" disabled={!canEdit} />
+                              </Grid>
+
+                              <Grid item xs={12}>
+                                <Divider className='mt-4 mb-3' textAlign="left">
+                                  <span className='seperator-ui'>Details of Authorized Signatory</span>
+                                </Divider>
+                              </Grid>
+
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Name *" name="authName" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Type of Employee" name="authType" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Designation *" name="authDesgn" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Employee ID *" name="authEmpId" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Acting on Behalf of *" name="authBehalf" disabled={true} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Official Email Id *" name="authEmailId" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField label="Official Mobile No *" name="authMobileNo" disabled={!canEdit} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <PANInputField label="PAN Number *" name="authPan" isRequired disabled={!canEdit} />
+                              </Grid>
+
+                              <Grid item xs={6} className='pt-3'>
+                                <MultiFileUpload
+                                  initialFiles={values.pnfDoc || []}
+                                  onFileChange={setNewFiles}
+                                  disabled={!canEdit}
+                                  isNew={isNew}
+                                  isFrom='pnf'
+                                />
+                              </Grid>
+
+                              <Grid item xs={12} textAlign="right">
+                                {canEdit && (
+                                  <>
+                                    <Button
+                                      variant="contained"
+                                      size="small"
+                                      className="text-capitalize sbmtBtn me-2"
+                                      onClick={() => handleButtonClick("01", formikProps)}
+                                      disabled={blockSave}
+                                    >
+                                      {initialData ? <>Save <BrowserUpdatedIcon /></> : <>Save as Draft <SaveAsIcon /></>}
+                                    </Button>
+
+                                    {initialData && (
+                                      <Button
+                                        variant="contained"
+                                        size="small"
+                                        className="text-capitalize sbmtBtn sbmtBtn_scn"
+                                        onClick={() => handleButtonClick("02", formikProps)}
+                                        disabled={blockSave}
+                                      >
+                                        Submit <CheckCircleIcon />
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </Grid>
+                            </Grid>
+                          </Form>
+                        );
+                      }}
+                    </Formik>
+                  </div>
+                </Section>
+              </CustomTabPanel>
+
+              <CustomTabPanel value={value} index={1}>
+                <Workflow formIdVal={pnfId} formTypeVal={'PNF'} />
+              </CustomTabPanel>
+
+              {oldWorkflowDetails?.length > 0 && (
+                <CustomTabPanel value={value} index={2}>
+                  <OldWorkFlowMain value={value} oldWorkflowDetails={oldWorkflowDetails} />
+                </CustomTabPanel>
+              )}
+            </Box>
+          </Section>
+        </div>
+
+        <NbfcSnackbar
+          open={openSnackbar}
+          msg={snackMsg}
+          severity={severity}
+          handleSnackClose={() => setOpenSnackbar(false)}
+          submitCall={false}
+        />
+      </Grid>
+    </Grid>
+  );
+};
+
+export default PnfForm;
+
+
+// components/MirPnfDropdown.tsx
+import React, { useEffect, useMemo } from "react";
+import { Grid, TextField, Autocomplete, Typography } from "@mui/material";
+import { getIn, useFormikContext } from "formik";
+import { useGetMaterQuery } from "../../../features/master/api";
+import { useGetMirQuery } from "../../../features/mir/api";
+import { modify } from "../../../utlis/helpers";
+
+export const MirPnfDropdown = (props: {
+  label?: string;
+  name: string;
+  disabled?: boolean;
+}) => {
+  const { setFieldValue, values, touched, errors, handleBlur } = useFormikContext<any>();
+
+  const { data: masterData, isLoading: isMasterLoading } = useGetMaterQuery(
+    `refapi/mir/getMirPnfList`,
+    { refetchOnMountOrArgChange: true }
+  );
+
+  const selectedMirId = getIn(values, props.name);
+  const { data: mirInfo, isLoading: isMirLoading } = useGetMirQuery(selectedMirId, {
+    skip: !selectedMirId
+  });
+
+  const options = useMemo(() => {
+    return modify("mir/getMirPnfList", masterData)?.map((item: any) => ({
+      key: item.key,
+      value: item.key,
+      label: item.label
+    })) || [];
+  }, [masterData]);
+
+  useEffect(() => {
+    if (mirInfo) {
+      setFieldValue("customerName", mirInfo.nbfcName || mirInfo.customerDetails);
+      setFieldValue("pan", mirInfo.panNo);
+      setFieldValue("businessNature", mirInfo.businessNature);
+      setFieldValue("authBehalf", mirInfo.nbfcName);
+      setFieldValue("cifCd", mirInfo.cifCd);
+      setFieldValue("nbfcId", mirInfo.nbfcId);
+    }
+  }, [mirInfo, setFieldValue]);
+
+  const currentValue = options.find(opt => opt.value == selectedMirId) || null;
+
+  return (
+    <Grid item xs={12}>
+      <Autocomplete
+        fullWidth
+        options={options}
+        value={currentValue}
+        disabled={props.disabled || isMasterLoading}
+        loading={isMasterLoading || isMirLoading}
+        onChange={(_, newValue) => {
+          setFieldValue(props.name, newValue ? newValue.value : null);
+        }}
+        onBlur={handleBlur}
+        getOptionLabel={(option) => option.label}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={props.label}
+            variant="outlined"
+            error={Boolean(getIn(touched, props.name) && getIn(errors, props.name))}
+            helperText={
+              getIn(touched, props.name) && getIn(errors, props.name)
+                ? JSON.stringify(getIn(errors, props.name)).replaceAll('"', "")
+                : ""
+            }
+          />
+        )}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+      />
+    </Grid>
+  );
+};
+
+
+
+
+
+
+
+
+
 //solution 
 if(formToSubmit.current) 
         {
