@@ -1,1151 +1,630 @@
-import { FieldArray, Form, Formik } from "formik";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Grid, IconButton, Snackbar } from "@mui/material";
-import { Delete } from '@mui/icons-material';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import React, { useEffect, useState } from 'react';
+import {
+  Grid,
+  Divider,
+  Button,
+  Tooltip,
+  Tabs,
+  Tab,
+  Box,
+  Fade
+} from '@mui/material';
+import { Formik, Form, FormikProps } from 'formik';
+import ErrorMessageGlobal from '../../../components/framework/ErrorMessageGlobal';
+import { TextBoxField } from '../../../components/framework/TextBoxField';
+import { PnfTextBoxField } from "../components/PnfTextBoxField"
+import { defaultPnfInformation, pnfInformationSchema } from '../../../models/pnf/pnf';
+import {
+  useAddPnfMutation, useGetPnfQuery,
+  useGetPnfEmailStatusQuery,
+  useLazyPnfReportQuery,
+  useLazyGetPnfQuery
+} from '../../../features/pnf/api';
+import { useAppDispatch, useAppSelector } from '../../../app/hooks';
+import { setDrawerState, setPnfStatus } from '../../../features/lead/leadSlice';
+import { Link, useLocation, } from 'react-router-dom';
+import { AiOutlineArrowLeft, AiOutlineFilePdf } from "react-icons/ai";
+import { MultipleDropDownField } from '../components/MultiplePnfDropDown';
+import Section from '../../nbfc/Section';
+import Workflow from '../../workflow/Workflow';
+import { TabPanelProps } from "../../../models/tabPanel";
 import SaveAsIcon from '@mui/icons-material/SaveAs';
-import { FixedSizeList } from 'react-window';
-import { connect } from 'react-redux';
-import { useDeleteLenderLimitByIdMutation, useGetLenderLimitFormDataQuery, useSaveLenderLimitFormDataMutation } from "../../../features/application-form/capitalResourceForm";
-import AutoSave from "../../../components/framework/AutoSave";
-import { TextBoxField } from "../../../components/framework/TextBoxField";
-import FormLoader from "../../../loader/FormLoader";
-import { EnhancedDropDown } from "../../../components/framework/EnhancedDropDown";
-import { useAppSelector } from "../../../app/hooks";
-import ConfirmationAlertDialog from "../../../models/application-form/ConfirmationAlertDialog";
-import { OnlineSnackbar } from "../../../components/shared/OnlineSnackbar";
-import { MultipleLenderDropDown } from "../commonFiles/MultipleLenderDropDown";
-import * as Yup from 'yup';
-import FullScreenLoaderNoClose from "../../../components/common/FullScreenLoaderNoClose";
-import { useGetMaterQuery } from "../../../features/master/api";
-import { modify } from "../../../utlis/helpers";
-import { useUpdateCommentByNIdMutation } from "../../../features/application-form/applicationForm";
-import NotificationSectionWiseButton from "../../../components/DrawerComponent/NotificationSectionWiseButton";
-import DrawerResponseComponent from "../../../components/DrawerComponent/DrawerResponseComponent";
-import Notification from "../../../components/shared/Notification";
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { UploadAPI } from '../../../features/upload/upload';
+import Alert from '@mui/material/Alert';
+import BrowserUpdatedIcon from '@mui/icons-material/BrowserUpdated';
+import Snackbar, { SnackbarCloseReason } from '@mui/material/Snackbar';
+import MultiFileUpload from '../../marketIntelligenceSheet/components/MultipleFileUpload';
+import { useGetOldWorkflowDetailsQuery, useLazyGetWorkflowDetailsQuery } from '../../../features/workflow/api';
+import NbfcSnackbar from '../../../components/shared/NbfcSnackbar';
+import { OldWorkFlowMain } from '../../workflow/OldWorkFlowMain';
+import { PANInputField } from '../../../components/framework/PANInputField';
+import AutoSave from '../../../components/framework/AutoSave';
+import { useNavigate } from "react-router-dom";
+import { TextAreaField } from '../../../components/framework/TextAreaAuto';
+import Cookies from 'js-cookie';
+import { setPNFIdData } from '../../../features/user/userSlice';
+import FullScreenLoaderNoClose from '../../../components/common/FullScreenLoaderNoClose';
+import zIndex from '@mui/material/styles/zIndex';
 
-interface LenderRow {
-    lenderName: string;
-    lenderType: string | null;
-    limitType: string;
-    sanctionedLimit: number | null;
-    fundingAmtTMinus2: number | null;
-    fundingAmtTMinus1: number | null;
-    fundingAmtT: number | null;
-    avgIntRate: number | null;
-    totalExposure: number | null;
-    latestIntRate: number | null;
-    contactDetails: string;
-    ncdOs: string;
-    security: string;
-    slNo: number | null;
-    saveStatus: string;
-    applId: string;
+
+function CustomTabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      className="wrap-tab-container py-2"
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box>{children}</Box>}
+    </div>
+  );
 }
 
-interface FormValues {
-    data: LenderRow[];
+function a11yProps(index: number) {
+  return {
+    id: `simple-tab-${index}`,
+    'aria-controls': `simple-tabpanel-${index}`,
+  };
 }
 
-interface Props {
-    applId: string;
-    excelData: any[];
-    openSectionsData?: any[];
-}
+const PnfForm = () => {
+  const { pnfId } = useAppSelector((state: any) => state.userStore);
+  let location = useLocation();
+  const [value, setValue] = React.useState(0);
+  const [open, setOpen] = React.useState(false);
 
-const LenderLimitOdForm = ({ applId, excelData, openSectionsData }: Props) => {
-    const [addLimitDetails] = useSaveLenderLimitFormDataMutation();
-    const { data: LimitData, isLoading, isError, refetch } = useGetLenderLimitFormDataQuery(applId, { skip: !applId, refetchOnMountOrArgChange: true });
-    const [deleteLimitDetails] = useDeleteLenderLimitByIdMutation();
-    const [index, setIndex] = useState(0);
-    const [openConfirmation, setOpenConfirmation] = useState(false);
-    const [formData, setFormData] = useState<LenderRow[] | null>(null);
-    const [actionVal, setActionVal] = useState<string | null>(null);
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<string>("");
-    const [severity, setSeverity] = useState<"success" | "error">("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [snackOpen, setSnackOpen] = useState(false);
-    const [snackMessages, setSnackMessages] = useState<string[]>([]);
-    const [snackSeverity, setSnackSeverity] = useState<"error" | "success" | "info">("error");
-    const { transactionData } = useAppSelector((state) => state.userStore);
-    const [initialValues, setInitialValues] = useState<FormValues>({ data: [] });
+  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    setValue(newValue);
+  };
 
-    // Removed width for "Type of FI" (previously 150 at index 4)
-    const columnWidths = [60, 60, 250, 150, 170, 170, 180, 180, 180, 170, 170, 320, 120, 120];
+  const handleCloseWorkFlow = () => {
+    setOpenSnackbar(false);
+  };
+  // const [pnfId, updatePnfId] = useState<number | null | any>();
+  sessionStorage.setItem("pnfId", pnfId);
 
-    useEffect(() => {
-        if (LimitData) {
-            const dataWithApplId: LenderRow[] = LimitData.map((item: any) => ({
-                ...item,
-                applId
-            }));
-            setInitialValues({ data: dataWithApplId });
-        }
-    }, [LimitData, applId]);
+  const [error, setError] = useState<any>();
+  const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const [addPnf] = useAddPnfMutation();
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [fileTypePdf, setFileTypePdf] = useState(false);
+  const [newFiles, setNewFiles] = useState<any>([]);
+  const [isNew, setIsNew] = useState<boolean>(true);
+  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<any>("");
+  const [severity, setSeverity] = useState<string | any>("success");
+  const [reportDataModal, setReportDataModal] = useState<any>();
+  const [isManualSave, setIsManualSave] = useState(false);
 
-    useEffect(() => {
-        if (excelData && excelData.length > 0) {
-            let newExcelData = excelData.slice(1);
-            const lenderRows = newExcelData.filter((row: any) => row[2] && row[2] !== 'Total');
-            const newData: LenderRow[] = lenderRows.map((excelRow: any) => ({
-                lenderName: excelRow[2]?.toString().trim() || "",
-                limitType: excelRow[3]?.toString().trim() || "",
-                lenderType: excelRow[4]?.toString().trim() || null,
-                sanctionedLimit: parseExcelValue(excelRow[5]),
-                fundingAmtTMinus2: parseExcelValue(excelRow[6]),
-                fundingAmtTMinus1: parseExcelValue(excelRow[7]),
-                fundingAmtT: parseExcelValue(excelRow[8]),
-                totalExposure: parseExcelValue(excelRow[9]),
-                avgIntRate: parseExcelValue(excelRow[10]),
-                latestIntRate: parseExcelValue(excelRow[11]),
-                contactDetails: excelRow[12]?.toString().trim() || "",
-                ncdOs: excelRow[13]?.toString().trim() || "",
-                security: excelRow[14]?.toString().trim() || "",
-                slNo: null,
-                saveStatus: '01',
-                applId
-            }));
-            setInitialValues({ data: newData });
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Lender data imported successfully");
-        }
-    }, [excelData, applId]);
+  const { data: initialData, isLoading: isInitialLoading, refetch: refetchPnfData } = useGetPnfQuery(pnfId, { skip: !pnfId, refetchOnMountOrArgChange: true });
+  const { userData } = useAppSelector((state: any) => state.userStore);
+  const { data: oldWorkflowDetails } = useGetOldWorkflowDetailsQuery({ formId: pnfId, formType: "PNF" }, {
+    skip: !pnfId,
+    refetchOnMountOrArgChange: true
+  });
 
-    const parseExcelValue = (value: any): number => {
-        if (value === undefined || value === null || value === '') return 0;
-        if (typeof value === 'string') return parseFloat(value.replace(/,/g, '')) || 0;
-        return parseFloat(value) || 0;
-    };
+  const [getPnfData] = useLazyGetPnfQuery();
 
-    const extractErrorMessages = (errorResponse: Record<string, string>) => {
-        const allMessages = Object.values(errorResponse)
-            .flatMap(msg => msg.split(',').map(m => m.trim()));
-        return allMessages;
-    };
+  useEffect(() => {
+    if (location.pathname.split("/")[2] === 'pnf') {
+      dispatch(setDrawerState(false));
+    }
+    if (location?.state?.id) {
+      console.log('location?.state', location?.state);
+      // updatePnfId(location?.state?.id);
+      dispatch(setPNFIdData(location?.state?.id));
 
-    const handleSubmitApis = async (values: FormValues | LenderRow[]) => {
-        try {
-            const requestBody = Array.isArray(values) ? values : values.data;
-            setIsUploading(true);
-            if (await addLimitDetails(requestBody).unwrap()) {
-                setOpenSnackbar(true);
-                setIsUploading(false);
-                setSeverity("success");
-                setSnackMsg(requestBody[0]?.saveStatus === '02' ? "Section submitted successfully" : "Record saved successfully");
-                setActionVal(null);
-                return true;
-            }
-            return false;
-        } catch (err: any) {
-            console.error(err);
-            setIsUploading(false);
-            if (err.status === 400 && err.message === "Invalid") {
-                const errorMessages = extractErrorMessages(err.customCode);
-                setSnackMessages(errorMessages.length > 0 ? errorMessages : ["Validation failed."]);
-                setSnackSeverity('error');
-                setSnackOpen(true);
-            } else {
-                console.error(err);
-            }
-            return false;
-        }
-    };
+    }
+  }, [location]);
 
-    const handleClosePop = () => setOpenSnackbar(false);
 
-    const { data: bankMasterData, isLoading: isBankMasterLoading } = useGetMaterQuery(`refapi/mstr/getBankMasters`);
-    const bankOptions = useMemo(() => bankMasterData ? modify("mstr/getBankMasters", bankMasterData) : [], [bankMasterData]);
 
-    const { data: limitTypeData, isLoading: isLimitTypeLoading } = useGetMaterQuery(`refapi/mstr/getLimitType`);
-    const limitTypeOptions = useMemo(() => limitTypeData ? modify("mstr/getLimitType", limitTypeData) : [], [limitTypeData]);
+  interface IFormValues {
+    myInput: string;
+  }
 
-    const handleDelete = async (applId: string, index: number) => {
-        handleClose();
-        try {
-            if (await deleteLimitDetails({ applId, index }).unwrap()) {
-                setOpenSnackbar(true);
-                setSeverity("success");
-                setSnackMsg("Record Deleted successfully");
-                return true;
-            }
-            return false;
-        } catch (error: any) {
-            console.error("Error saving compliance position:", error);
+  const [checkWorkFlow] = useLazyGetWorkflowDetailsQuery();
+  const [generateReport] = useLazyPnfReportQuery()
+
+  const handleButtonClick = async (
+    status: "01" | "02" | "03" | "04",
+    formikProps: FormikProps<IFormValues>
+  ) => {
+    const { values, submitForm, setSubmitting, validateForm, } = formikProps;
+    setIsLoading(true);
+    setError(null);
+    submitForm();
+    const error = await validateForm();
+    console.log("error",error);
+    if (Object.keys(error).length === 0) {
+      try {
+        setIsManualSave(true);
+
+        if (status == "02") {
+          const workflowDetails = await checkWorkFlow({ formId: pnfId, formType: "PNF" }).unwrap();
+          if (workflowDetails && workflowDetails.length < 2) {
+            setSubmitting(false);
+            setIsLoading(false);
             setOpenSnackbar(true);
             setSeverity("error");
-            setSnackMsg("failed to save : " + error?.message);
+            setSnackMsg("Please assign workflow before proceeding. ");
             return false;
+          }
         }
-    };
-
-    const handleClickOpen = (index: number) => {
-        setIndex(index);
-        setOpen(true);
-    };
-
-    const calculateSanTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.sanctionedLimit) || 0);
-        }, 0);
-    };
-
-    const calculateFy2Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus2) || 0);
-        }, 0);
-    };
-
-    const calculateFy1Total = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtTMinus1) || 0);
-        }, 0);
-    };
-
-    const calculateFyTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.fundingAmtT) || 0);
-        }, 0);
-    };
-
-    const calculateNcdTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.ncdOs) || 0);
-        }, 0);
-    };
-
-    const calculatetotalExposureTotal = (values: FormValues): number => {
-        return values.data.reduce((total: number, data1: any) => {
-            return total + (parseFloat(data1.totalExposure) || 0);
-        }, 0);
-    };
-    const odListingSchema = Yup.object().shape({
-        data: Yup.array().of(
-            Yup.object().shape({
-                lenderName: Yup.string().required('Required'),
-                limitType: Yup.string().required('Required'),
-                // lenderType: Yup.string().required('Required'),
-            })
-        ),
-    });
-
-    const handleClose = () => setOpen(false);
-
-    const handleCloseConfirmation = () => {
-        setActionVal(null);
-        setOpenConfirmation(false);
-    };
-
-    const handleSubmitConfirmation = (values: LenderRow[]) => {
-        setOpenConfirmation(false);
-        handleSubmitApis(values);
-    };
-
-    const handleSubmit = async (values: FormValues) => {
-        const finalValue = values.data.map((listData: any, index: number) => ({
-            ...listData,
-            applId,
-            slNo: index + 1,
-            saveStatus: actionVal
-        }));
-        if (actionVal === '02') {
-            setFormData(finalValue);
-            setOpenConfirmation(true);
+        let responseId;
+        if (pnfId) {
+          const response: any = await addPnf({ ...values, pnfId: pnfId, status, makerId: userData?.userId, pnfDoc: newFiles }).unwrap();
+          responseId = response?.pnfId;
         } else {
-            handleSubmitApis(finalValue);
+          const response = await addPnf({ ...values, status, makerId: userData?.userId, pnfDoc: newFiles }).unwrap();
+          responseId = response?.pnfId;
+          // updatePnfId(response.pnfId);
+          dispatch(setPNFIdData(response.pnfId));
         }
-        setActionVal(null);
-    };
 
-    const handleClickSetAction = (action: string) => setActionVal(action);
-
-    const handleSnackbarCloseSnack = () => setSnackOpen(false);
-
-    const renderRow = ({ index, style, data }: { index: number; style: any; data: { values: FormValues; setFieldValue: any } }) => {
-        const { values, setFieldValue } = data;
-        const row = values.data[index];
-        const selectedLimitType = limitTypeOptions.find((option: any) => option.value === row.limitType);
-        const lenderTypeOptionsForRow = selectedLimitType ? selectedLimitType.lenderType.map((type: string) => ({
-            key: type,
-            value: type,
-            label: type
-        })) : [];
-
-        return (
-            <div style={{ ...style, display: 'flex' }} className="div-table-row">
-                {columnWidths.map((width, colIndex) => (
-                    <div key={colIndex} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                        {colIndex === 0 && (
-                            <IconButton
-                                className="text-danger"
-                                disabled={row.saveStatus === '02'}
-                                onClick={() => row.slNo ? handleClickOpen(row.slNo) : values.data.splice(index, 1)}
-                            >
-                                <Delete />
-                            </IconButton>
-                        )}
-                        {colIndex === 1 && <span>{index + 1}</span>}
-                        {colIndex === 2 && (
-                            <MultipleLenderDropDown
-                                label=""
-                                name={`data.${index}.lenderName`}
-                                domain=""
-                                disabled={row.saveStatus === '02'}
-                                options={bankOptions}
-                                isLoading={isBankMasterLoading}
-                                onSelect={(selected) => {
-                                    setFieldValue(`data.${index}.lenderType`, selected ? selected.tag : null);
-                                }}
-                            />
-                        )}
-                        {colIndex === 3 && (
-                            <Grid item xs={12}>
-                                <EnhancedDropDown
-                                    label=""
-                                    name={`data.${index}.limitType`}
-                                    disabled={row.saveStatus === '02'}
-                                    customOptions={limitTypeOptions}
-                                    domain=""
-                                />
-                            </Grid>
-                        )}
-                        {colIndex === 4 && (
-                            <TextBoxField
-                                name={`data.${index}.sanctionedLimit`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 5 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus2`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 6 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtTMinus1`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 7 && (
-                            <TextBoxField
-                                name={`data.${index}.fundingAmtT`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 8 && (
-                            <TextBoxField
-                                name={`data.${index}.totalExposure`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 9 && (
-                            <TextBoxField
-                                name={`data.${index}.avgIntRate`}
-                                type="number"
-                            />
-                        )}
-
-                        {colIndex === 10 && (
-                            <TextBoxField
-                                name={`data.${index}.latestIntRate`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 11 && (
-                            <TextBoxField
-                                name={`data.${index}.contactDetails`}
-                            />
-                        )}
-                        {colIndex === 12 && (
-                            <TextBoxField
-                                name={`data.${index}.ncdOs`}
-                                type="number"
-                            />
-                        )}
-                        {colIndex === 13 && (
-                            <TextBoxField
-                                name={`data.${index}.security`}
-                            />
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    };
-
-    const [updateCommentByNId] = useUpdateCommentByNIdMutation();
-    const { opensections } = useAppSelector((state) => state.userStore);
-    const [getOpenSectionsData, setOpenSections] = useState<any[]>([]);
-    const [open, setOpen] = useState<any>(false);
-    const [getNotiId, setNotiId] = useState<any>('');
-    const [openDr, setOpenDr] = useState<any>(false);
-
-    const toggleDrawer = (newOpen: boolean) => () => {
-        setOpenDr(true);
-    };
-    const handleButtonClick = (notfId: any) => {
-        setOpenDr(true);
-        setNotiId(notfId);
-    };
-    useEffect(() => {
-        if (opensections && opensections.length > 0) {
-            setOpenSections(opensections);
+        if (responseId) {
+          for (const file of newFiles) {
+            const pnfDocData = {
+              pnfId: responseId,
+              slNo: file.slNo
+            };
+            await UploadAPI.updateDoc(pnfDocData, "/pnf/updatePnfDoc");
+            await getPnfData(responseId).unwrap();
+          }
+          setIsNew(false);
         }
-    }, [opensections]);
-    if (isLoading) return <FormLoader />;
-    if (isUploading) return <FullScreenLoaderNoClose />;
+        setSubmitting(false);
+        dispatch(setPnfStatus(status));
+        if (status == "01") {
+          setOpen(true);
 
-    return (
-        <>
-            {!transactionData ?
-                <Notification /> : <>
-                    <Grid item xs={12} className="opensections-sticky-css">
-                        <Grid
-                            className="pb-0"
-                            item
-                            xs={12}
-                            display="flex"
-                            justifyContent="end">
-                            {getOpenSectionsData && getOpenSectionsData.length > 0 && (() => {
-                                const matchedItem = getOpenSectionsData.find(
-                                    (item: any) => item?.sectionId === "09" && item?.subSectionId === "03"
-                                );
-                                return matchedItem ? (
-                                    <div className="openSection-item">
-                                        <NotificationSectionWiseButton
-                                            label="Respond"
-                                            handleClick={() => handleButtonClick(matchedItem?.notfId)}
-                                            className="btn-primary-css--"
-                                            notfId={matchedItem?.notfId}
-                                            getOpenSectionsData={getOpenSectionsData}
-                                        />
-                                    </div>
-                                ) : null;
-                            })()}
-                            <DrawerResponseComponent
-                                open={openDr}
-                                toggleDrawer={toggleDrawer}
-                                notfId={getNotiId}
-                                detailsData={''}
-                                postDataTrigger={updateCommentByNId}
-                                setOpen={setOpenDr}
-                            />
-                        </Grid>
-                    </Grid>
-                    <div className="wrap-appraisal-area">
-                        <Snackbar
-                            open={snackOpen}
-                            autoHideDuration={6000}
-                            onClose={handleSnackbarCloseSnack}
-                            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                        >
-                            <Alert onClose={handleSnackbarCloseSnack} severity={snackSeverity} sx={{ width: '100%' }}>
-                                <ul className="list-unstyled">
-                                    {snackMessages && snackMessages.length > 0 ? snackMessages.map((msg: any, i: number) => (
-                                        <li key={i} className="text-danger">{`(${i + 1})`} {msg} </li>
-                                    )) : ''}
-                                </ul>
-                            </Alert>
-                        </Snackbar>
-                        <div className="custome-form">
-                            <ConfirmationAlertDialog
-                                id={1}
-                                type={4}
-                                open={openConfirmation}
-                                handleClose={handleCloseConfirmation}
-                                handleDelete={handleSubmitConfirmation}
-                                values={formData}
-                            />
-                            <ConfirmationAlertDialog
-                                id={2}
-                                index={index}
-                                type={2}
-                                open={open}
-                                handleClose={handleClose}
-                                handleDelete={handleDelete}
-                            />
-                            <div className="wrap-inner-table" style={{ overflow: 'auto' }}>
-                                <Formik
-                                    initialValues={initialValues}
-                                    onSubmit={handleSubmit}
-                                    enableReinitialize={true}
-                                    validationSchema={odListingSchema}
-                                    validateOnChange={true}
-                                    validateOnBlur={true}
-                                >
-                                    {({ values, setFieldValue }) => {
-                                        const sanTotal = useMemo(() => calculateSanTotal(values), [values]);
-                                        const fy2Total = useMemo(() => calculateFy2Total(values), [values]);
-                                        const fy1Total = useMemo(() => calculateFy1Total(values), [values]);
-                                        const fyTotal = useMemo(() => calculateFyTotal(values), [values]);
-                                        const ncdTotal = useMemo(() => calculateNcdTotal(values), [values]);
-                                        const exposureTotal = useMemo(() => calculatetotalExposureTotal(values), [values]);
+        }
 
-                                        const itemCount = values.data.length;
-                                        const ITEM_SIZE = 50;
-                                        const MAX_HEIGHT = 500;
-                                        const calculatedHeight = Math.min(itemCount * ITEM_SIZE, MAX_HEIGHT);
+        if (status == "02") {
+          setOpenSnackbar(true);
+          setSeverity("success");
+          setSnackMsg("PNF Submit Successfully!");
+          for (const file of newFiles) {
+            const pnfDocData = {
+              pnfId: responseId,
+              slNo: file.slNo
+            };
+            await UploadAPI.updateDoc(pnfDocData, "/pnf/updatePnfDoc");
+            await getPnfData(responseId).unwrap();
+          }
+        }
 
-                                        return (
-                                            <Form>
-                                                <fieldset disabled={values?.data?.[0]?.saveStatus === "02"}>
-                                                    {values?.data?.[0]?.saveStatus !== "02" && (
-                                                        <AutoSave handleSubmit={handleSubmit} values={values} debounceMs={10000} />
-                                                    )}
-                                                    <FieldArray name="data">
-                                                        {({ push }) => (
-                                                            <>
-                                                                {values?.data?.[0]?.saveStatus !== "02" && (
-                                                                    <Button
-                                                                        type="button"
-                                                                        size='small'
-                                                                        className='psn_btn text-capitalize my-2 saveBtn'
-                                                                        variant="contained"
-                                                                        color="primary"
-                                                                        style={{ marginLeft: '15px', display: 'block' }}
-                                                                        onClick={() =>
-                                                                            push({
-                                                                                applId: applId,
-                                                                                slNo: values.data.length,
-                                                                                limitType: '',
-                                                                                lenderType: null,
-                                                                                sanctionedLimit: null,
-                                                                                lenderName: '',
-                                                                                fundingAmtTMinus2: null,
-                                                                                fundingAmtTMinus1: null,
-                                                                                fundingAmtT: null,
-                                                                                avgIntRate: null,
-                                                                                totalExposure: null,
-                                                                                latestIntRate: null,
-                                                                                ncdOs: '',
-                                                                                contactDetails: '',
-                                                                                security: '',
-                                                                                saveStatus: ''
-                                                                            })
-                                                                        }
-                                                                    >
-                                                                        Add <AddCircleIcon />
-                                                                    </Button>
-                                                                )}
-                                                                <div className="table-ui div-table">
-                                                                    <div style={{ display: 'flex' }} className="div-table-row div-table-header">
-                                                                        {columnWidths.map((width, i) => (
-                                                                            <div key={i} style={{ width: `${width}px`, flexShrink: 0, padding: '8px' }} className="div-table-cell">
-                                                                                {i === 0 && <b>Action</b>}
-                                                                                {i === 1 && <b style={{ minWidth: '50px', display: 'inline-block' }}>Sr. No.</b>}
-                                                                                {i === 2 && <b>Name of the Bank/ lender</b>}
-                                                                                {i === 3 && <b>Limit Type</b>}
-                                                                                {i === 4 && <b>Sanctioned Limit</b>}
-                                                                                {i === 5 && <b>Funding received in FY {transactionData?.lstAudYrTm2}</b>}
-                                                                                {i === 6 && <b>Funding received in FY {transactionData?.lstAudYrTm1}</b>}
-                                                                                {i === 7 && <b>Funding received in FY {transactionData?.lstAudYrT}</b>}
-                                                                                {i === 8 && <b>Total Exposure</b>}
-                                                                                {i === 9 && <b>Avg rate of interest</b>}
-                                                                                {i === 10 && <b>Latest rate of interest</b>}
-                                                                                {i === 11 && <b>Contact details of lenders</b>}
-                                                                                {i === 12 && <b>NCD – o/s</b>}
-                                                                                {i === 13 && <b>Security</b>}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                    {values.data.length > 0 ? (
-                                                                        <div style={{ flex: 1 }}>
-                                                                            <FixedSizeList
-                                                                                className="table-list-container"
-                                                                                height={calculatedHeight}
-                                                                                itemCount={values.data.length}
-                                                                                itemSize={ITEM_SIZE}
-                                                                                width="100%"
-                                                                                itemData={{ values, setFieldValue }}
-                                                                            >
-                                                                                {renderRow}
-                                                                            </FixedSizeList>
-                                                                        </div>
-                                                                    ) : null}
+      } catch (error) {
+        setSubmitting(false);
+        setIsLoading(false);
+        setIsManualSave(false);
+        setError(error);
 
-                                                     
-                                                                    <div style={{ display: 'flex' }} className="div-table-row">
-                                                                        <div style={{ width: `${columnWidths[0]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[1]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[2]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        {/* <div style={{ width: `${columnWidths[3]}px`, flexShrink: 0 }} className="div-table-cell"></div> */}
-                                                                        <div style={{ width: `${columnWidths[4]-20}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell"><b>Total</b></div>
-                                                                        <div style={{ width: `${columnWidths[5]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{sanTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[6]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy2Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[7]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fy1Total.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[8]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{fyTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[9]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{exposureTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[10]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                         <div style={{ width: `${columnWidths[3]+20}px`, flexShrink: 0 }} className="div-table-cell"></div>
+      } finally {
+        setIsLoading(false);
+        setIsManualSave(false);
+      }
+    }
+    else {
+      setSubmitting(false);
+      setIsLoading(false);
+      setIsManualSave(false);
+    }
+  };
 
-                                                                        <div style={{ width: `${columnWidths[11]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                        <div style={{ width: `${columnWidths[12]}px`, padding: '8px', flexShrink: 0 }} className="div-table-cell">
-                                                                            <b>{ncdTotal.toLocaleString('en-IN', { maximumFractionDigits: 2, style: 'currency', currency: 'INR' })}</b>
-                                                                        </div>
-                                                                        <div style={{ width: `${columnWidths[13]}px`, flexShrink: 0 }} className="div-table-cell"></div>
-                                                                       
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </FieldArray>
-                                                </fieldset>
-                                                {
-                                                    values?.data?.[0]?.saveStatus !== "02" && (
-                                                        <>
-                                                            <Button
-                                                                className="sbmtBtn psn_btn mt-3 mb-3 ms-3"
-                                                                type='submit'
-                                                                onClick={() => handleClickSetAction('01')}
-                                                                variant="contained"
-                                                            >
-                                                                Save <CheckCircleOutlineIcon />
-                                                            </Button>
-                                                            <Button
-                                                                className="sbmtBtn sbmtBtn_scn psn_btn mt-3 mb-3 ms-3"
-                                                                type='submit'
-                                                                onClick={() => handleClickSetAction('02')}
-                                                                variant="contained"
-                                                            >
-                                                                Submit <SaveAsIcon />
-                                                            </Button>
-                                                        </>
-                                                    )
-                                                }
-                                            </Form>
-                                        );
-                                    }}
-                                </Formik>
-                            </div>
-                            <OnlineSnackbar open={openSnackbar} msg={snackMsg} severity={severity} handleSnackClose={handleClosePop} />
-                        </div>
-                    </div></>}
-        </>
-    );
-};
+  const handleAutoSave = async (values: any) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      let responseId;
+      const { customerName }: any = values;
+      const customerSplit: any = customerName.split("-")?.map((customer: any) => {
+        if (customer === "null") return undefined;
+        return customer
+      });
 
-export default connect((state: any) => ({
-    applId: state.userStore.applId
-}))(LenderLimitOdForm);
+      if (pnfId) {
+        const response: any = await addPnf({
+          ...values,
+          id: pnfId,
+          status: "01",
+          makerId: userData?.userId,
+          pnfDoc: newFiles
+        }).unwrap();
+        responseId = response?.pnfId;
+      } else {
+        const response = await addPnf({
+          ...values,
+          status: "01",
+          makerId: userData?.userId,
+          pnfDoc: newFiles
+        }).unwrap();
+        responseId = response?.pnfId;
+        //updatePnfId(response.pnfId);
+        dispatch(setPNFIdData(response.pnfId));
+      }
+
+      if (responseId) {
+        for (const file of newFiles) {
+          const pnfDocData = {
+            pnfId: responseId,
+            slNo: file.slNo
+          };
+          await UploadAPI.updateDoc(pnfDocData, "/pnf/updatePnfDoc");
+        }
+        setIsNew(false);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error in autosave:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const { data: emailValue } = useGetPnfEmailStatusQuery(
+    {
+      id: initialData?.nominationEmailId,
+      pnfId: pnfId,
+    },
+    { skip: !initialData?.nominationEmailId });
+
+  const handleClose = (
+    event?: React.SyntheticEvent | Event,
+    reason?: SnackbarCloseReason,
+  ) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpen(false);
+  };
 
 
-
-import { STATUS } from "./constants";
-// Helper function
-export function showFileFromByteArray(byteArray: string, mimeType: string) {
-  const byteCharacters = atob(byteArray);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  function showFileFromByteArray(byteArray: any, mimeType: any) {
+    const byteCharacters = atob(byteArray);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray1 = new Uint8Array(byteNumbers);
+    const file = new Blob([byteArray1], { type: 'application/pdf;base64' });
+    const fileURL = URL.createObjectURL(file);
+    window.open(fileURL);
   }
-  const byteArray1 = new Uint8Array(byteNumbers);
-  const file = new Blob([byteArray1], { type: mimeType });
-  const fileURL = URL.createObjectURL(file);
-  window.open(fileURL);
+
+  const handleViewModal = async (event: any) => {
+    try {
+      const reportData: any = await generateReport(pnfId).unwrap();
+      showFileFromByteArray(reportData?.repData, reportData?.mimeType)
+      setReportDataModal(reportData?.repData);
+      setShowViewModal(true);
+      setFileTypePdf(true);
+    } catch (error) {
+    }
+
+  }
+
+  useEffect(() => {
+    if (value === 0 && pnfId) {
+      refetchPnfData();
+    }
+  }, [value, pnfId, refetchPnfData]);
+
+
+  const [id, setId] = useState<any>("");
+  const [show, setShow] = useState(true);
+  const loginData: any = Cookies.get("user") ?? null;
+  const loginCookiesData: any = JSON.parse(loginData);
+
+  const handleShow = () => {
+    setShow((preValue: boolean) => !preValue)
+  }
+
+  let navigate = useNavigate();
+
+  const handleNavigate = () => {
+    navigate("/los/pnf-dashboard")
+  }
+  if (isManualSave) return <FullScreenLoaderNoClose />;
+
+
+  return (
+    <Grid
+      container
+      className="los_mainwra">
+      <Grid item xs={12} className="los_rgtdata">
+        <div className="wrap-appraisal-area">
+          <Section>
+            <Box className="wrap-tabs" sx={{ width: '100%' }}>
+              <Box className="tab-with-btn ps-0" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                <span className='back' style={{ top: '0px' }}>
+                  <Tooltip arrow
+                    TransitionComponent={Fade}
+                    TransitionProps={{ timeout: 600 }}
+                    title="Back PNF Dashboard" placement="top">
+                    {/* <Link to="/los/pnf-dashboard" className="in-clickable font17 round-button">
+                    <AiOutlineArrowLeft className="me-2" /> Back
+                    </Link> */}
+
+                    <Button variant="outlined" color='inherit'
+                      size="small" onClick={handleNavigate}>
+                      <AiOutlineArrowLeft className="me-0" /> Back
+                    </Button>
+                  </Tooltip>
+                </span>
+                <Tabs className="tabs-header" value={value} onChange={handleChange} aria-label="basic tabs example">
+                  <Tab className="tab-ui" label="Pnf Form" {...a11yProps(0)} />
+                  <Tab className="tab-ui" label="Workflow" {...a11yProps(1)} />
+                  {oldWorkflowDetails && oldWorkflowDetails.length > 0 && <Tab className="tab-ui" label="WorkFlowHistory" {...a11yProps(2)} />}
+                </Tabs>
+              </Box>
+              <CustomTabPanel value={value} index={0}>
+                <ErrorMessageGlobal status={error} />
+                <Section>
+                  <div className='custome-form'>
+                    <div className='d-flex justify-content-end'>
+                      {
+                        !pnfId && (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            className="text-capitalize shadow-none search-color vRprt"
+                            startIcon={<AiOutlineFilePdf />}
+                          >&nbsp;Please fill details to View Report
+                          </Button>
+                        )
+                      }
+
+                      {pnfId &&
+                        <Button
+                          variant="contained"
+                          size="small"
+                          className="text-capitalize shadow-none search-color"
+                          onClick={(event) => handleViewModal(event)}
+                          startIcon={<AiOutlineFilePdf />}
+                          sx={{ zIndex: 10, position: 'relative' }}
+                        >
+                          View Report
+                        </Button>
+                      }
+                    </div>
+                    <Formik
+                      initialValues={initialData || defaultPnfInformation}
+                      validationSchema={pnfInformationSchema}
+                      onSubmit={() => console.log("")}
+                      enableReinitialize={true}
+                    >
+                      {formikProps => {
+                        const {
+                          values,
+                          isSubmitting,
+                        } = formikProps;
+
+                        return (
+                          <Form>
+                            {((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker") && (
+                              <AutoSave
+                                debounceMs={5000}
+                                handleSubmit={handleAutoSave}
+                                values={values}
+                              />
+                            )}
+                            <Grid spacing={2} padding={4} container className='form-grid pt-0 pb-0'>
+                              <Grid item xs={12} lg={12}>
+                                <div className='mirDtls'>
+                                  <Grid spacing={2} padding={4} container className='form-grid pt-0 pb-0'>
+                                    <Grid item xs={12} lg={12}>
+                                      <Divider className='mt-0 mb-0' textAlign="left">
+                                        <span className='seperator-ui'>MIR Details</span>
+                                      </Divider>
+                                    </Grid>
+
+
+                                    <Grid item xs={12} sm={6} md={3} lg={4}>
+                                      <MultipleDropDownField
+                                        label="Select MIR: *"
+                                        name="mirId"
+                                        domain="mir/getMirPnfList"
+                                        disabled={!((values.status === "01" || values.status === "05")
+                                          && loginCookiesData?.regType === "Maker")}
+                                      />
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={6} md={3} lg={4}>
+                                      <TextBoxField label="Name of Borrower: *" name="customerName"
+                                        disabled={!((values.status === "01" || values.status === "05")
+                                          && loginCookiesData?.regType === "Maker")} />
+
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={6} md={3} lg={4}>
+                                      <PANInputField
+                                        label="Pan" name="pan"
+                                        isRequired={true}
+                                        disabled={!((values.status === "01" || values.status === "05")
+                                          && loginCookiesData?.regType === "Maker")} />
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={6} md={12} lg={12} className='text_count'>
+                                      <TextAreaField restrictedCharacters="¿"
+                                        label="Nature of Business: *" name="businessNature"
+                                        disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} maxLength={500} />
+                                      {/* <TextBoxField label="Nature of Business: * "
+                                        name="businessNature"
+                                        disabled={userData?.regType != "Maker"}
+                                      /> */}
+                                    </Grid>
+                                  </Grid>
+                                </div>
+                              </Grid>
+
+
+                              <Grid item xs={12} lg={12}>
+                                <Divider className='mt-3 mb-0' textAlign="left">
+                                  <span className='seperator-ui'>Details of Nominated Personnel </span>
+                                </Divider>
+                              </Grid>
+                              <Grid item xs={12} lg={12}>
+                                <Alert severity="warning" className='cstmSz'>
+                                  <strong> Note:</strong> User ID will be generated from the <strong>Official Email Id field.</strong> Kindly verify it..
+                                </Alert>
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField label="Name *" name="nominationName"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField name="nominationType" label="Type of Employee"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField name="nominationDesgn" label="Designation *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={3}>
+                                <TextBoxField name="nominationEmpId" label="Employee Id *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={2}>
+                                <PnfTextBoxField name="nominationEmailId" label="Official Email Id *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                                {!emailValue ? <> </> : emailValue && values.status == "01" ?
+                                  <span style={{
+                                    color: "#d43333",
+                                    fontWeight: "10px"
+                                  }}>This email address is already in use.
+                                  </span> : <></>}
+                              </Grid>
+                              <Grid item xs={12} lg={2}>
+                                <TextBoxField name="nominationMobileNo" label="Mobile No *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={2}>
+                                <PANInputField name="nominationPan" label="Pan Number *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="nominationAuthBy" label="Authorized By"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={12}>
+                                <Divider className='mt-3 mb-0' textAlign="left">
+                                  <span className='seperator-ui'>Details of Authorized Signatory (As Per Board Resolution)</span>
+                                </Divider>
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authName" label="Name *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authType" label="Type of Employee"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authDesgn" label="Designation *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authEmpId" label="Employee Id *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authBehalf" label="Acting on Behalf of *"
+                                  disabled={true} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authEmailId" label="Official Email Id *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <TextBoxField name="authMobileNo" label="Official Mobile No *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+                              <Grid item xs={12} lg={4}>
+                                <PANInputField
+                                  isRequired={true}
+                                  name="authPan" label="Pan Number *"
+                                  disabled={!((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker")} />
+                              </Grid>
+
+                              <Grid item xs={6} className='pt-0'>
+                                <MultiFileUpload
+                                  initialFiles={values.pnfDoc || []}
+                                  onFileChange={(files) => setNewFiles(files)}
+                                  disabled={!((values.status === "01" || values.status === "05")
+                                    && loginCookiesData?.regType === "Maker")}
+                                  isNew={isNew}
+                                  isFrom='pnf'
+                                />
+                              </Grid>
+                              <Grid item xs={12} textAlign="right" className='p-0 mt-0'>
+                                {((values.status === "01" || values.status === "05") && loginCookiesData?.regType === "Maker") ? <><Button
+                                  variant="contained"
+                                  size="small"
+                                  className="text-capitalize sbmtBtn"
+                                  onClick={() => handleButtonClick("01", formikProps)}
+                                  disabled={isSubmitting}
+                                >
+                                  {initialData ? <> Save <BrowserUpdatedIcon /></> : <> Save as draft &nbsp;<SaveAsIcon /></>}
+                                </Button>
+
+
+                                  {initialData && (
+                                    <>  <Button
+                                      variant="contained"
+                                      size="small"
+                                      className="text-capitalize sbmtBtn sbmtBtn_scn"
+                                      onClick={() => handleButtonClick("02", formikProps)}
+                                      disabled={emailValue || isSubmitting}
+                                    >
+                                      Submit <CheckCircleIcon />
+                                    </Button></>
+                                  )
+                                  }</>
+                                  : <></>}
+
+                              </Grid>
+                            </Grid>
+                          </Form>
+                        )
+                      }}
+                    </Formik>
+                  </div>
+                </Section>
+              </CustomTabPanel>
+              <CustomTabPanel value={value} index={1}>
+                <Workflow formIdVal={pnfId} formTypeVal={'PNF'} />
+              </CustomTabPanel>
+              <OldWorkFlowMain value={value} oldWorkflowDetails={oldWorkflowDetails} />
+            </Box>
+          </Section>
+        </div>
+        <Snackbar open={open} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          autoHideDuration={3000} onClose={handleClose}>
+          <Alert
+            onClose={handleClose}
+            severity="success"
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            Personal nomination Form Saved Successfully!
+          </Alert>
+        </Snackbar>
+        <NbfcSnackbar open={openSnackbar} msg={snackMsg} severity={severity}
+          handleSnackClose={handleCloseWorkFlow} submitCall={false} />
+      </Grid>
+    </Grid>
+  );
 }
 
+export default PnfForm;
 
-export const getTime = (): number => {
-  return new Date().getTime();
-};
-
-export const modify = (domain: string, masterData: any) => {
-  let master: any = [];
-  switch (domain) {
-    case "mstr/businessNature":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.natCd,
-          value: item.natDesc,
-        }));
-
-      return master;
-    case "mstr/getKmpType": master =
-      masterData &&
-      masterData.map((item: any) => ({
-        key: item.slNo,
-        value: item.particulars,
-      }));
-
-      return master;
-
-    case "mstr/getNbfcMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.nbfcCifCd,
-          value: `${item.nbfcName}-${item.nbfcCifCd}-${item.nbfcId}-${item.nbfcPanNo}`,
-          label: item.nbfcName,
-        }));
-      return master;
-
-    case "mstr/loanPurpose":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.purCd,
-          value: item.purDesc,
-        }));
-      return master;
-    case "mir/getMirPnfList":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.mirId,
-          value: `${item.customerDetails}-${item.mirValidTo}-${item.mirRefNO}-${item.cifCd}`,
-          label: `${item.customerDetails}-${item.mirValidTo}`,
-        }));
-      return master;
-
-    case "mstr/getScheme":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.schCd,
-          value: `${item.schLongName}`,
-        }));
-      return master;
-
-    case "mstr/getCovenantMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.covenant}`,
-          label: `${item.covenant}`,
-        }));
-      return master;
-
-    case "mstr/getApprlCoventOpertr":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.operator}`,
-          label: `${item.operator}`,
-        }));
-      return master;
-
-    case "mstr/getBenchMark":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.BRM_RATE_ID,
-          value: `${item.BRM_RATE_ID}`,
-          label: `${item.BRM_RATE_NAME}`
-        }));
-      return master;
-
-    case "committee/getAllCommitteeMasters":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.commId,
-          value: `${item.commId}`,
-          label: `${item.commName}`,
-        }));
-
-      return master;
-
-    case "committee/getAllMemberRoles":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.roleId,
-          value: `${item.roleName}`,
-        }));
-
-      return master;
-
-    case "minutes/getAllUsers":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.userId,
-          value: `${item.userName}-${item.userEmpId}-${item.userDesgn}`,
-          label: `${item.userName}`,
-        }));
-
-      return master;
-
-
-    case "mstr/getFundMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.fundCode,
-          value: `${item.fundDesc}`,
-        }));
-      return master;
-
-    case "mstr/getStockExchange":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.slNo,
-          value: item.exchangeType,
-          label: item?.exchangeType,
-        }));
-      return master;
-
-    case "mstr/getRatingAgency":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.agencyDet,
-          value: `${item.agencyDet}`,
-          label: item.agencyDet
-        }));
-      return master;
-
-    case "mstr/getRatingCode":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.ratingDet,
-          value: `${item.ratingDet}`,
-          label: item.ratingDet
-        }));
-      return master;
-
-    case "mstr/getAppraGradingCovent":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.gradingValue}`,
-          label: `${item.gradingValue}`,
-        }));
-      return master;
-
-    case "committee/getLosAgendaPurpose":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.prpsCd,
-          value: `${item.prpsDesc}`,
-        }));
-      return master;
-
-    case "minutes/getAgendaStatusMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.statusCd,
-          value: `${item.statusDesc}`,
-        }));
-      return master;
-
-
-    case "minutes/getNBFCApprovedUsersData":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.applId,
-          value: `${item.nbfcName}`,
-        }));
-      return master;
-
-    case "appl/getProdMstr":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.prodId,
-          value: item.prodId,
-          label: item?.prodDesc,
-        }));
-      return master;
-
-    case "appl/getProdSchemeMstr":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.schCd,
-          value: item.schCd,
-          label: item?.schLongName,
-        }));
-      return master;
-
-    case "appl/getProdAssistType":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.assistType,
-          value: item.assistType,
-          label: item?.assistType,
-        }));
-      return master;
-
-
-
-    case `dueDiligence/parentOrHolding`:
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.ddId,
-          value: item.ddId,
-          label: item?.entityName,
-        }));
-      return master;
-
-    case "mstr/getConstitution":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item.id,
-          label: item?.name,
-        }));
-      return master;
-
-    case "mstr/getclassification":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.classCd,
-          value: item.classCd,
-          label: item?.classDesc,
-        }));
-      return master;
-
-    case "mstr/getLenderType":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.slNo,
-          value: item.particulars,
-          label: item?.particulars,
-        }));
-      return master;
-
-    case "mstr/getBorrowParticulars":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.slNo,
-          value: item.particulars,
-          label: item?.particulars,
-        }));
-      return master;
-
-
-    case "mstr/getIndividualParticular":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.slNo,
-          value: item.particulars,
-          label: item?.particulars,
-        }));
-      return master;
-
-    case "mstr/getBankMasters":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item.bankName,
-          label: item?.bankName,
-          bankTag:item?.bankTag,
-          tag:item?.tag,
-        }));
-      return master;
-
-    case "mstr/getStateMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.stateCode,
-          value: item.stateName,
-          label: item?.stateName,
-        }));
-      return master;
-
-    case "mstr/getKmpDesignation":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.slNo,
-          value: item.desgnDesc,
-          label: item?.desgnDesc,
-        }));
-      return master;
-
-    case "mstr/getPortfolioTrnxMaster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item.constTypes,
-          label: item?.constTypes,
-        }));
-      return master;
-
-    case "mstr/getNbfcLayerTypes":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.nbfcLayerId,
-          value: item.nbfcLayerId,
-          label: item?.nbfcLayerName,
-        }));
-      return master;
-
-    case "mstr/getNbfcTypes":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.nbfcTypeId,
-          value: item?.nbfcTypeId,
-          label: item?.nbfcTypeName,
-        }));
-      return master;
-
-    case "mstr/getAuditedYears":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item?.year,
-          label: item?.year,
-        }));
-      return master;
-
-    case "mstr/getYearMaster":
-      master = masterData?.map((item: any) => ({
-        key: item?.slNo,
-        value: item.periodName,
-        label: item?.periodName,
-      }));
-      return master;
-
-    case "appl/getIndvShareDetails":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item?.value,
-          label: item?.value,
-        }));
-      return master;
-
-    case "mstr/getUnauditedQuarter":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item?.id,
-          value: item?.qtrName,
-          label: item?.qtrName,
-        }));
-      return master;
-
-    case "mstr/getRepayFreq":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.slNo}`,
-          label: `${item.particulars}`,
-        }));
-      return master;
-
-    case "mstr/getProduct":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.prodId,
-          value: `${item.prodId}`,
-          label: `${item.prodDesc}`,
-        }));
-      return master;
-
-    case "mstr/getFacilityTypeMstr":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.slNo}`,
-          label: `${item.facilityType}`,
-        }));
-      return master;
-
-    case "mstr/getResetClauseMstr":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.slNo}`,
-          label: item.resetClauseDesc
-        }));
-      return master;
-
-    case "mstr/getPastAsationMster":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.id,
-          value: `${item.id}`,
-          label: item.particulars
-        }));
-      return master;
-
-    case "mstr/getProdCutType":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.id,
-          value: `${item.id}`,
-          label: item.product
-        }));
-      return master;
-
-    case "mstr/getLimitType":
-      master =
-        masterData &&
-        masterData.map((item: any) => ({
-          key: item.slNo,
-          value: `${item.particulars}`,
-          label: item.particulars,
-          lenderType:item.lenderType,
-        }));
-      return master;
-
-    default:
-  }
-};
-
-export const statusCode: any = (status: any) => {
-  return STATUS[status];
-};
-
-export const getStatusCodeValue: any = (value: any) => {
-  const object = STATUS;
-  return Object.keys(object).find((key) => object[key] === value);
-};
-
-// Defined the function to check if string is checkSplittable 
-export const checkSplittable = (inputString: string) => {
-  return inputString.length % 4 !== 0 ? false : (() => {
-    const regex = new RegExp(`.{${inputString.length / 4}}`, 'g');
-    const segments = inputString.match(regex);
-    return segments && new Set(segments).size === 4;
-  })();
-};
-//End checkSplittable 
 
 import React, { useMemo } from "react";
 import { KeyValuePair } from "../../../components/framework/KeyValuePair";
@@ -1154,16 +633,13 @@ import Typography from "@mui/material/Typography";
 import { Autocomplete, TextField, Grid } from "@mui/material";
 import { useGetMaterQuery } from "../../../features/master/api";
 import { modify } from "../../../utlis/helpers";
-import SelectLoader from "../../../loader/SelectLoader";
+import { useGetMirQuery } from "../../../features/mir/api";
 
-export const MultipleLenderDropDown = (props: {
+export const MultipleDropDownField = (props: {
   label?: string;
   name: string;
   domain: string;
-  disabled?: boolean;
-  options?: any[];
-  isLoading?: boolean;
-  onSelect?: (selected: any) => void; 
+  disabled?: boolean
 }) => {
   const {
     handleBlur,
@@ -1175,67 +651,65 @@ export const MultipleLenderDropDown = (props: {
 
   const {
     data: masterData,
-    isLoading: isMasterLoadingInternal,
+    isLoading: isMasterLoading,
     error: masterError,
-  } = props.options
-    ? { data: props.options, isLoading: false, error: null }
-    : useGetMaterQuery(`refapi/${props.domain}`, {
-        refetchOnMountOrArgChange: true
-      });
+  } = useGetMaterQuery(`refapi/${props.domain}`, {
+    refetchOnMountOrArgChange: true
+  });
 
-  const options = useMemo(() => {
-    if (props.options) {
-      return props.options.map((item: any) => ({
-        key: item.key,
-        value: item.value,
-        label: item.label || item.value,
-        tag: item.tag, 
-        bankTag: item.bankTag 
-      }));
-    }
+  const {
+    data: infoData,
+    isLoading: infoLoading,
+    error: infoError
+  } = useGetMirQuery(getIn(values, props.name), {
+    skip: !getIn(values, props.name)
+  });
 
-    return modify(props.domain, masterData)?.map((item: any) => ({
+  const options = React.useMemo(() => {
+    const transformedOptions = modify(props.domain, masterData)?.map((item: any) => ({
       key: item.key,
       value: props.domain !== "mir/getMirPnfList" ? item.value : item.key,
-      label: item.label || item.value,
-      tag: item?.tag, 
-      bankTag: item?.bankTag 
+      label: item.label || item.value
     })) || [];
-  }, [masterData, props.domain, props.options]);
+
+    return transformedOptions;
+  }, [masterData, props.domain]);
+
+  React.useEffect(() => {
+    if (infoData) {
+      setFieldValue("custDetails", infoData?.customerDetails);
+      setFieldValue("customerName", infoData?.nbfcName);
+      setFieldValue("authBehalf", infoData?.nbfcName);
+      setFieldValue("businessNature", infoData?.businessNature);
+      setFieldValue("loanPurpose", infoData?.loanPurpose);
+      setFieldValue("pan", infoData?.panNo);
+      setFieldValue("nbfcId", infoData?.nbfcId);
+      setFieldValue("cifCd", infoData?.cifCd);
+    }
+  }, [infoData, setFieldValue]);
 
   const currentValue = useMemo(() => {
     return options.find(
-      (option: any) => option.value === getIn(values, props.name)
+      (option: any) => option.value == getIn(values, props.name)
     ) || null;
   }, [options, values, props.name]);
-
-  const isLoading = props.isLoading !== undefined
-    ? props.isLoading
-    : isMasterLoadingInternal;
-
-  if (isLoading) return <SelectLoader />;
 
   return (
     <Grid item xs={12}>
       <Autocomplete
-        sx={{
-          "& .MuiOutlinedInput-root": {
-            paddingRight: "20px!important",
-            paddingLeft: "0px!important",
-            paddingTop: "0px!important",
-            paddingBottom: "0px!important",
-          },
-        }}
+      sx={{
+        "& .MuiOutlinedInput-root": {
+          paddingRight: "20px!important",
+          paddingLeft: "0px!important",
+        },
+      }}
         fullWidth
         options={options}
         value={currentValue}
         disabled={props?.disabled}
-        loading={isLoading}
+        loading={isMasterLoading}
         onChange={(_, newValue) => {
           setFieldValue(props.name, newValue ? newValue.value : null);
-          if (props.onSelect) {
-            props.onSelect(newValue); 
-          }
         }}
         onBlur={handleBlur}
         getOptionLabel={(option) => option.label}
@@ -1245,9 +719,12 @@ export const MultipleLenderDropDown = (props: {
             name={props.name}
             label={props.label}
             variant="outlined"
-            sx={{
-              padding: 0
-            }}
+          // error={!!getIn(errors, props.name)}
+          // helperText={
+          //   getIn(touched, props.name) &&
+          //   getIn(errors, props.name) &&
+          //   JSON.stringify(getIn(errors, props.name)).replaceAll('"', "")
+          // }
           />
         )}
         isOptionEqualToValue={(option, value) => option.value === value.value}
@@ -1440,105 +917,123 @@ export const EnhancedDropDown =
         );
     };
 
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { crudApiTemplate, customBaseQuery } from "../../app/commonApi";
+import { PagedResult, SearchRequest } from "../../models/baseModels";
+import { count } from "console";
+import { getStatusCodeValue, statusCode } from "../../utlis/helpers";
+import { STATUS, sortedOrders } from "../../utlis/constants";
 
-bank master data --> "data": [
-        {
-            "bankName": "Axis Bank Ltd.",
-            "tag": "Private Sector Bank",
-            "bankTag": "TL"
-        },
-        {
-            "bankName": "Bandhan Bank Ltd.",
-            "tag": "Private Sector Bank",
-            "bankTag": "TL"
-        },
-        {
-            "bankName": "CSB Bank Limited",
-            "tag": "Private Sector Bank",
-            "bankTag": "TL"
-        },
-        {
-            "bankName": "City Union Bank Ltd.",
-            "tag": "Private Sector Bank",
-            "bankTag": "TL"
-        },
-        {
-            "bankName": "DCB Bank Ltd.",
-            "tag": "Private Sector Bank",
-            "bankTag": "TL"
-        },]
+const entity = "pnf";
+const path = `pnfApi`;
+const tags = [entity];
+
+export const pnfApi = createApi({
+    reducerPath: path,
+    baseQuery: customBaseQuery('refapi'),
+    tagTypes: tags,
+    endpoints: (builder) => ({
+        listPnf: builder.query<PagedResult<any>, SearchRequest<any>>({
+            query: (searchReqeust) => crudApiTemplate(entity).listItem(searchReqeust),
+
+            providesTags: tags,
+        }),
+        getAllPnf: builder.query<any, void>({
+            query: () => crudApiTemplate(entity).getAllItem(),
+            transformResponse: (response: any) => {
+                const modifiedData = response && response.map((item: any, key: number) => {
+                    return {
+                        sNo: +key + 1, ...item
+                    }
+                });
+                return modifiedData;
+            },
+            providesTags: tags,
+        }),
+        getPnf: builder.query<any, number>({
+            query: (id) => crudApiTemplate('pnf/getPnf').getItem(id),
+            providesTags: tags,
+        }),
+
+        getPnfData: builder.query<any, any>({
+            query: (id) => crudApiTemplate(entity).performCommonActionWithId('getPnfDetByApplId', id, "applId"),
+            providesTags: tags,
+        }),
+        getPnfStatus: builder.query<any, any>({
+            query: (body) => crudApiTemplate(entity).getItemByBody('getByPnfStatus', body),
+            transformResponse: (response: any) => {
+                const modifiedData = response && response.map((item: any, key: number) => {
+                    return {
+                        ...item,
+                        sNo: +key + 1,
+                        status: getStatusCodeValue(item?.status)
+                    }
+                });
+                return modifiedData;
+            },
+            providesTags: tags,
+        }),
+  
+        getPnfStatusCount: builder.query<any, any>({
+            query: (body) => crudApiTemplate(entity).getItemByBody('getPnfStatusCount',body),
+            transformResponse: (response: any) => {
+                const modifiedData = response && response.map((item: any, key: number) => {
+                    if (item.STATUS !== "INITIAL") {
+                        return {
+                            count: item.COUNT,
+                            status: item.STATUS === "Total" ? "Total Application" : item.STATUS,
+                            statusCode: statusCode(item.STATUS)
+                        }
+                    }
+                }).filter(Boolean);
+                return modifiedData.sort(function (a: any, b: any) {
+                    return sortedOrders[a.status] - sortedOrders[b.status];
+                });
+            },
+            providesTags: tags,
+        }),
+        pnfReport: builder.query<any, any>({
+            query: (id) => crudApiTemplate(entity).performCommonActionWithId('genReport', id, "pnfId"),
+            providesTags: tags,
+        }),
+        pnfReportData: builder.query<any, any>({
+            query: (id) => crudApiTemplate(entity).performCommonActionWithId('genReport', id, "pnfId"),
+            providesTags: tags,
+        }),
+        getPnfEmailStatus: builder.query<any, any>({
+            query: (params) => crudApiTemplate(entity).performCommonActionWithRequestParam2('checkMail', "mailId", params.id , "pnfId", params.pnfId),
+            // providesTags: tags,
+        }),
+        addPnf: builder.mutation<any, any>({
+            query: (body) => crudApiTemplate('pnf/savePnf').addItem(body),
+            invalidatesTags: tags,
+        }),
+        updatePnf: builder.mutation<any, any>({
+            query: (body) => crudApiTemplate(entity).updateItem(body),
+            invalidatesTags: tags,
+        }),
+        deletePnf: builder.mutation<void, any>({
+            query: (id) => crudApiTemplate(entity).deleteItem(id),
+            invalidatesTags: tags,
+        }),
+    }),
+});
 
 
-    
-"data": [
-        {
-            "particulars": "CC",
-            "slNo": 1,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank"
-            ]
-        },
-        {
-            "particulars": "WC",
-            "slNo": 2,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank"
-            ]
-        },
-        {
-            "particulars": "OD",
-            "slNo": 3,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank"
-            ]
-        },
-        {
-            "particulars": "NCD",
-            "slNo": 4,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank",
-                "NBFC / FI",
-                "Others-NCD"
-            ]
-        },
-        {
-            "particulars": "Commercial Paper",
-            "slNo": 5,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank",
-                "NBFC/FI",
-                "Others-Commercial Paper "
-            ]
-        },
-        {
-            "particulars": "Sub-debt (including perpetual debt)",
-            "slNo": 6,
-            "lenderType": [
-                "Public Sector Bank",
-                "Private Sector Bank",
-                "Foreign Bank",
-                "NBFC/FI",
-                "Others-Sub-debt (including perpetual debt) "
-            ]
-        }
-    ],
-    "message": "Success",
-    "status": 200
-}
-
-
-now there is some changes limit type will come first 
-limit type data now added new field lenderType so in name of bank now only those value will come which is present in lenderType  so we have to check tag basically made the changes according to that 
-apart from this there is one more changes Funding received in FY 2022
-Funding received in FY 2023
-Funding received in FY 2024 and Avg rate of interest remove all these field and validation of these field also and give me complete and proper code 
+export const {
+    useListPnfQuery,
+    useGetPnfQuery,
+    useLazyGetPnfQuery,
+    useGetPnfDataQuery,
+    useAddPnfMutation,
+    useUpdatePnfMutation,
+    useDeletePnfMutation,
+    useGetAllPnfQuery,
+    useGetPnfEmailStatusQuery,
+    useGetPnfStatusQuery,
+    useGetPnfStatusCountQuery,
+    usePnfReportQuery,
+    useLazyPnfReportQuery,
+    usePnfReportDataQuery,
+    useLazyPnfReportDataQuery
+} = pnfApi;
