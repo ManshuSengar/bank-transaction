@@ -1,3 +1,103 @@
+const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+        setExcelUploadError(null);
+        setIsUploading(true);
+
+        const file = event.target.files?.[0];
+        if (!file) {
+            setIsUploading(false);
+            return;
+        }
+
+        // File type check
+        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
+            setIsUploading(false);
+            return;
+        }
+
+        // File size check
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
+            setIsUploading(false);
+            return;
+        }
+
+        const buffer = await file.arrayBuffer();
+        const workbookExcelJS = new ExcelJS.Workbook();
+        await workbookExcelJS.xlsx.load(buffer);
+
+        // Access worksheets by index (1-based in Excel, but 0-based in array)
+        const lenderTlSheet = workbookExcelJS.worksheets[1];   // Sheet 2
+        const lenderOdSheet = workbookExcelJS.worksheets[2];   // Sheet 3
+        const lenderMasterSheet = workbookExcelJS.worksheets[3]; // Sheet 4 → This is your Sheet 3 in UI
+
+        // === VALIDATE HIDDEN KEY IN LENDER MASTER SHEET (Sheet 3 in template) ===
+        if (!lenderMasterSheet) {
+            throw new Error("Lender Master sheet (Sheet 3) is missing in the uploaded file.");
+        }
+
+        // Check hidden validation cell - commonly Z1 or A1 in hidden sheet
+        const validationCell = lenderMasterSheet.getCell('Z1'); // You can change to 'A1' if needed
+        const hiddenKey = validationCell.value?.toString().trim();
+
+        if (hiddenKey !== "readonly@2025") {
+            setExcelUploadError("Invalid or tampered template. Please download the latest template and fill it correctly.");
+            setOpenSnackbar(true);
+            setSeverity("error");
+            setSnackMsg("Template validation failed. Use the original downloaded file.");
+            setIsUploading(false);
+            return;
+        }
+
+        // === Proceed only if validation passes ===
+        if (!lenderTlSheet || !lenderOdSheet) {
+            throw new Error("Required sheets are missing. Please use the correct template.");
+        }
+
+        const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
+            const jsonData: any[] = [];
+            worksheet.eachRow({ includeEmpty: true }, (row: any, rowNumber: number) => {
+                if (rowNumber >= 3) { // Skip header rows (assuming data starts from row 3)
+                    jsonData.push(row.values);
+                }
+            });
+            return jsonData;
+        };
+
+        const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
+        const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
+
+        setExcelData({
+            lenderTl: lenderTlData,
+            lenderOd: lenderOdData,
+        });
+
+        setIsUploading(false);
+        setOpenSnackbar(true);
+        setSeverity("success");
+        setSnackMsg("Excel file uploaded and validated successfully!");
+
+    } catch (error: any) {
+        console.error("Excel upload error:", error);
+        setExcelUploadError(error.message || "Invalid Excel file or incorrect template format.");
+        setOpenSnackbar(true);
+        setSeverity("error");
+        setSnackMsg("Failed to process Excel file. Please use the correct template.");
+        setIsUploading(false);
+    } finally {
+        setIsUploading(false);
+        if (event.target) event.target.value = "";
+    }
+};
+
+
+
+
+
+
+
+
 import React, { FC, useEffect, useState } from "react"
 import Grid from '@mui/material/Grid';
 import { Button, CircularProgress, Typography } from "@mui/material";
