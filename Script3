@@ -23,6 +23,459 @@ import {
   nbfcLoanDetailsSchema,
 } from "../../models/nbfcLoanDetails";
 import Section from "../../Components/Framework/Section";
+import { TextBoxFieldAmountStartAdornmentWithDecimalText } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimalText";
+import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
+import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
+import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
+import { SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
+import { skipToken } from "@reduxjs/toolkit/dist/query";
+import SaveColorButton from "../../Components/Framework/ColorButton";
+
+const formatNonDigitCharacter = (num: string): string => {
+  if (num == null) return "";
+  const str = String(num);
+  let formattedNum = str.replace(/[^0-9.]/g, "");
+ 
+  const parts = formattedNum.split(".");
+  if (parts.length > 2) {
+    formattedNum = `${parts[0]}.${parts[1]}`;
+  }
+ 
+  if (parseFloat(formattedNum) > 100) {
+    return "100";
+  }
+ 
+  if (parts[1]) {
+    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
+  }
+ 
+  return formattedNum;
+};
+
+const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
+  const { id: leadId } = useAppSelector((state) => state.leadStore);
+    
+  const [error, setError] = useState<string>();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const { data } = useGetLeadQuery(Number(leadId) || skipToken);
+
+  const [isInterestFixationPossible] = useState((
+        (data?.leadStatus === "SANCTIONED" && data?.sidbiStatus === "WITH_NBFC")|| 
+        data?.leadStatus === "DISBURSED"));
+
+  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
+
+  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
+  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
+  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
+
+  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
+    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
+      let nbfcShare = 1 - config.sidbiShare;
+      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
+      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
+      setEffectiveRate(formattedEffectiveRateCalc);
+      return formattedEffectiveRateCalc;
+    }
+  }
+
+  useEffect(() => {
+    if (data && config) {
+      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
+      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
+   
+      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
+      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
+   
+      setNbfcRoi(formattedNbfc);
+      setSidbiRoiToCustomer(formattedSidbi);
+   
+      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
+    }
+  }, [data, config]);
+
+  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(event.target.value) || 0;
+    setNbfcRoi(value);
+    if (sidbiRoiToCustomer !== null)
+      calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
+  };
+
+  const formToSubmit = React.useRef<SubmitableForm>(null);
+
+  const handleSave = () => {
+    if(formToSubmit.current) formToSubmit.current.submit();
+  }
+
+  return leadId ? (
+    <EntityForm
+      id={leadId || 0}
+      defaultItem={{
+        loanDetails: defaultLoanDetails,
+        nbfcLoanDetails: defaultNbfcLoanDetails,
+      }}
+      itemSchema={Yup.object().shape({
+        loanDetails: loanDetailsSchema,
+        nbfcLoanDetails: nbfcLoanDetailsSchema,
+      })}
+      useUpdateItemMutation={useUpdateLeadMutation}
+      useGetItemQuery={useGetLeadQuery}
+      setError={setError}
+      setIsLoading={setIsLoading}
+    >
+      <Grid
+        container
+        style={{
+          backgroundColor: error && "#FFD1DC",
+          paddingBottom: 0,
+          paddingLeft: "16px",
+          paddingRight: "8px",
+        }}
+        spacing={2}
+      >
+        <Grid item xs={12} lg={12}>
+          {isLoading && <LinearProgress color="secondary" />}
+        </Grid>
+
+        <Section>
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                NBFC Loan Details
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldAmountStartAdornmentWithDecimalText
+                label={
+                  <>
+                  Customer Applied Amount<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.nbfcLoanAmount"}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+                <DatePickerField
+                  label={
+                    <>Customer Application Date</>
+                  }
+                  name="nbfcLoanDetails.nbfcDisbursalDate"
+                  allowPast={true}
+                  disabled
+                />
+              </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxField
+                label={
+                  <>
+                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name="nbfcLoanDetails.nbfcTenure"
+                type="number"
+                maxLength={3}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldAmountStartAdornmentWithDecimalText
+                label={
+                  <>
+                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.outstandingAmount"}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+                <DatePickerField
+                  label={
+                    <>NBFC Sanction Date</>
+                  }
+                  name="nbfcLoanDetails.nbfcSanctionDate"
+                  allowPast={true}
+                  disabled
+                />
+              </Grid>
+              <Grid item xs={12} lg={4}>
+                <TextBoxField
+                  label={
+                    <>
+                      NBFC assessed Tenure (months)<span style={{ color: 'red' }}> *</span>
+                    </>
+                  }
+                  name="nbfcLoanDetails.balanceTenure"
+                  type="number"
+                  maxLength={3}
+                  disabled
+                />
+              </Grid>
+              <Grid item xs={12} lg={4}>
+                <AutocompleteField
+                  label={"Purpose"}
+                  name={"nbfcLoanDetails.purpose"}
+                  domain={"m_purpose_of_loan"}
+                  disabled
+                />
+              </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={
+                  <>
+                    CGTMSE<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.cgtmse"}
+                domain={"m_cgstme"}
+                disabled
+              />
+            </Grid>
+            {data?.productName === 'secured' && (
+              <>
+                <Grid item xs={12} lg={4}>
+                  <DropDownFieldYesNo
+                    label="Project Loan"
+                    name={"nbfcLoanDetails.projectloan"}
+                    disabled
+                    css={"#F8F8F8"}
+                  />
+                </Grid>
+                {data?.nbfcLoanDetails?.projectloan == 'y' && (
+                  <Grid item xs={12} lg={4}>
+                    <DatePickerField label="DCCO" name={"nbfcLoanDetails.dcco"} />
+                  </Grid>
+                )}
+              </>
+            )}
+          </Grid>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+        </Section>
+
+        <Section sx={{ marginTop: "24px", width: '100%' }}>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Loan Ask
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <SidbiShare/>
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <SidbiLoanAmount/>
+            </Grid>
+          </Grid>
+        </Section>
+        <Section sx={{ marginTop: "24px", width: '100%' }}>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Interest Fixation
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+              <Grid item xs={12} lg={4}>
+                <TextBoxFieldPercentageEndAdornment
+                  label={
+                    <>
+                    NBFC ROI<span style={{ color: 'red' }}> *</span>
+                    </>
+                  }
+                  name="nbfcLoanDetails.nbfcRoi"
+                onChange={handleNbfcRoiChange}
+                disabled={!isInterestFixationPossible}
+                css={!isInterestFixationPossible && "#F8F8F8"}
+                />
+              </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={
+                  <>
+                    SIDBI's Hurdle Rate Type
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name={"loanDetails.rateType"}
+                domain={"m_base_rate_type"}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={
+                  <>
+                  SIDBI's Hurdle Rate<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"loanDetails.benchMarkRate"}
+                domain={"m_interest_rate"}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                    Maximum Service rate fee
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name="loanDetails.maxServiceRateFee"
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                    SIDBI ROI to customer
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name="loanDetails.sidbiRate" 
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                    Effective interest rate to end customer
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name="loanDetails.effectiveInterestRateToCustomer"
+                valueChanged={effectiveRate}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            {isInterestFixationPossible && 
+                  <Grid item xs={12} style={{ textAlign: "right" }}>
+                    <SaveColorButton
+                      variant="contained"
+                      onClick={handleSave}
+                    >
+                      Save
+                    </SaveColorButton>
+                  </Grid>
+            }
+          </Grid>
+        </Section>
+      </Grid>
+      <FormSubmit ref={formToSubmit} />
+    </EntityForm>
+  ) : (
+    <>Loading...</>
+  );
+});
+
+export default LoanDetailsNbfc;
+
+
+
+
+
+
+
+
+.
+
+
+
+
+import Grid from "@mui/material/Grid";
+import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
+import EntityForm from "../../Components/Framework/EntityForm";
+import { TextBoxField } from "../../Components/Framework/TextBoxField";
+import { useState, useEffect } from "react";
+import Typography from "@mui/material/Typography";
+import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
+import LinearProgress from "@material-ui/core/LinearProgress";
+import * as Yup from "yup";
+import {
+  FormSubmit,
+  SubmitableForm,
+} from "../../Components/Framework/FormSubmit";
+import { DatePickerField } from "../../Components/Framework/DatePickerField";
+import React from "react";
+import { useAppSelector } from "../../app/hooks";
+import {
+  defaultLoanDetails,
+  loanDetailsSchema,
+} from "../../models/loanDetails";
+import {
+  defaultNbfcLoanDetails,
+  nbfcLoanDetailsSchema,
+} from "../../models/nbfcLoanDetails";
+import Section from "../../Components/Framework/Section";
 import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
 import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
 import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
