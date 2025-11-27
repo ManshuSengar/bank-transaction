@@ -1,1881 +1,667 @@
+import Grid from "@mui/material/Grid";
+import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
 import EntityForm from "../../Components/Framework/EntityForm";
-import { useImperativeHandle, useState } from "react";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import { useAppSelector } from "../../app/hooks";
-import {
-  useAddKmpMutation,
-  useGetKmpQuery,
-  useListKmpsQuery,
-  useUpdateKmpMutation,
-} from "../../slices/keyManagementPersonnelSlice";
-import { Typography, Grid } from "@mui/material";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
 import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { TextBoxFieldUppercase } from "../../Components/Framework/TextBoxFieldUppercase";
-import { TextBoxFieldAadhaarStartAdornment } from "../../Components/Framework/TextBoxFieldAadhaarStartAdornment";
+import { useState, useEffect } from "react";
+import Typography from "@mui/material/Typography";
+import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
+import LinearProgress from "@material-ui/core/LinearProgress";
+import * as Yup from "yup";
 import {
   FormSubmit,
   SubmitableForm,
 } from "../../Components/Framework/FormSubmit";
-import React from "react";
-import {
-  defaultKeyManagemetPersonnel,
-  keyManagementPersonnelSchema,
-  KeyManagemetPersonnel,
-} from "../../models/keyManagementPersonnel";
 import { DatePickerField } from "../../Components/Framework/DatePickerField";
+import React from "react";
+import { useAppSelector } from "../../app/hooks";
+import {
+  defaultLoanDetails,
+  loanDetailsSchema,
+} from "../../models/loanDetails";
+import {
+  defaultNbfcLoanDetails,
+  nbfcLoanDetailsSchema,
+} from "../../models/nbfcLoanDetails";
 import Section from "../../Components/Framework/Section";
-import {
-  useAddKmpDocumentMutation,
-  useDeleteKmpDocumentMutation,
-  useLazyListKmpDocumentsQuery,
-  useListKmpDocumentsQuery,
-} from "../../slices/kmpDocumentSlice";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import {
-  useAddKmpBankDetailMutation,
-  useDeleteKmpBankDetailMutation,
-  useGetKmpBankDetailQuery,
-  useListKmpBankDetailsQuery,
-  useUpdateKmpBankDetailMutation,
-} from "../../slices/kmpBankDetailsSlice";
-import {
-  useAddKmpBankStatementMutation,
-  useDeleteKmpBankStatementMutation,
-  useLazyListKmpBankdStatementsQuery,
-  useListKmpBankdStatementsQuery,
-} from "../../slices/kmpBankStatementSlice";
-import BankDetailsContainer from "./BankDetailsContainer";
-import DocumentUploadContainer from "./DocumentUploadContainer";
-import {
-  useAddKmpItrMutation,
-  useDeleteKmpItrMutation,
-  useListKmpItrsQuery,
-} from "../../slices/kmpItrSlice";
-import {
-  useAddKmpBureauMutation,
-  useListKmpBureausQuery,
-  useDeleteKmpBureauMutation,
-  useLazyListKmpBureausQuery
-} from "../../slices/kmpBureauSlice";
-import {
-  useAddKmpAdditionalDocMutation,
-  useDeleteKmpAdditionalDocMutation,
-  useListKmpAdditionalDocsQuery,
-} from "../../slices/kmpAdditionalDocsSlice";
-import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { BankDetails } from "../../models/bankDetails";
-import { Document } from "../../models/document";
-import { BankStatement } from "../../models/bankStatement";
-import { DropDownFieldYes } from "../../Components/Framework/DropDownFieldYes";
+// import { DropDownField } from "../../Components/Framework/DropDownField";
+import { TextBoxFieldAmountStartAdornment } from "../../Components/Framework/TextBoxFieldAmountStartAdornment";
+import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
 import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { DropDownFieldInlineDomain } from "../../Components/Framework/DropDownFieldInlineDomain";
+import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
+import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
+import { TextField } from "@material-ui/core";
+import { DisplayOnlyTextField } from "../../Components/Framework/DisplayOnlyTextField";
+import { SidbiDisbursementDate, SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
+import { skipToken } from "@reduxjs/toolkit/dist/query";
+import { sidbiShareSchema } from "../../models/sidbiShare";
+import SaveColorButton from "../../Components/Framework/ColorButton";
 
-const KeyManagemetPersonnelComponent = React.forwardRef<
-  SubmitableForm,
-  { kmpId: number | undefined }
->((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-
-  const docListInput: RequestWithParentId<SearchRequest<Document>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
-  };
-
-  const bankDetailListInput: RequestWithParentId<SearchRequest<BankDetails>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
-  };
-
-  const [listKmpDocsQuery] = useLazyListKmpDocumentsQuery();
-  const [listKmpBureausQuery] = useLazyListKmpBureausQuery();
-
-  const kmpListInput: RequestWithParentId<
-    SearchRequest<KeyManagemetPersonnel>
-  > = {
-    parentId: leadId || 0,
-    requestValue: {},
-  };
-
-  const { data: kmpList } = useListKmpsQuery(kmpListInput);
-
-  const [validationMessage, setValidationMessage] = useState("");
-
-  const validateAllKmps = async () : Promise<boolean> => {
-
-    let overallValidationResult = true;
-
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      setValidationMessage("");
-
-      for(let i = 0; i <kmpList.content.length; i++) {
-        overallValidationResult = await validateKmp(kmpList.content[i].id);
-        console.log("validateKmp: return value", kmpList.content[i].id, overallValidationResult);
-        if(!overallValidationResult) break;
-      }
-    } 
-
-    console.log("overallValidationResult", overallValidationResult);
-
-    return overallValidationResult;
+const formatNonDigitCharacter = (num: string): string => {
+  if (num == null) return ""; // handle undefined or null safely
+  const str = String(num); // ensure it's a string
+  // Allow digits and a single decimal point
+  let formattedNum = str.replace(/[^0-9.]/g, "");
+ 
+  // Ensure there's only one decimal point
+  const parts = formattedNum.split(".");
+  if (parts.length > 2) {
+    formattedNum = `${parts[0]}.${parts[1]}`;
   }
+ 
+  // Cap the value if it exceeds 100, but only after a full number is entered
+  if (parseFloat(formattedNum) > 100) {
+    return "100";
+  }
+ 
+  // Limit the decimal part to two digits
+  if (parts[1]) {
+    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
+  }
+ 
+  return formattedNum;
+};
 
-  const validateKmp = async (kmpId?: number) : Promise<boolean> => {
-
-    if(kmpId === undefined || Number.isNaN(kmpId)) return true;
-
-    let kmpKycDocuments = await listKmpDocsQuery({
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    }).unwrap();
-
-    console.log("KMP Validate Form: ", kmpId, kmpKycDocuments);
-
-    // Validate KYC Documents (at least 2 required)
-    if(kmpKycDocuments?.content === undefined || 
-      kmpKycDocuments?.content.length < 2) {
-      setValidationMessage("Individual should have atleast 2 KYC Documents");
-      console.log("Returning false from validateKmp", kmpId);
-      return false;
-    }
-
-    if(kmpKycDocuments && kmpKycDocuments.content !== undefined &&
-      kmpKycDocuments.content.length > 0) {
-        console.log(kmpKycDocuments.content.length);
-      
-      // PAN or Form 60 validation
-      let panDocList = kmpKycDocuments?.content.filter(item => item.type === "10");
-      let form60 = kmpKycDocuments?.content.filter(item => item.type === "21");
-      if(panDocList.length <= 0 && form60.length <= 0) {
-        setValidationMessage("Please upload PAN copy or Form 60 in KYC Documents section.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-
-      // Form 60 additional validation
-      let voterId = kmpKycDocuments?.content.filter(item => item.type === "4");
-      let passport = kmpKycDocuments?.content.filter(item => item.type === "1");
-      let driversLicense = kmpKycDocuments?.content.filter(item => item.type === "2");
-      let jobCard = kmpKycDocuments?.content.filter(item => item.type === "5");
-
-      if(form60.length > 0) {
-        if(voterId.length <= 0 && passport.length <= 0 && driversLicense.length <= 0 && jobCard.length <= 0) {
-          setValidationMessage("If FORM 60 is uploaded, then atleast one of voter id / passport / aadhar / driving license / job card should be uploaded.");
-          console.log("Returning false from validateKmp", kmpId);
-          return false;
-        }
-      }
-
-      // Photo validation
-      let photo = kmpKycDocuments?.content.filter(item => item.type === "8");
-      if(photo.length <= 0) {
-        setValidationMessage("Photo is mandatory for individuals.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    // Bureau validation - At least 1 bureau document required
-    let kmpBureauDocuments = await listKmpBureausQuery({
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    }).unwrap();
-
-    console.log("KMP Bureau Validate: ", kmpId, kmpBureauDocuments);
+const LoanDetails = React.forwardRef<SubmitableForm, {}>((props, ref) => {
+  const { id: leadId } = useAppSelector((state) => state.leadStore);
     
-    if(kmpBureauDocuments?.content === undefined || 
-      kmpBureauDocuments?.content.length < 1) {
-      setValidationMessage("Individual should have at least 1 Bureau Document");
-      console.log("Returning false from validateKmp - Bureau missing", kmpId);
-      return false;
-    }
-
-    // At least one KMP should have PAN
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      let kmpWithPan = kmpList?.content.filter(item => item.pan !== undefined && item.pan !== null);
-      if(kmpWithPan.length <= 0) {
-        setValidationMessage("Atleast PAN for one individual is mandatory.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    console.log("Returning true from validateKmp", kmpId);
-
-    return true;
-  }
-
-  const validateForm = async () => {
-    return validateKmp(props.kmpId);
-  };
-
-  useImperativeHandle(ref, () => ({       
-
-    async submit() {
-      if(await validateForm()) {
-        
-        if(formToSubmit.current) 
-        {
-          let isValidToSubmit = await formToSubmit.current.isValid();
-
-          if(isValidToSubmit) {
-            await formToSubmit.current.submit();
-            let response = await validateAllKmps();
-            console.log("validateAllKmps: ", response);
-            return response;
-          } else {
-            return false;
-          }
-        }
-      } 
-
-      return false;
-    },
-  
-    isDirty() {
-      if(formToSubmit.current) 
-      {
-        return formToSubmit.current.isDirty();
-      }
-
-      return false;
-    },
-  
-    async isValid() {
-
-      setValidationMessage("")
-
-      if(props.kmpId === undefined || Number.isNaN(props.kmpId)) {
-        setValidationMessage("Please save and add the mandatory documents before proceeding.");
-        return false;
-      }
-
-      let formIsValid = await validateAllKmps();
-
-      if(formIsValid && formToSubmit.current)
-      {
-        let response = await formToSubmit.current.isValid();
-        if(response === true) return response;
-      }
-      return false;
-    },
-  
-    getValues() {
-
-      if(formToSubmit.current && formToSubmit.current.getValues) 
-      {
-        formToSubmit.current.getValues();
-      }
-
-      return {};
-    }
-  
-  }));
-
-  return leadId ? (
-    <EntityForm
-      parentId={leadId}
-      id={props.kmpId}
-      defaultItem={defaultKeyManagemetPersonnel}
-      itemSchema={keyManagementPersonnelSchema}
-      useAddItemMutation={useAddKmpMutation}
-      useUpdateItemMutation={useUpdateKmpMutation}
-      useGetItemQuery={useGetKmpQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <>
-        <div>
-          <div>
-            <Section>
-              {validationMessage !== "" && 
-              <Grid container spacing={0} paddingTop={2} paddingLeft={4}>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    Check all KMPs for the following error.
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    {validationMessage}
-                  </Typography>
-                </Grid>
-              </Grid>}
-              <Grid
-                container
-                style={{ backgroundColor: error && "#FFD1DC" }}
-                padding={4}
-                paddingTop={2}
-                spacing={0}
-              >
-                <Grid item xs={12} lg={12}>
-                  {isLoading && <LinearProgress color="secondary" />}
-                </Grid>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} lg={12}>
-                    <ErrorMessage status={error} />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          First Name
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="firstName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label="Middle Name "
-                      name="middleName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Last Name
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="lastName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>
-                          DOB
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="dob"
-                      allowPast={true}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label="PAN "
-                      name="pan"
-                      uppercase={true}
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldAadhaarStartAdornment
-                      label={
-                        <>
-                          Aadhaar Number
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name={"aadhaarNumber"}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Category
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="beneficiaryCategory"
-                      domain="m_beneficiary_category"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Marital Status
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="maritalStatus"
-                      domain="m_marital_status"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label={
-                        <>
-                        CKYC Number
-                        </>
-                      }
-                      name="ckycNumber"
-                      maxLength={14}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYesNo
-                      label={
-                        <>
-                          Politically Exposed Person
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="politicallyExposedPerson"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYes
-                      label={
-                        <>
-                          UN Terrorist Checked & No Matches Found
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="unTerroist"
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2} paddingY={4}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Contact Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Email
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.email"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Phone Number
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.phoneNumber"
-                      type="number"
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Address
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.address"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          City
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.city"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          State
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.state"
-                      domain="m_states"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Pin Code
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.pincode"
-                      type="number"
-                      maxLength={6}
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Professional Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>Appointment Date
-                        </>
-                      }
-                      name="professionalInformation.appointmentDate"
-                      allowPast={true}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldInlineDomain
-                      label={
-                        <>
-                          KMP Type
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.designation"
-                      domain={["Financial", "Non financial"]}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Experience in Years
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.experienceInYear"
-                      type="number"
-                      maxLength={2}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Type
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.beneficiaryType"
-                      domain="m_beneficiary_type"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldPercentageEndAdornment
-                      label={
-                        <>
-                          Shareholding
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.shareHolding"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    {!props.kmpId && (
-                      <span>
-                        Please save the Key Management Personnel to add related
-                        documents & bank details.
-                      </span>
-                    )}
-                  </Grid>
-                </Grid>
-              </Grid>
-            </Section>
-          </div>
-        </div>
-
-        {props.kmpId && (
-          <>
-            <DocumentUploadContainer
-              parentId={props.kmpId}
-              message="Save the Key management personal to add documents."
-              heading="KYC Documents"
-              bucket="kmpDocuments"
-              documentTypeDomain={"m_kmp_kyc_document_type"}
-              useAddMutation={useAddKmpDocumentMutation}
-              useListQuery={useListKmpDocumentsQuery}
-              useDeleteMutation={useDeleteKmpDocumentMutation}
-            />
-
-            <Grid
-              container
-              style={{
-                backgroundColor: error && "#FFD1DC",
-                paddingBottom: 0,
-                paddingLeft: "16px",
-                paddingRight: "8px",
-              }}
-              padding={4}
-              spacing={2}
-            >
-              <DocumentUploadContainer
-                parentId={props.kmpId}
-                heading={"Bureau"}
-                bucket={"kmpBureaus"}
-                documentTypeDomain={"m_bureau"}
-                useAddMutation={useAddKmpBureauMutation}
-                useListQuery={useListKmpBureausQuery}
-                useDeleteMutation={useDeleteKmpBureauMutation}
-              />
-            </Grid>
-          </>
-        )}
-      </>
-      <FormSubmit ref={formToSubmit} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
-  );
-});
-
-export default KeyManagemetPersonnelComponent;
-
-
-
-
-
-
-
-
-
-
-
-import EntityForm from "../../Components/Framework/EntityForm";
-import { useImperativeHandle, useState } from "react";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import { useAppSelector } from "../../app/hooks";
-import {
-  useAddKmpMutation,
-  useGetKmpQuery,
-  useListKmpsQuery,
-  useUpdateKmpMutation,
-} from "../../slices/keyManagementPersonnelSlice";
-import { Typography, Grid } from "@mui/material";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { TextBoxFieldUppercase } from "../../Components/Framework/TextBoxFieldUppercase";
-import { TextBoxFieldAadhaarStartAdornment } from "../../Components/Framework/TextBoxFieldAadhaarStartAdornment";
-import {
-  FormSubmit,
-  SubmitableForm,
-} from "../../Components/Framework/FormSubmit";
-import React from "react";
-import {
-  defaultKeyManagemetPersonnel,
-  keyManagementPersonnelSchema,
-  KeyManagemetPersonnel,
-} from "../../models/keyManagementPersonnel";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-import Section from "../../Components/Framework/Section";
-import {
-  useAddKmpDocumentMutation,
-  useDeleteKmpDocumentMutation,
-  useLazyListKmpDocumentsQuery,
-  useListKmpDocumentsQuery,
-} from "../../slices/kmpDocumentSlice";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import {
-  useAddKmpBankDetailMutation,
-  useDeleteKmpBankDetailMutation,
-  useGetKmpBankDetailQuery,
-  useListKmpBankDetailsQuery,
-  useUpdateKmpBankDetailMutation,
-} from "../../slices/kmpBankDetailsSlice";
-import {
-  useAddKmpBankStatementMutation,
-  useDeleteKmpBankStatementMutation,
-  useLazyListKmpBankdStatementsQuery,
-  useListKmpBankdStatementsQuery,
-} from "../../slices/kmpBankStatementSlice";
-import BankDetailsContainer from "./BankDetailsContainer";
-import DocumentUploadContainer from "./DocumentUploadContainer";
-import {
-  useAddKmpItrMutation,
-  useDeleteKmpItrMutation,
-  useListKmpItrsQuery,
-} from "../../slices/kmpItrSlice";
-import {
-  useAddKmpBureauMutation,
-  useListKmpBureausQuery,
-  useDeleteKmpBureauMutation
-} from "../../slices/kmpBureauSlice";
-import {
-  useAddKmpAdditionalDocMutation,
-  useDeleteKmpAdditionalDocMutation,
-  useListKmpAdditionalDocsQuery,
-} from "../../slices/kmpAdditionalDocsSlice";
-import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { BankDetails } from "../../models/bankDetails";
-import { Document } from "../../models/document";
-import { BankStatement } from "../../models/bankStatement";
-import { DropDownFieldYes } from "../../Components/Framework/DropDownFieldYes";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { DropDownFieldInlineDomain } from "../../Components/Framework/DropDownFieldInlineDomain";
-
-const KeyManagemetPersonnelComponent = React.forwardRef<
-  SubmitableForm,
-  { kmpId: number | undefined }
->((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(false);
 
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-
-  const docListInput: RequestWithParentId<SearchRequest<Document>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
+  const { data } = useGetLeadQuery(Number(leadId) || skipToken)
+  const [isProjectLoanYes, setIsProjectLoanYes] = useState(false);
+ 
+  const handleProjectLoanChange = (event: any) => {
+    setIsProjectLoanYes(event.target.value === "y"); // Check if 'Yes' is selected
   };
 
-  const bankDetailListInput: RequestWithParentId<SearchRequest<BankDetails>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
-  };
+  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
 
-  const [listKmpDocsQuery] = useLazyListKmpDocumentsQuery();
+  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
+  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
+  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
 
-  const kmpListInput: RequestWithParentId<
-    SearchRequest<KeyManagemetPersonnel>
-  > = {
-    parentId: leadId || 0,
-    requestValue: {},
-  };
-
-  const { data: kmpList } = useListKmpsQuery(kmpListInput);
-
-  const [validationMessage, setValidationMessage] = useState("");
-
-  const validateAllKmps = async () : Promise<boolean> => {
-
-    let overallValidationResult = true;
-
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      setValidationMessage("");
-
-      for(let i = 0; i <kmpList.content.length; i++) {
-        overallValidationResult = await validateKmp(kmpList.content[i].id);
-        console.log("validateKmp: return value", kmpList.content[i].id, overallValidationResult);
-        if(!overallValidationResult) break;
-      }
-    } 
-
-    console.log("overallValidationResult", overallValidationResult);
-
-    return overallValidationResult;
+  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
+    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
+      let nbfcShare = 1 - config.sidbiShare;
+      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
+      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
+      setEffectiveRate(formattedEffectiveRateCalc);
+    }
   }
 
-  const validateKmp = async (kmpId?: number) : Promise<boolean> => {
-
-    if(kmpId === undefined || Number.isNaN(kmpId)) return true;
-
-    let kmpKycDocuments = await listKmpDocsQuery({
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    }).unwrap();
-
-    console.log("KMP Validate Form: ", kmpId, kmpKycDocuments);
-
-    // Validate KYC Documents (at least 2 required)
-    if(kmpKycDocuments?.content === undefined || 
-      kmpKycDocuments?.content.length < 2) {
-      setValidationMessage("Individual should have atleast 2 KYC Documents");
-      console.log("Returning false from validateKmp", kmpId);
-      return false;
+  // ✅ On page load, populate fields from API and calculate
+  useEffect(() => {
+    if (data && config) {
+      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
+      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
+   
+      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
+      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
+   
+      setNbfcRoi(formattedNbfc);
+      setSidbiRoiToCustomer(formattedSidbi);
+   
+      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
     }
+  }, [data, config]);
 
-    if(kmpKycDocuments && kmpKycDocuments.content !== undefined &&
-      kmpKycDocuments.content.length > 0) {
-        console.log(kmpKycDocuments.content.length);
-      
-      // PAN or Form 60 validation
-      let panDocList = kmpKycDocuments?.content.filter(item => item.type === "10");
-      let form60 = kmpKycDocuments?.content.filter(item => item.type === "21");
-      if(panDocList.length <= 0 && form60.length <= 0) {
-        setValidationMessage("Please upload PAN copy or Form 60 in KYC Documents section.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-
-      // Form 60 additional validation
-      let voterId = kmpKycDocuments?.content.filter(item => item.type === "4");
-      let passport = kmpKycDocuments?.content.filter(item => item.type === "1");
-      let driversLicense = kmpKycDocuments?.content.filter(item => item.type === "2");
-      let jobCard = kmpKycDocuments?.content.filter(item => item.type === "5");
-
-      if(form60.length > 0) {
-        if(voterId.length <= 0 && passport.length <= 0 && driversLicense.length <= 0 && jobCard.length <= 0) {
-          setValidationMessage("If FORM 60 is uploaded, then atleast one of voter id / passport / aadhar / driving license / job card should be uploaded.");
-          console.log("Returning false from validateKmp", kmpId);
-          return false;
-        }
-      }
-
-      // Photo validation
-      let photo = kmpKycDocuments?.content.filter(item => item.type === "8");
-      if(photo.length <= 0) {
-        setValidationMessage("Photo is mandatory for individuals.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    // Bureau validation - At least 1 bureau document required
-    const bureauListInput: RequestWithParentId<SearchRequest<Document>> = {
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    };
-
-    try {
-      const { data: kmpBureauDocuments } = useListKmpBureausQuery(bureauListInput);
-      
-      if(kmpBureauDocuments?.content === undefined || 
-        kmpBureauDocuments?.content.length < 1) {
-        setValidationMessage("Individual should have at least 1 Bureau Document");
-        console.log("Returning false from validateKmp - Bureau missing", kmpId);
-        return false;
-      }
-    } catch (error) {
-      console.error("Error validating bureau documents:", error);
-      setValidationMessage("Error validating Bureau documents for individual");
-      return false;
-    }
-
-    // At least one KMP should have PAN
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      let kmpWithPan = kmpList?.content.filter(item => item.pan !== undefined && item.pan !== null);
-      if(kmpWithPan.length <= 0) {
-        setValidationMessage("Atleast PAN for one individual is mandatory.");
-        console.log("Returning false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    console.log("Returning true from validateKmp", kmpId);
-
-    return true;
-  }
-
-  const validateForm = async () => {
-    return validateKmp(props.kmpId);
-  };
-
-  useImperativeHandle(ref, () => ({       
-
-    async submit() {
-      if(await validateForm()) {
-        
-        if(formToSubmit.current) 
-        {
-          let isValidToSubmit = await formToSubmit.current.isValid();
-
-          if(isValidToSubmit) {
-            await formToSubmit.current.submit();
-            let response = await validateAllKmps();
-            console.log("validateAllKmps: ", response);
-            return response;
-          } else {
-            return false;
-          }
-        }
-      } 
-
-      return false;
-    },
-  
-    isDirty() {
-      if(formToSubmit.current) 
-      {
-        return formToSubmit.current.isDirty();
-      }
-
-      return false;
-    },
-  
-    async isValid() {
-
-      setValidationMessage("")
-
-      if(props.kmpId === undefined || Number.isNaN(props.kmpId)) {
-        setValidationMessage("Please save and add the mandatory documents before proceeding.");
-        return false;
-      }
-
-      let formIsValid = await validateAllKmps();
-
-      if(formIsValid && formToSubmit.current)
-      {
-        let response = await formToSubmit.current.isValid();
-        if(response === true) return response;
-      }
-      return false;
-    },
-  
-    getValues() {
-
-      if(formToSubmit.current && formToSubmit.current.getValues) 
-      {
-        formToSubmit.current.getValues();
-      }
-
-      return {};
-    }
-  
-  }));
+  // ✅ Handle NBFC ROI change
+  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(event.target.value) || 0;
+        setNbfcRoi(value);
+        if (sidbiRoiToCustomer !== null)
+          calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
+      };
 
   return leadId ? (
     <EntityForm
-      parentId={leadId}
-      id={props.kmpId}
-      defaultItem={defaultKeyManagemetPersonnel}
-      itemSchema={keyManagementPersonnelSchema}
-      useAddItemMutation={useAddKmpMutation}
-      useUpdateItemMutation={useUpdateKmpMutation}
-      useGetItemQuery={useGetKmpQuery}
+      id={leadId || 0}
+      defaultItem={{
+        loanDetails: defaultLoanDetails,
+        nbfcLoanDetails: defaultNbfcLoanDetails,
+      }}
+      itemSchema={Yup.object().shape({
+        loanDetails: loanDetailsSchema,
+        nbfcLoanDetails: nbfcLoanDetailsSchema,
+      })}
+      useUpdateItemMutation={useUpdateLeadMutation}
+      useGetItemQuery={useGetLeadQuery}
       setError={setError}
       setIsLoading={setIsLoading}
     >
-      <>
-        <div>
-          <div>
-            <Section>
-              {validationMessage !== "" && 
-              <Grid container spacing={0} paddingTop={2} paddingLeft={4}>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    Check all KMPs for the following error.
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    {validationMessage}
-                  </Typography>
-                </Grid>
-              </Grid>}
-              <Grid
-                container
-                style={{ backgroundColor: error && "#FFD1DC" }}
-                padding={4}
-                paddingTop={2}
-                spacing={0}
+      <Grid
+        container
+        style={{
+          backgroundColor: error && "#FFD1DC",
+          paddingBottom: 0,
+          paddingLeft: "16px",
+          paddingRight: "8px",
+        }}
+        spacing={2}
+      >
+        <Grid item xs={12} lg={12}>
+          {isLoading && <LinearProgress color="secondary" />}
+        </Grid>
+
+        <Section>
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
               >
-                <Grid item xs={12} lg={12}>
-                  {isLoading && <LinearProgress color="secondary" />}
-                </Grid>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} lg={12}>
-                    <ErrorMessage status={error} />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          First Name
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="firstName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label="Middle Name "
-                      name="middleName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Last Name
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="lastName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>
-                          DOB
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="dob"
-                      allowPast={true}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label="PAN "
-                      name="pan"
-                      uppercase={true}
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldAadhaarStartAdornment
-                      label={
-                        <>
-                          Aadhaar Number
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name={"aadhaarNumber"}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Category
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="beneficiaryCategory"
-                      domain="m_beneficiary_category"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Marital Status
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="maritalStatus"
-                      domain="m_marital_status"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label={
-                        <>
-                        CKYC Number
-                        </>
-                      }
-                      name="ckycNumber"
-                      maxLength={14}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYesNo
-                      label={
-                        <>
-                          Politically Exposed Person
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="politicallyExposedPerson"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYes
-                      label={
-                        <>
-                          UN Terrorist Checked & No Matches Found
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="unTerroist"
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2} paddingY={4}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Contact Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Email
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.email"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Phone Number
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.phoneNumber"
-                      type="number"
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Address
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.address"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          City
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.city"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          State
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.state"
-                      domain="m_states"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Pin Code
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="contactInformation.pincode"
-                      type="number"
-                      maxLength={6}
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Professional Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>Appointment Date
-                        </>
-                      }
-                      name="professionalInformation.appointmentDate"
-                      allowPast={true}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldInlineDomain
-                      label={
-                        <>
-                          KMP Type
-                          <span className="required_symbol" style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.designation"
-                      domain={["Financial", "Non financial"]}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Experience in Years
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.experienceInYear"
-                      type="number"
-                      maxLength={2}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Type
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.beneficiaryType"
-                      domain="m_beneficiary_type"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldPercentageEndAdornment
-                      label={
-                        <>
-                          Shareholding
-                          <span style={{ color: "red" }}> *</span>
-                        </>
-                      }
-                      name="professionalInformation.shareHolding"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    {!props.kmpId && (
-                      <span>
-                        Please save the Key Management Personnel to add related
-                        documents & bank details.
-                      </span>
-                    )}
-                  </Grid>
-                </Grid>
-              </Grid>
-            </Section>
-          </div>
-        </div>
-
-        {props.kmpId && (
-          <>
-            <DocumentUploadContainer
-              parentId={props.kmpId}
-              message="Save the Key management personal to add documents."
-              heading="KYC Documents"
-              bucket="kmpDocuments"
-              documentTypeDomain={"m_kmp_kyc_document_type"}
-              useAddMutation={useAddKmpDocumentMutation}
-              useListQuery={useListKmpDocumentsQuery}
-              useDeleteMutation={useDeleteKmpDocumentMutation}
-            />
-
-            <Grid
-              container
-              style={{
-                backgroundColor: error && "#FFD1DC",
-                paddingBottom: 0,
-                paddingLeft: "16px",
-                paddingRight: "8px",
-              }}
-              padding={4}
-              spacing={2}
-            >
-              <DocumentUploadContainer
-                parentId={props.kmpId}
-                heading={"Bureau"}
-                bucket={"kmpBureaus"}
-                documentTypeDomain={"m_bureau"}
-                useAddMutation={useAddKmpBureauMutation}
-                useListQuery={useListKmpBureausQuery}
-                useDeleteMutation={useDeleteKmpBureauMutation}
+                NBFC Loan Details
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldAmountStartAdornmentWithDecimal
+                label={
+                  <>
+                    Customer Applied Amount<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.nbfcLoanAmount"}
               />
             </Grid>
-          </>
-        )}
-      </>
-      <FormSubmit ref={formToSubmit} />
+            <Grid item xs={12} lg={4}>
+                <DatePickerField
+                  label={
+                    <>
+                    Customer Application Date
+                    </>
+                  }
+                  name="nbfcLoanDetails.nbfcDisbursalDate"
+                  allowPast={true}
+                />
+              </Grid>
+              <Grid item xs={12} lg={4}>
+              <TextBoxField
+                label={
+                  <>
+                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name="nbfcLoanDetails.nbfcTenure"
+                type="number"
+                maxLength={3}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldAmountStartAdornmentWithDecimal
+                label={
+                  <>
+                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.outstandingAmount"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <DatePickerField
+                label={
+                  <>
+                  NBFC Sanction Date
+                  </>
+                }
+                name="nbfcLoanDetails.nbfcSanctionDate"
+                allowPast={true}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxField
+                label={
+                  <>
+                    NBFC assessed Tenure (months)
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name="nbfcLoanDetails.balanceTenure"
+                type="number"
+                maxLength={3}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={"Purpose"}
+                name={"nbfcLoanDetails.purpose"}
+                domain={"m_purpose_of_loan"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              {/* <DropDownFieldYesNo
+                label="CGTMSE"
+                name={"nbfcLoanDetails.cgtmse"}
+              /> */}
+              <AutocompleteField
+                label={
+                  <>
+                    CGTMSE<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.cgtmse"}
+                domain={"m_cgstme"}
+              />
+            </Grid>
+            {data?.productName === 'secured' && (
+              <>
+                <Grid item xs={12} lg={4}>
+                  <DropDownFieldYesNo
+                    label={
+                      <>
+                        Project Loan
+                      </>
+                    }
+                    name={"nbfcLoanDetails.projectloan"}
+                    onChange={handleProjectLoanChange}
+                    // onChange={(event: any) => {
+                    //   console.log(event.target.value);
+                    //   setIsProjectLoanYes(event.target.value === 'Yes');
+                    // }}
+                  />
+                </Grid>
+                {isProjectLoanYes && (
+                  <Grid item xs={12} lg={4}>
+                    <DatePickerField label="DCCO" name={"nbfcLoanDetails.dcco"} />
+                  </Grid>
+                )}
+              </>
+            )}
+          </Grid>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+        </Section>
+
+        <Section sx={{ marginTop: "24px", width: '100%' }}>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Loan Ask
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <SidbiShare/>
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <SidbiLoanAmount/>
+            </Grid>
+          </Grid>
+        </Section>
+        <Section sx={{ marginTop: "24px", width: '100%' }}>
+          {isLoading && (
+            <Grid container spacing={0} padding={0}>
+              <Grid item xs={12} lg={12}>
+                <LinearProgress color="secondary" />
+              </Grid>
+            </Grid>
+          )}
+          <Grid container spacing={2} padding={4}>
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Interest Fixation
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <ErrorMessage status={error} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  NBFC ROI<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"nbfcLoanDetails.nbfcRoi"}
+                onChange={handleNbfcRoiChange}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  Rate Negotiated With Customer
+                  </>
+                }
+                name={"nbfcLoanDetails.rateNegotiatedWithCustomer"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <DatePickerField
+                label={
+                  <>Next Full EMI Date</>
+                }
+                name={"nbfcLoanDetails.nextFullEmiDate"}
+                allowFuture={true}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={
+                  <>
+                    SIDBI’s Hurdle Rate Type
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name={"loanDetails.rateType"}
+                domain={"m_base_rate_type"}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={
+                  <>
+                    SIDBI’s Hurdle Rate
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name={"loanDetails.benchMarkRate"}
+                domain={"m_interest_rate"}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  Additional spread<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"loanDetails.additionalSpread"}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  Maximum Service rate fee<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"loanDetails.maxServiceRateFee"}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                    SIDBI ROI to customer
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name={"loanDetails.sidbiRate"}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                    Effective interest rate to end customer
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name={"loanDetails.effectiveInterestRateToCustomer"}
+                valueChanged={effectiveRate}
+                disabled
+                css={"#F8F8F8"}
+              />
+            </Grid>            
+          </Grid>
+        </Section>
+      </Grid>
+      <FormSubmit ref={ref} />
     </EntityForm>
   ) : (
     <>Loading...</>
   );
 });
 
-export default KeyManagemetPersonnelComponent;
+export default LoanDetails;
 
+import { BaseDTO } from "./baseModels";
+import * as Yup from "yup";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+ 
+dayjs.extend(customParseFormat);
 
+//Data model
+export interface NbfcLoanDetails extends BaseDTO {
+  nbfcLoanAmount?: number;
+  nbfcRoi?: number;
+  nbfcTenure?: number;
+  nbfcDisbursalDate?: Date;
+  outstandingAmount?: number;
+  emiAmount?: string;
+  balanceTenure?: number;
+  nextFullEmiDate?: Date;
+  purpose?: string;
+  cgtmse?: string;
+  projectloan?: string;
+  dcco?: Date;
+  rateType?: string;
+  benchmark?: string;
+  nbfcEmiStartDate?: Date;
+  previousEmidate?: Date;
+  sidbiRoiToCustomer?: number;
+  bankRoi?: number;
+  baseRateType?: string;
+  baseRate?: number;
+  emiMoratorium?: number;
+  principleMoratorium?: number;
+  advanceEmi?: string;
+  processingFee?: string;
+  netDisbursalAmount?: string;
+  rateNegotiatedWithCustomer?: number;
+  nbfcSanctionDate?: Date;
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-        setExcelUploadError(null);
-        setIsUploading(true);
-
-        const file = event.target.files?.[0];
-        if (!file) {
-            setIsUploading(false);
-            return;
+//Validation Schema for the model
+export const nbfcLoanDetailsSchema = Yup.object().shape({
+  nbfcLoanAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcRoi: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcDisbursalDate: Yup.string()
+    .nullable()  // This allows null values (so the field can be empty).
+    .notRequired()  // Makes it optional, so validation is not triggered if the field is empty.
+    .test(
+      'valid-date',
+      'Please enter a valid date in DD/MM/YYYY format',
+      (value) => {
+        if (value) {
+          const parsedDate = dayjs(value);
+          if (parsedDate.isValid()) {
+            value = parsedDate.format('YYYY-MM-DD'); // Extract only the date
+          }
+          // Check if the date is valid in the required format
+          return dayjs(value, 'YYYY-MM-DD', true).isValid();
         }
-
-        // File type check
-        if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-            setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-            setIsUploading(false);
-            return;
+        return true; // Return true if the field is empty, so validation passes
+      }
+    )
+    .test(
+      'not-future-date',
+      'Date cannot be in the future',
+      (value) => {
+        if (value) {
+          // Ensure the date is not in the past or in the future
+          return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isAfter(dayjs(), 'day'));
         }
-
-        // File size check
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-            setIsUploading(false);
-            return;
-        }
-
-        const buffer = await file.arrayBuffer();
-        const workbookExcelJS = new ExcelJS.Workbook();
-        await workbookExcelJS.xlsx.load(buffer);
-
-        // Access worksheets by index (1-based in Excel, but 0-based in array)
-        const lenderTlSheet = workbookExcelJS.worksheets[1];   // Sheet 2
-        const lenderOdSheet = workbookExcelJS.worksheets[2];   // Sheet 3
-        const lenderMasterSheet = workbookExcelJS.worksheets[3]; // Sheet 4 → This is your Sheet 3 in UI
-
-        // === VALIDATE HIDDEN KEY IN LENDER MASTER SHEET (Sheet 3 in template) ===
-        if (!lenderMasterSheet) {
-            throw new Error("Lender Master sheet (Sheet 3) is missing in the uploaded file.");
-        }
-
-        // Check hidden validation cell - commonly Z1 or A1 in hidden sheet
-        const validationCell = lenderMasterSheet.getCell('Z1'); // You can change to 'A1' if needed
-        const hiddenKey = validationCell.value?.toString().trim();
-
-        if (hiddenKey !== "readonly@2025") {
-            setExcelUploadError("Invalid or tampered template. Please download the latest template and fill it correctly.");
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg("Template validation failed. Use the original downloaded file.");
-            setIsUploading(false);
-            return;
-        }
-
-        // === Proceed only if validation passes ===
-        if (!lenderTlSheet || !lenderOdSheet) {
-            throw new Error("Required sheets are missing. Please use the correct template.");
-        }
-
-        const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
-            const jsonData: any[] = [];
-            worksheet.eachRow({ includeEmpty: true }, (row: any, rowNumber: number) => {
-                if (rowNumber >= 3) { // Skip header rows (assuming data starts from row 3)
-                    jsonData.push(row.values);
-                }
-            });
-            return jsonData;
-        };
-
-        const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
-        const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
-
-        setExcelData({
-            lenderTl: lenderTlData,
-            lenderOd: lenderOdData,
-        });
-
-        setIsUploading(false);
-        setOpenSnackbar(true);
-        setSeverity("success");
-        setSnackMsg("Excel file uploaded and validated successfully!");
-
-    } catch (error: any) {
-        console.error("Excel upload error:", error);
-        setExcelUploadError(error.message || "Invalid Excel file or incorrect template format.");
-        setOpenSnackbar(true);
-        setSeverity("error");
-        setSnackMsg("Failed to process Excel file. Please use the correct template.");
-        setIsUploading(false);
-    } finally {
-        setIsUploading(false);
-        if (event.target) event.target.value = "";
+        return true; // Return true if the field is empty, so validation passes
+      }
+    )
+    ,
+  outstandingAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  balanceTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .test(
+      'is-less-than-or-equal-to-nbfcTenure',
+      'Balance Tenure should not be greater than Total Tenure (In Months) of the Loan',
+      function (value) {
+        const { nbfcTenure } = this.parent; // Access `nbfcTenure` from the parent object
+        return value !== undefined && value <= nbfcTenure; // Ensure `value` is defined and validate
+      }
+    ),
+  // nextFullEmiDate: Yup.string()
+  //   .required("Please enter a valid date")
+  //   .test(
+  //     'valid-date',
+  //     'Please enter a valid date in DD/MM/YYYY format',
+  //     (value) => {
+  //       if (value) {
+  //         const parsedDate = dayjs(value);
+  //         if (parsedDate.isValid()) {
+  //           value = parsedDate.format('YYYY-MM-DD'); // Extract only the date
+  //         }
+  //         // Check if the date is valid in the required format
+  //         return dayjs(value, 'YYYY-MM-DD', true).isValid();
+  //       }
+  //       return true; // Return true if the field is empty, so validation passes
+  //     }
+  //   )
+  //   .test(
+  //     'not-past-date',
+  //     'Date cannot be in the past',
+  //     (value) => {
+  //       // // Ensure the date is not in the past (compare against today's date)
+  //       return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isBefore(dayjs(), 'day')); //For 
+  //     }
+  //   )
+  //   ,
+  purpose: Yup.string()
+    .typeError("Please select from the drop down"),
+  cgtmse: Yup.string()
+    .required("Please select a value from drop-down list"),
+  projectloan: Yup.string()
+    .required("Please select a value from drop-down list"),
+  // sidbiHurdleRate: Yup.string()
+  //   .required("Please select a value from drop-down list"),
+  nbfcSanctionDate: Yup.string()
+  .nullable()
+  .notRequired()
+  .transform((value) => {
+    if (!value) return value;
+    const d = dayjs(value, "DD/MM/YYYY", true);
+    return d.isValid() ? d.format("YYYY-MM-DD") : value; // stored as YYYY-MM-DD
+  })
+  .test(
+    "valid-date",
+    "Please enter a valid date in DD/MM/YYYY format",
+    (value) => {
+      if (!value) return true;
+      return dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true).isValid();
     }
+  )
+  .test(
+    "sanction-after-disbursal",
+    "NBFC Sanction Date must be greater than or equal to Customer Application Date",
+    function (value) {
+      if (!value) return true;
+      const { nbfcDisbursalDate } = this.parent;
+      if (!nbfcDisbursalDate) return true;
+ 
+      const sanction = dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
+      const disbursal = dayjs(nbfcDisbursalDate, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
+ 
+      if (!sanction.isValid() || !disbursal.isValid()) return true;
+ 
+      return (
+        sanction.isSame(disbursal, "day") ||
+        sanction.isAfter(disbursal, "day")
+      );
+    }
+  )
+});
+
+//Default values
+export const defaultNbfcLoanDetails = {
+  nbfcLoanAmount: undefined,
+  nbfcRoi: undefined,
+  rateNegotiatedWithCustomer: undefined,
+  nbfcTenure: undefined,
+  nbfcDisbursalDate: undefined,
+  outstandingAmount: undefined,
+  additionalSpread: undefined,
+  emiAmount: undefined,
+  balanceTenure: undefined,
+  nextFullEmiDate: undefined,
+  purpose: undefined,
+  cgtmse: undefined,
+  projectloan: undefined,
+  dcco: undefined,
+  nbfcSanctionDate: undefined,
 };
 
 
+Loan Details	Retain as is – only change – remove project loan field	
+Loan Details	The following fields in Interest fixation are removed
+Rate negotiated with customer 
+Next Full EMI date
+Additional spread		
 
-
-
-
-
-
-import React, { FC, useEffect, useState } from "react"
-import Grid from '@mui/material/Grid';
-import { Button, CircularProgress, Typography } from "@mui/material";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { AiOutlineArrowLeft } from "react-icons/ai";
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import BorrowingForm from "../application-form/capitalResourceProfile/BorrowingForm";
-import EquityReserveForm from "../application-form/capitalResourceProfile/EquityReserveForm";
-import EquityInfusionForm from "../application-form/capitalResourceProfile/EquityInfusionForm";
-import LenderLimitOdForm from "../application-form/capitalResourceProfile/LenderLimitOdForm";
-import LenderTermLoanForm from "../application-form/capitalResourceProfile/LenderTermLoanForm";
-import { setApplId, setEligibleToSign, setSchemeCode } from "../../features/user/userSlice";
-import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import SimCardDownloadIcon from '@mui/icons-material/SimCardDownload';
-import ExcelJS from 'exceljs';
-import * as XLSX from 'xlsx';
-import { DocumentAPI } from "../../features/application-form/documentUpload";
-import { OnlineSnackbar } from "../../components/shared/OnlineSnackbar";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UPLOADINGTEXT } from "../../utlis/constants";
-import FullScreenLoader from "../../components/common/FullScreenLoader";
-import NotificationAlertBell from "../../components/DrawerComponent/NotificationAlertBell";
-
-const CapitalResourceProfile: FC = () => {
-    const [expanded, setExpanded] = React.useState("");
-    const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
-    const [snackMsg, setSnackMsg] = useState<any>("");
-    const [severity, setSeverity] = useState<string | any>("success");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
-    const { userData, schemeCode, opensections } = useAppSelector((state: any) => state.userStore);
-    const [openSectionsData, setOpenSectionsData] = React.useState<any[] | undefined>([]);
-    const location = useLocation();
-    const receivedData = location.state;
-
-    const [excelData, setExcelData] = useState<any>({
-        lenderTl: [],
-        lenderOd: [],
-    });
-    const [excelUploadError, setExcelUploadError] = useState<string | null>(null);
-
-    const onOpenChange =
-        (panel: any) => (event: React.SyntheticEvent, isExpanded: any) => {
-            setExpanded(isExpanded ? panel : false);
-        };
-
-    const dispatch = useAppDispatch();
-    const navigate = useNavigate();
-
-    const handleNavigate = (e: any) => {
-        e.preventDefault();
-
-        if (window.location.pathname === "/refinance/online-dashboard") {
-            localStorage.removeItem('applId');
-        }
-        dispatch(setApplId(""));
-        dispatch(setSchemeCode(""));
-        dispatch(setEligibleToSign(""));
-        navigate("/refinance/online-dashboard");
-    };
-
-    const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        try {
-            setExcelUploadError(null);
-            setIsUploading(true);
-
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-                setExcelUploadError("Please upload a valid Excel file (.xlsx or .xls)");
-                return;
-            }
-            //Check file size
-            if (file.size > MAX_FILE_SIZE_BYTES) {
-                setExcelUploadError(`File size should not exceed ${MAX_FILE_SIZE_MB} MB`);
-                return;
-            }
-
-            const buffer = await file.arrayBuffer();
-            const workbookExcelJS = new ExcelJS.Workbook();
-            await workbookExcelJS.xlsx.load(buffer);
-
-            const lenderTlSheet = workbookExcelJS.worksheets[1];
-            const lenderOdSheet = workbookExcelJS.worksheets[2];
-            const lenderMasterSheet = workbookExcelJS.worksheets[3];
-            console.log("lenderMasterSheet",lenderMasterSheet);
-            if (!lenderTlSheet) {
-                throw new Error("Lender TL sheet not found in the Excel file.");
-            }
-            if (!lenderOdSheet) {
-                throw new Error("Lender OD sheet not found in the Excel file.");
-            }
-
-            const parseSheetDataExcelJS = (worksheet: ExcelJS.Worksheet) => {
-                const jsonData: any[] = [];
-                worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
-                    jsonData.push(row.values);
-                });
-                let jsonArr = jsonData.slice(2);
-                return jsonData.slice(2);
-            };
-            const lenderTlData = parseSheetDataExcelJS(lenderTlSheet);
-            const lenderOdData = parseSheetDataExcelJS(lenderOdSheet);
-            setExcelData({
-                lenderTl: lenderTlData,
-                lenderOd: lenderOdData,
-            });
-
-            // setTimeout(() => {
-            //     setIsUploading(false);
-            //     // setOpenSnackbar(true);
-            //     // setSeverity("error");
-            //     // setSnackMsg("Please ensure the uploaded excel shall follow the validation which are been provided in the sheet 1 of the sample format");
-            //     setExcelUploadError("Please ensure the uploaded excel shall follow the validation which are been provided in the sheet 1 of the sample format");
-            // }, 60000);
-
-            setIsUploading(false);
-            setOpenSnackbar(true);
-            setSeverity("success");
-            setSnackMsg("Excel file uploaded successfully");
-
-        } catch (error: any) {
-            console.error("Excel upload error:", error);
-            setExcelUploadError(error.message || "Error parsing Excel file");
-            setOpenSnackbar(true);
-            setIsUploading(false);
-            setSeverity("error");
-            setSnackMsg("Error processing Excel file. Please check the format.");
-        }
-        finally {
-            setIsUploading(false); // Always turn off the loader
-            if (event.target) event.target.value = "";
-        }
-    };
-
-    const handleExternalDownload = async () => {
-        try {
-            const response = await DocumentAPI.downloadExternalTemplate('09', schemeCode);
-            const downloadLink = document.createElement('a');
-            const type:any=response?.headers?.filetype;
-            downloadLink.href = URL.createObjectURL(new Blob([response.data]));
-            downloadLink.download = `Capital_Resource_Template.${type}`;
-            downloadLink.target = '_blank';
-            downloadLink.click();
-        } catch (error: any) {
-            setOpenSnackbar(true);
-            setSeverity("error");
-            setSnackMsg('Failed to download template document.');
-        }
-    };
-
-    useEffect(() => {
-        if (opensections && opensections.length > 0) {
-            setOpenSectionsData(opensections);
-        }
-    }, [])
-
-    React.useEffect(() => {
-        const panelMap: any = {
-            "01": "panel1",
-            "02": "panel2",
-            "03": "panel3",
-            "04": "panel4",
-            "05": "panel5",
-        };
-
-        const panelToExpand = panelMap[receivedData?.subSectionId];
-        if (panelToExpand) {
-            setExpanded(panelToExpand);
-        }
-    }, [receivedData]);
-
-
-    // if (isUploading) return <div className="CrclProg"><CircularProgress /></div>;
-    if (isUploading) return <FullScreenLoader open={isUploading} setOpenModal={setIsUploading} text={UPLOADINGTEXT} />;
-
-    return (
-        <div className="wrap-appraisal-area">
-            <div className="wrap-accordian">
-                <div className="wrap-tabs">
-
-                    <Grid className="top-header-container" container spacing={1} style={{ zIndex: '9', position: 'relative' }}>
-                        <Grid className="pb-2" item xs={7}>
-                            <Typography
-                                className="wrap-bold"
-                                noWrap
-                                variant="subtitle1"
-                                component="div"
-                            >
-                                <h6 className="title">Capital & Resource Profile</h6>
-                            </Typography>
-                        </Grid>
-                        <Grid
-                            className="pb-2"
-                            item
-                            xs={5}
-                            display="flex"
-                            justifyContent="end"
-                        >
-                            <Link className="in-clickable text-capitalize" to="/refinance/online-dashboard">
-                                <Button
-                                    color="inherit"
-                                    className="text-capitalize"
-                                    variant="outlined"
-                                    size="small"
-                                    onClick={handleNavigate}
-                                >
-                                    <AiOutlineArrowLeft className="me-2" /> Back
-                                </Button>
-                            </Link>
-                        </Grid>
-                    </Grid>
-
-                    <div className="up_btns">
-                        <input
-                            accept=".xlsx, .xls"
-                            id="excel-upload-button"
-                            type="file"
-                            onChange={handleExcelUpload}
-                            style={{ display: 'none' }}
-                        />
-                        <label htmlFor="excel-upload-button">
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                component="span"
-                                disabled={isUploading} // <-- Disable button while uploading
-                                style={{ marginLeft: '0px', padding: '4px 10px', textTransform: 'capitalize' }}
-                                startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <UploadFileIcon style={{ fontSize: '20px' }} />}
-                            >
-                                {isUploading ? "Uploading..." : "Upload Excel"}
-                            </Button>
-                        </label>
-
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            className="sbmtBtn dwldBtn"
-                            style={{ marginLeft: '10px' }}
-                            onClick={handleExternalDownload}
-                        >
-                            Download Sample <SimCardDownloadIcon />
-                        </Button>
-                    </div>
-                    {excelUploadError && (
-                        <div className="error-message mt-1 text-danger">
-                            {excelUploadError}
-                        </div>
-                    )}
-
-                    <div className="form-container mt-1">
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel1'} onChange={onOpenChange('panel1')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel1-content"
-                                id="panel1-header"
-                            >
-                                <div className="icnAlrt">
-                                    <div> Borrowing Cost details</div>
-                                    {openSectionsData && openSectionsData.length > 0 && (() => {
-                                        const matchedItem = openSectionsData.find(
-                                            (item: any) => item?.sectionId === "09" && item?.subSectionId === "01"
-                                        );
-                                        return matchedItem ? (
-                                            <NotificationAlertBell />
-                                        ) : null;
-                                    })()}
-                                </div>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <BorrowingForm openSectionsData={openSectionsData} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel2'} onChange={onOpenChange('panel2')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel2-content"
-                                id="panel1-header">
-                                <div className="icnAlrt">
-                                    <div>Details of Lenders - TL</div>
-                                    {openSectionsData && openSectionsData.length > 0 && (() => {
-                                        const matchedItem = openSectionsData.find(
-                                            (item: any) => item?.sectionId === "09" && item?.subSectionId === "02"
-                                        );
-                                        return matchedItem ? (
-                                            <NotificationAlertBell />
-                                        ) : null;
-                                    })()}
-                                </div>
-                                {/*excelData={excelData} openSectionsData={openSectionsData */}
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderTermLoanForm excelData={excelData?.lenderTl} openSectionsData={openSectionsData} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel3'} onChange={onOpenChange('panel3')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel3-content"
-                                id="panel1-header">
-                                <div className="icnAlrt">
-                                    <div> Details of Lenders -  CC/WC/OD</div>
-                                    {openSectionsData && openSectionsData.length > 0 && (() => {
-                                        const matchedItem = openSectionsData.find(
-                                            (item: any) => item?.sectionId === "09" && item?.subSectionId === "03"
-                                        );
-                                        return matchedItem ? (
-                                           <NotificationAlertBell />
-                                        ) : null;
-                                    })()}
-                                </div>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <LenderLimitOdForm excelData={excelData?.lenderOd} openSectionsData={openSectionsData} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel4'} onChange={onOpenChange('panel4')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel4-content"
-                                id="panel1-header"
-                            >
-                                <div className="icnAlrt">
-                                    <div>Details of Equity and reserves</div>
-                                    {/* {openSectionsData && openSectionsData.length > 0 && (() => {
-                                        const matchedItem = openSectionsData.find(
-                                            (item: any) => item?.sectionId === "09" && item?.subSectionId === "04"
-                                        );
-                                        return matchedItem ? (<NotificationAlertBell />) : null;
-                                    })()} */}
-                                </div>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityReserveForm openSectionsData={openSectionsData} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                        <Accordion className='custome-accordian' expanded={expanded === 'panel5'} onChange={onOpenChange('panel5')}>
-                            <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls="panel5-content"
-                                id="panel1-header">
-                                <div className="icnAlrt">
-                                    <div> Equity Infusion Details</div>
-                                    {openSectionsData && openSectionsData.length > 0 && (() => {
-                                        const matchedItem = openSectionsData.find(
-                                            (item: any) => item?.sectionId === "09" && item?.subSectionId === "05"
-                                        );
-                                        return matchedItem ? (
-                                            <NotificationAlertBell />
-                                        ) : null;
-                                    })()}
-                                </div>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <div className="form-container">
-                                    <EquityInfusionForm openSectionsData={openSectionsData} />
-                                </div>
-                            </AccordionDetails>
-                        </Accordion>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-export default CapitalResourceProfile;
+these are changes which i have to do in these form and give me complete and proper code 
