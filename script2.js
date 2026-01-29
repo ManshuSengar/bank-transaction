@@ -1,667 +1,1036 @@
-import Grid from "@mui/material/Grid";
-import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
-import EntityForm from "../../Components/Framework/EntityForm";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { useState, useEffect } from "react";
-import Typography from "@mui/material/Typography";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import * as Yup from "yup";
+import TitleHeader from "../../Components/titleheader";
+import * as React from 'react';
+import { 
+  Box, 
+  Grid, 
+  Container, 
+  Typography, AccordionDetails, Slide, CircularProgress, 
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  IconButton,
+  Button,
+  Stack,
+  Paper,
+} from "@mui/material";
+import { styled } from '@mui/material/styles';
+import Section from "../../Components/Framework/Section";
+import "../../assets/css/common.css";
+import { useCallback, useEffect } from "react";
+import { makeStyles } from "@material-ui/core/styles";
 import {
-  FormSubmit,
+  setLeadId,
+} from "../../slices/localStores/leadStore";
+import { useAppDispatch } from "../../app/hooks";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
   SubmitableForm,
 } from "../../Components/Framework/FormSubmit";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-import React from "react";
-import { useAppSelector } from "../../app/hooks";
-import {
-  defaultLoanDetails,
-  loanDetailsSchema,
-} from "../../models/loanDetails";
-import {
-  defaultNbfcLoanDetails,
-  nbfcLoanDetailsSchema,
-} from "../../models/nbfcLoanDetails";
-import Section from "../../Components/Framework/Section";
-// import { DropDownField } from "../../Components/Framework/DropDownField";
-import { TextBoxFieldAmountStartAdornment } from "../../Components/Framework/TextBoxFieldAmountStartAdornment";
-import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
-import { TextField } from "@material-ui/core";
-import { DisplayOnlyTextField } from "../../Components/Framework/DisplayOnlyTextField";
-import { SidbiDisbursementDate, SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
+import FacilityLoanDetails from "./FacilityLoanDetails";
+import NbfcDetailsCredit from "./NbfcDetailsCredit";
+import SidbiShareCredit from "./SidbiShareCredit";
+import KmpDocumentsCredit from "./KmpDocumentsCredit";
+import LegalEntityInformation from "./LegalEntityInformation";
+import AccordionCss from "../../Components/Framework/AccordionCss";
+import AccordionSummaryCss from "../../Components/Framework/AccordionSummaryCss";
+import { ReactComponent as PlusIcon } from '../../assets/icons/plus.svg';
+import { ReactComponent as MinusIcon } from '../../assets/icons/minus.svg';
+import ApplicantInfo from "./ApplicantInfo";
+import TableWithoutPaginationRemarks from "./TableWithoutPaginationRemarks";
+import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
+import { Remark } from "../../models/remark";
+import { useListRemarksQuery } from "../../slices/remarksSlice";
+import BlueButton from "../../Components/Framework/BlueButton";
+import { useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
 import { skipToken } from "@reduxjs/toolkit/dist/query";
-import { sidbiShareSchema } from "../../models/sidbiShare";
-import SaveColorButton from "../../Components/Framework/ColorButton";
+import AlertSuccessWithoutClose from "../../Components/Framework/AlertSuccessWithoutClose";
+import AlertBlueWithoutClose from "../../Components/Framework/AlertBlueWithoutClose";
+import WhiteOutlinedWithBlueButton from "../../Components/Framework/WhiteOutlinedWithBlueButton";
+import BreGoDisplay from "../L0/BreGoDisplay";
+import RepaymentScheduleAccordion from "./RepaymentScheduleAccordion";
+import RepaymentScheduleSidbiAccordion from "./RepaymentScheduleSidbiAccordion";
+import RepaymentScheduleAmbitAccordion from "./RepaymentScheduleAmbitAccordion";
+import { useUploadKycMutation } from "../../slices/integrationSlice";
+import CreditAssessmentMemoPdfButton from  './CreditAssessmentMemoPdfButton';
+import { ReactComponent as SpinningDotsWhite } from "../../assets/icons/spinning_dots_white.svg";
+import { Rps } from "../../models/rps";
+import { useListRpsOverallQuery, useListRpsSidbiQuery, useListRpsAmbitQuery } from "../../slices/rpsListSlice";
+import CloseIcon from "@mui/icons-material/Close";
+import SuccessAnimation from "../../Components/Framework/SuccessAnimation";
 
-const formatNonDigitCharacter = (num: string): string => {
-  if (num == null) return ""; // handle undefined or null safely
-  const str = String(num); // ensure it's a string
-  // Allow digits and a single decimal point
-  let formattedNum = str.replace(/[^0-9.]/g, "");
- 
-  // Ensure there's only one decimal point
-  const parts = formattedNum.split(".");
-  if (parts.length > 2) {
-    formattedNum = `${parts[0]}.${parts[1]}`;
-  }
- 
-  // Cap the value if it exceeds 100, but only after a full number is entered
-  if (parseFloat(formattedNum) > 100) {
-    return "100";
-  }
- 
-  // Limit the decimal part to two digits
-  if (parts[1]) {
-    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
-  }
- 
-  return formattedNum;
-};
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+import jsPDF from 'jspdf';
+import useToken from "../Authentication/useToken";
+import Textarea from "@mui/joy/Textarea";
+// import { documentDefinition } from "../pdf/CreditAssessmentMemo";
+pdfMake.vfs = pdfFonts.pdfMake.vfs;
 
-const LoanDetails = React.forwardRef<SubmitableForm, {}>((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-    
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
+const SpeedometerWhiteIcon = require("../../assets/icons/speedometer_white.svg").default;
+const PrintIcon = require("../../assets/icons/printing.svg").default;
+const RightArrowIcon = require("../../assets/icons/rightarrowgrey.svg").default;
+const CheckmarkWhiteIcon = require("../../assets/icons/checkmarkwhite.svg").default;
 
-  const { data } = useGetLeadQuery(Number(leadId) || skipToken)
-  const [isProjectLoanYes, setIsProjectLoanYes] = useState(false);
- 
-  const handleProjectLoanChange = (event: any) => {
-    setIsProjectLoanYes(event.target.value === "y"); // Check if 'Yes' is selected
+interface ExpandedState {
+  [key: string]: boolean;
+}
+
+const AccordionDetailsCss = styled(AccordionDetails)(() => ({
+  padding: '0px !important',
+}));
+
+const useStyles = makeStyles((theme) => ({
+  browsefilediv: {
+    "& > *": {
+      margin: theme.spacing(1),
+      color: "#A9A9A9 !important",
+    },
+
+    "& .MuiButtonBase-root": {
+      "&hover": {
+        color: "#FFFFFF",
+      },
+      "&focus": {
+        color: "#FFFFFF",
+      },
+    },
+    display: "flex",
+    alignItems: "center",
+    border: "1px solid #C0C0C0",
+    maxHeight: "52px",
+  },
+  input: {
+    display: "none",
+  },
+  root: {
+    backgroundColor: "#F5F5F5 !important",
+    minHeight: "100%",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  card: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "32px",
+  },
+}));
+
+const CreditAssessmentMemo = React.forwardRef<SubmitableForm, {}>(() => {
+  const classes = useStyles();
+  const { id: leadId } = useParams();
+  const { data: lead } = useGetLeadQuery(Number(leadId) || skipToken);
+  const dispatch = useAppDispatch();
+
+  const { getName, getRoles} = useToken();
+  const roles = getRoles();
+
+  const [updateLeadStatus] = useUpdateLeadMutation();
+  const [uploadKyc] = useUploadKycMutation();
+
+  const setLeadIdRef = useCallback(
+    (id: number) => dispatch(setLeadId(id)),
+    [dispatch]
+  );
+  useEffect(() => {
+    if (leadId) setLeadIdRef(Number(leadId));
+    if(lead !== undefined){
+      if(roles && roles.length > 0 && roles[0] === "NBFC"){
+        navigate("/restricted");
+      }
+      if(roles && roles.length > 0 && roles[0] === "MAKER"){
+        if(lead?.sidbiStatus !== "BUSINESS_RULES" && leadSubmitted === false) {
+          navigate("/restricted");
+        }
+      }
+      if(roles && roles.length > 0 && roles[0] === "CHECKER") {
+        if(lead?.sidbiStatus !== "MAKER_APPROVED" && lead?.sidbiStatus !== "CHECKER_APPROVED") {
+          navigate("/restricted");
+        }
+      }
+    }
+  }, [leadId, setLeadIdRef, lead]);
+
+  const navigate = useNavigate();
+
+  const buttons = [
+    {
+      label: "Back to Application Details",
+      buttonstyle: "secondary_outline",
+      icon: RightArrowIcon,
+      action: () => {
+        localStorage.setItem('CreditAssessmentMemoSuccess', 'true');
+        navigate(`/l1/queuetracker/${leadId}`); // Send the state
+      },
+    },
+    {
+      label: "Credit Vetting Completed",
+      buttonstyle: "blue",
+      icon: SpeedometerWhiteIcon,
+      action: () => {
+        localStorage.setItem('CreditAssessmentMemoSuccess', 'true');
+        navigate(`/l1/queuetracker/${leadId}`); // Send the state
+      },
+      css: { marginLeft: "12px" }
+    },
+    {
+      label: "Print",
+      buttonstyle: "white_outlined_with_blue",
+      icon: PrintIcon,
+      action: () => { console.log('print'); },
+      css: { marginLeft: "12px" }
+    },
+  ];
+
+  const breadcrumbs = [
+    <Link key="1" color="#A9A9A9" to="/">
+      Queue Tracker
+    </Link>,
+    <Link key="1" color="#A9A9A9" to={`/l1/queuetracker/${leadId}`}>
+      Application Queue
+    </Link>,
+    <Link key="1" color="#A9A9A9" to={`/l1/queuetracker/${leadId}`}>
+      Application Details
+    </Link>,
+    <Link key="1" color="#A9A9A9" to={`/l1/queuetracker/${leadId}`}>
+      Credit Assessment Memo
+    </Link>,
+  ];
+
+
+
+  interface ColumnRemarks {
+    id: 'touchedAt' | 'username' | 'notes' | 'status';
+    label: string;
+    align?: 'left' | 'right' | 'center'; // Adjust the alignment values as per your requirement
+    width?: string; // Adjust the width type as per your requirement
+  }
+
+  const columnsRemarks: readonly ColumnRemarks[] = [{ id: 'touchedAt', label: 'DATE & TIME', width: '40%' }, { id: 'username', label: 'USERNAME', width: '20%' }, { id: 'notes', label: 'REMARKS', width: '20%' }, { id: 'status', label: 'STATUS', width: '20%', align: 'center' }];
+
+  const remarksInput: RequestWithParentId<SearchRequest<Remark>> = {
+    parentId: Number(leadId) || 0,
+    requestValue: {
+      orderBy: {
+        id: "DESC"
+      }
+    },
   };
 
-  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
+  const { data: rows_product_segmentRemarks } = useListRemarksQuery(remarksInput);
 
-  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
-  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
-  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
+  const [expanded, setExpanded] = React.useState<ExpandedState>({ panel_bre: true });
+  const [showApproveCommentsModal, setShowApproveCommentsModal] = React.useState(false);
+  const [remarkAction, setRemarkAction] = React.useState("");
+  const [remark, setRemark] = React.useState("");
+  const [leadSubmitted, setLeadSubmitted] = React.useState(false);
+  const [leadSubmittedText, setLeadSubmittedText] = React.useState("");
 
-  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
-    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
-      let nbfcShare = 1 - config.sidbiShare;
-      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
-      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
-      setEffectiveRate(formattedEffectiveRateCalc);
+  const handleChange = (panel: string) => (event: React.ChangeEvent<{}>, isExpanded: boolean) => {
+    setExpanded((prev) => ({ ...prev, [panel]: isExpanded }));
+  };
+  
+  const [loadingPDF, setLoadingPDF] = React.useState(false);
+  const [loadingButton, setLoadingButton] = React.useState(false);
+  const [loadingModalButton, setLoadingModalButton] = React.useState(false);
+
+  const generatePDF = async () => {
+
+    setLoadingPDF(true);
+    const element = document.getElementsByClassName('custom_scroll')[0] as HTMLElement;
+   
+    if (element) {
+      const pdf = new jsPDF('p', 'pt', 'a4');
+      // Get page dimensions
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      // Define margins
+      const marginLeft = pageWidth * 0.05;
+      const marginRight = pageWidth * 0.07;
+      const marginTopBottom = pageHeight * 0.05;
+   
+      // Reset element height to "auto" to avoid cutoff
+      element.style.height = 'auto';
+   
+      await pdf.html(element, {
+        callback: function (doc) {
+          doc.save('Credit Assessment Memo - ' + lead?.entityName + '.pdf');
+          setLoadingPDF(false);
+        },
+        x: marginLeft,
+        y: marginTopBottom,
+        margin: [20, 0, 20, 0],
+        html2canvas: {
+          scale: 0.64, // Adjust scale if needed
+          backgroundColor: "#ffffff",
+          windowWidth: element.scrollWidth, // Capture the full width
+        },
+        autoPaging: true, // Automatically add pages
+      });
+    } else {
+      console.error("Element 'custom_scroll' not found");
     }
-  }
+  };
 
-  // ✅ On page load, populate fields from API and calculate
-  useEffect(() => {
-    if (data && config) {
-      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
-      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
+  const rpsInput: RequestWithParentId<SearchRequest<Rps>> = {
+    parentId: Number(leadId) || 0,   // assuming you have leadId in this component
+    requestValue: {},
+  };
    
-      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
-      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
-   
-      setNbfcRoi(formattedNbfc);
-      setSidbiRoiToCustomer(formattedSidbi);
-   
-      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
-    }
-  }, [data, config]);
+  const { data: rpsDataConsolidated } = useListRpsOverallQuery(rpsInput);
+	const { data: rpsDataSidbi } = useListRpsSidbiQuery(rpsInput);
+	const { data: rpsDataNbfc } = useListRpsAmbitQuery(rpsInput);
 
-  // ✅ Handle NBFC ROI change
-  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value) || 0;
-        setNbfcRoi(value);
-        if (sidbiRoiToCustomer !== null)
-          calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
-      };
-
-  return leadId ? (
-    <EntityForm
-      id={leadId || 0}
-      defaultItem={{
-        loanDetails: defaultLoanDetails,
-        nbfcLoanDetails: defaultNbfcLoanDetails,
-      }}
-      itemSchema={Yup.object().shape({
-        loanDetails: loanDetailsSchema,
-        nbfcLoanDetails: nbfcLoanDetailsSchema,
-      })}
-      useUpdateItemMutation={useUpdateLeadMutation}
-      useGetItemQuery={useGetLeadQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <Grid
-        container
-        style={{
-          backgroundColor: error && "#FFD1DC",
-          paddingBottom: 0,
-          paddingLeft: "16px",
-          paddingRight: "8px",
-        }}
-        spacing={2}
-      >
-        <Grid item xs={12} lg={12}>
-          {isLoading && <LinearProgress color="secondary" />}
-        </Grid>
-
-        <Section>
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
+  return (
+    <>
+    {leadSubmitted ? (
+      <React.Fragment>
+        <Grid
+          item
+          xs={12}
+          sm={8}
+          md={6}
+          component={Paper}
+          elevation={6}
+          square
+          className={classes.root}
+          spacing={0}
+          style={{ alignItems: "center", justifyContent: "center" }}
+        >
+          <Box className="login_formBox">
+            <SuccessAnimation />
+            <Typography
+              variant="h5"
+              gutterBottom
+              style={{
+                marginBottom: "0px",
+                fontWeight: "600",
+                textAlign: "center",
+              }}
+            >
+              You have successfully
+              <br />{leadSubmittedText}{" "}
+              <span style={{ color: "#1377FF" }}>#{leadId}</span>
+            </Typography>
+            {leadSubmittedText !== "approved this application as Checker" ?
+            <Box component="form" noValidate className="loginformBox">
+              <Grid
+                container
+                className="login_forgot_password_grid"
+                justifyContent="center"
+                alignItems="center"
+                sx={{ textAlign: "center", mt: "24px" }}
               >
-                NBFC Loan Details
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    Customer Applied Amount<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcLoanAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-                <DatePickerField
-                  label={
-                    <>
-                    Customer Application Date
-                    </>
-                  }
-                  name="nbfcLoanDetails.nbfcDisbursalDate"
-                  allowPast={true}
-                />
-              </Grid>
-              <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.nbfcTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.outstandingAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label={
-                  <>
-                  NBFC Sanction Date
-                  </>
-                }
-                name="nbfcLoanDetails.nbfcSanctionDate"
-                allowPast={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    NBFC assessed Tenure (months)
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="nbfcLoanDetails.balanceTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={"Purpose"}
-                name={"nbfcLoanDetails.purpose"}
-                domain={"m_purpose_of_loan"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              {/* <DropDownFieldYesNo
-                label="CGTMSE"
-                name={"nbfcLoanDetails.cgtmse"}
-              /> */}
-              <AutocompleteField
-                label={
-                  <>
-                    CGTMSE<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.cgtmse"}
-                domain={"m_cgstme"}
-              />
-            </Grid>
-            {data?.productName === 'secured' && (
-              <>
-                <Grid item xs={12} lg={4}>
-                  <DropDownFieldYesNo
-                    label={
-                      <>
-                        Project Loan
-                      </>
+                <Grid
+                  item
+                  xs={12}
+                  sm={12}
+                  md={10}
+                  lg={10}
+                  xl={12}
+                  className="text-right"
+                >
+                  <Button component={Link} {...{
+                    to: "/",
+                    className: "no-underline login_forgot_password",
+                    style: {
+                      textDecoration: "none",
+                      color: "#A9A9A9",
+                      fontSize: "14px",
                     }
-                    name={"nbfcLoanDetails.projectloan"}
-                    onChange={handleProjectLoanChange}
-                    // onChange={(event: any) => {
-                    //   console.log(event.target.value);
-                    //   setIsProjectLoanYes(event.target.value === 'Yes');
-                    // }}
-                  />
+                  } as any}>
+                    {"< Back to Dashboard"}
+                  </Button>
                 </Grid>
-                {isProjectLoanYes && (
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField label="DCCO" name={"nbfcLoanDetails.dcco"} />
-                  </Grid>
-                )}
-              </>
-            )}
-          </Grid>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
               </Grid>
-            </Grid>
-          )}
-        </Section>
+            </Box>
+            : <></>}
+          </Box>
+        </Grid>
+      </React.Fragment>
+    ) : (
+    <div style={{ marginTop: "2.5em", marginBottom: "2.5em" }}>
+      <Container maxWidth="xl">
+        <div>
+          <TitleHeader
+            title="Credit Assessment Memo"
+            breadcrumbs={breadcrumbs}
+            button={buttons}
+          />
+        </div>
 
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
+        <div style={{ marginTop: "1.5em" }}>
+          <Box sx={{ width: "100%" }}>
+            <Grid container spacing={3}>
+              <Grid item xl={3} lg={3.5} md={4} xs={4}>
+                <ApplicantInfo />
+                {localStorage.getItem("alertCustomerNTBAfterApplicantInfo") && (
+                  <div id="alert-div" style={{ marginTop: "16px" }}>
+                    <Slide
+                      in={true}
+                      direction="down"
+                      mountOnEnter
+                      unmountOnExit
+                    >
+                      <AlertSuccessWithoutClose
+                        icon={false}
+                        severity="success"
+                      >
+                        Customer is NTB, Customer ID is not yet available
+                      </AlertSuccessWithoutClose>
+                    </Slide>
+                  </div>
+                )}
+                {localStorage.getItem("alertCreditAssessmentCompleted") && (
+                  <div id="alert-div" style={{ marginTop: "16px" }}>
+                    <Slide
+                      in={true}
+                      direction="down"
+                      mountOnEnter
+                      unmountOnExit
+                    >
+                      <AlertBlueWithoutClose
+                        icon={false}
+                        severity="success"
+                      >
+                        Credit Assessment completed
+                      </AlertBlueWithoutClose>
+                    </Slide>
+                  </div>
+                )}
               </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Loan Ask
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiShare/>
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiLoanAmount/>
-            </Grid>
-          </Grid>
-        </Section>
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
+
+              <Grid item xl={9} lg={8.5} md={8} xs={8}>
+                <Grid container spacing={0} padding={0}>
+                  <Grid item xs={12} sx={{ textAlign: "right" , marginBottom: "10px" }}>
+                    {/* <CreditAssessmentMemoPdfButton /> */}
+                    <WhiteOutlinedWithBlueButton
+                        key={"Print CAM"}
+                        variant="contained"
+                        startIcon={loadingPDF ? <CircularProgress size={14} /> : <img src={PrintIcon} alt="Print Icon" />}
+                        // onClick={() => { console.log('print test'); }}
+                        onClick={generatePDF}
+                    >
+                        Print CAM
+                    </WhiteOutlinedWithBlueButton>
+                  </Grid>
+                </Grid>
+                <div className="custom_scroll" style={{color: "#3B415B"}}>
+                  <LegalEntityInformation />
+                  <FacilityLoanDetails />
+                  <NbfcDetailsCredit />
+                  <SidbiShareCredit />
+                  <KmpDocumentsCredit />
+
+                  <Section sx={{ width: '100%', mt: '24px' }}>
+                    <Grid container spacing={0} padding={0}>
+                      <Grid item xs={12}>
+                        <AccordionCss expanded={expanded['panel_bre']} onChange={handleChange('panel_bre')}>
+                          <AccordionSummaryCss
+                            expandIcon={expanded['panel_bre'] ? <MinusIcon /> : <PlusIcon />}
+                            aria-controls="panel_bre-content"
+                            id="panel_bre-header"
+                          >
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#3B415B" }}>BRE</Typography>
+                          </AccordionSummaryCss>
+                          <AccordionDetailsCss>
+                            <Grid container spacing={0} padding={0}>
+                              <BreGoDisplay/>
+                            </Grid>
+                          </AccordionDetailsCss>
+                        </AccordionCss>
+                      </Grid>
+                    </Grid>
+                  </Section>
+
+                  {rpsDataConsolidated && rpsDataConsolidated.length > 0 && (
+                    <Section sx={{ width: '100%', mt: '24px' }}>
+                      <Grid container spacing={0} padding={0}>
+                        <Grid item xs={12}>
+                          <AccordionCss
+                            expanded={expanded['panel_bre']}
+                            onChange={handleChange('panel_bre')}
+                          >
+                            <AccordionSummaryCss
+                              expandIcon={expanded['panel_bre'] ? <MinusIcon /> : <PlusIcon />}
+                              aria-controls="panel_bre-content"
+                              id="panel_bre-header"
+                            >
+                              <Typography
+                                variant="subtitle1"
+                                sx={{ fontWeight: 700, color: '#3B415B' }}
+                              >
+                                Repayment Schedule (Consolidated)
+                              </Typography>
+                            </AccordionSummaryCss>
+                            <AccordionDetailsCss>
+                              <Grid container spacing={0} padding={0}>
+                                {/* we’ll pass the data down */}
+                                <RepaymentScheduleAccordion data={rpsDataConsolidated} />
+                              </Grid>
+                            </AccordionDetailsCss>
+                          </AccordionCss>
+                        </Grid>
+                      </Grid>
+                    </Section>
+                  )}
+
+                  {rpsDataSidbi && rpsDataSidbi.length > 0 && (
+                    <Section sx={{ width: '100%', mt: '24px' }}>
+                      <Grid container spacing={0} padding={0}>
+                        <Grid item xs={12}>
+                          <AccordionCss expanded={expanded['panel_bre']} onChange={handleChange('panel_bre')}>
+                            <AccordionSummaryCss
+                              expandIcon={expanded['panel_bre'] ? <MinusIcon /> : <PlusIcon />}
+                              aria-controls="panel_bre-content"
+                              id="panel_bre-header"
+                            >
+                              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#3B415B" }}>Repayment Schedule (SIDBI)</Typography>
+                            </AccordionSummaryCss>
+                            <AccordionDetailsCss>
+                              <Grid container spacing={0} padding={0}>
+                                <RepaymentScheduleSidbiAccordion data={rpsDataSidbi} />
+                              </Grid>
+                            </AccordionDetailsCss>
+                          </AccordionCss>
+                        </Grid>
+                      </Grid>
+                    </Section>
+                  )}
+
+                  {rpsDataNbfc && rpsDataNbfc.length > 0 && (
+                    <Section sx={{ width: '100%', mt: '24px' }}>
+                      <Grid container spacing={0} padding={0}>
+                        <Grid item xs={12}>
+                          <AccordionCss expanded={expanded['panel_bre']} onChange={handleChange('panel_bre')}>
+                            <AccordionSummaryCss
+                              expandIcon={expanded['panel_bre'] ? <MinusIcon /> : <PlusIcon />}
+                              aria-controls="panel_bre-content"
+                              id="panel_bre-header"
+                            >
+                              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#3B415B" }}>Repayment Schedule (Nbfc)</Typography>
+                            </AccordionSummaryCss>
+                            <AccordionDetailsCss>
+                              <Grid container spacing={0} padding={0}>
+                                <RepaymentScheduleAmbitAccordion data={rpsDataNbfc} />
+                              </Grid>
+                            </AccordionDetailsCss>
+                          </AccordionCss>
+                        </Grid>
+                      </Grid>
+                    </Section>
+                  )}
+
+                  <div style={{ marginTop: 24 }}>
+                  <TableWithoutPaginationRemarks
+                    rows={rows_product_segmentRemarks?.content}
+                    columns={columnsRemarks}
+                  />
+                  </div>
+                </div>
+                  {lead?.sidbiStatus === "MAKER_APPROVED" && <Grid container spacing={2} paddingTop={2} paddingBottom={2} alignItems={'center'}>
+                    <Grid item xs={12} lg={12} sx={{ textAlign: "right" }}>
+                      <BlueButton
+                        key={"Approve"}       
+                        startIcon={loadingButton === true? <SpinningDotsWhite /> : <img src={CheckmarkWhiteIcon} alt={CheckmarkWhiteIcon} />}
+                        disabled={loadingButton}
+                        variant="contained"
+                        onClick={() => {
+                          setRemarkAction('CHECKER_APPROVED');
+                          setLoadingButton(true);
+                          setShowApproveCommentsModal(true);
+                          // updateLeadStatus({ 
+                          //   id: Number(leadId), 
+                          //   sidbiStatus: "CHECKER_APPROVED",
+                          //   bulkEntryId: "NEW",
+                          //   remark: "Application is approved by the checker",
+                          //   checker: getName(),
+                          //   checkerApprovedOn: new Date() }).then(() => {
+                          //     uploadKyc(Number(leadId)).then(() => {
+                          //       alert("Application is approved by the checker.");
+                          //       navigate(`/l1/sanctionletter/${leadId}`)
+                          //       setLoadingButton(false);
+                          //     })
+                          // });
+                        }}
+                      >
+                        Approve
+                      </BlueButton> 
+                    </Grid>
+                  </Grid>}
+                  {lead?.sidbiStatus === "BUSINESS_RULES" && <Grid container spacing={2} paddingTop={2} paddingBottom={2} alignItems={'center'}>
+                    <Grid item xs={12} lg={12} sx={{ textAlign: "right" }}>
+                      <BlueButton
+                        key={"Recommended for Approval"}                        
+                        startIcon={loadingButton === true? <SpinningDotsWhite /> : <img src={CheckmarkWhiteIcon} alt={CheckmarkWhiteIcon} />}
+                        disabled={loadingButton}
+                        variant="contained"
+                        onClick={() => {
+                          setRemarkAction('MAKER_APPROVED');
+                          setLoadingButton(true);
+                          setShowApproveCommentsModal(true);
+                          // updateLeadStatus({ 
+                          //   id: Number(leadId), 
+                          //   sidbiStatus: "MAKER_APPROVED", 
+                          //   remark: "Application is approved by Maker",
+                          //   maker: getName(),
+                          //   makerApprovedOn: new Date() }).then(() => {
+                          //   // uploadKyc(Number(leadId)).then(() => {
+                          //   //   alert("Recommended for approval");
+                          //   //   navigate(`/`)
+                          //   // })     
+                          //   navigate(`/`)     
+                          //   setLoadingButton(false);
+                          // });
+
+                        }}
+                      >
+                        Recommended for approval
+                      </BlueButton>
+                    </Grid>
+                  </Grid>}
               </Grid>
+
             </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Interest Fixation
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                  NBFC ROI<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcRoi"}
-                onChange={handleNbfcRoiChange}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                  Rate Negotiated With Customer
-                  </>
-                }
-                name={"nbfcLoanDetails.rateNegotiatedWithCustomer"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label={
-                  <>Next Full EMI Date</>
-                }
-                name={"nbfcLoanDetails.nextFullEmiDate"}
-                allowFuture={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI’s Hurdle Rate Type
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.rateType"}
-                domain={"m_base_rate_type"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI’s Hurdle Rate
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.benchMarkRate"}
-                domain={"m_interest_rate"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                  Additional spread<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.additionalSpread"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                  Maximum Service rate fee<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.maxServiceRateFee"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    SIDBI ROI to customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.sidbiRate"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Effective interest rate to end customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.effectiveInterestRateToCustomer"}
-                valueChanged={effectiveRate}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>            
-          </Grid>
-        </Section>
-      </Grid>
-      <FormSubmit ref={ref} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
+          </Box>
+        </div>
+      </Container>
+      <Dialog
+          open={showApproveCommentsModal}
+          onClose={() => { 
+            setShowApproveCommentsModal(false); 
+            setLoadingButton(false);
+            setLoadingModalButton(false);
+          }}
+          fullWidth
+          maxWidth="xs"
+          PaperProps={{
+              sx: {
+              borderRadius: 3,
+              p: 0,
+              overflow: "hidden",
+              },
+          }}
+        >
+            {/* Close icon */}
+            <Box sx={{ position: "absolute", top: 12, right: 12 }}>
+                <IconButton
+                size="small"
+                onClick={() => {
+                  setShowApproveCommentsModal(false);
+                  setLoadingButton(false);
+                  setLoadingModalButton(false);
+                }}
+                sx={{
+                    backgroundColor: "#ffffff",
+                    boxShadow: 1,
+                    "&:hover": { backgroundColor: "#f5f5f5" },
+                    border: "1px solid #9E9E9E",
+                    borderRadius: "5px",
+                }}
+                >
+                <CloseIcon fontSize="small" />
+                </IconButton>
+            </Box>
+            
+            {/* Content */}
+            <Box sx={{ px: 4, pt: 4, pb: 3 }}>
+                <Stack spacing={2} alignItems="center">
+            
+                {/* Title */}
+                <DialogTitle
+                    sx={{
+                    p: 0,
+                    textAlign: "center",
+                    fontSize: "1.1rem",
+                    fontWeight: 600,
+                    }}
+                >
+                    Comments
+                </DialogTitle>
+            
+                  <Grid container>
+                    <Grid item lg={12} md={12} xs={12}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#3B415B" }}>Please enter a comment and submit</Typography>
+                      <Textarea
+                        value={remark}
+                        onChange={(event) => setRemark(event.target.value)}
+                        minRows={10}
+                      />
+                    </Grid>
+                  </Grid>
+                </Stack>
+            </Box>
+            
+            {/* Bottom actions bar */}
+            <Box
+                sx={{
+                borderTop: "1px solid #f0f0f0",
+                px: 4,
+                py: 2.5,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 2,
+                backgroundColor: "#f3f3f3"
+                }}
+            >
+                <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => {
+                  setShowApproveCommentsModal(false);
+                  setLoadingButton(false);
+                  setLoadingModalButton(false);
+                }}
+                sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    borderColor: "#e0e0e0",
+                    color: "text.primary",
+                    "&:hover": {
+                    borderColor: "#c2c2c2",
+                    backgroundColor: "#fafafa",
+                    },
+                }}
+                >
+                Cancel
+                </Button>
+            
+                <Button
+                startIcon={loadingModalButton === true && <SpinningDotsWhite />}
+                disabled={loadingModalButton}
+                variant="contained"
+                fullWidth
+                onClick={() => {
+                  setLoadingModalButton(true);
+                 
+                  // --- MAKER APPROVED ---
+                  if (remarkAction === "MAKER_APPROVED") {
+                    updateLeadStatus({
+                      id: Number(leadId),
+                      sidbiStatus: "MAKER_APPROVED",
+                      remark: remark === "" ? "Application is approved by maker" : `${remark} Application is approved by maker`,
+                      maker: getName(),
+                      makerApprovedOn: new Date(),
+                    }).then(() => {
+                      // navigate(`/`);
+                      setLeadSubmitted(true);
+                      setLeadSubmittedText("approved this application as Maker")
+                      setLoadingButton(false);
+                      setLoadingModalButton(false);
+                    });
+                 
+                    return;
+                  }
+                 
+                  // --- CHECKER APPROVED ---
+                  if (remarkAction === "CHECKER_APPROVED") {
+                    updateLeadStatus({
+                      id: Number(leadId),
+                      sidbiStatus: "CHECKER_APPROVED",
+                      bulkEntryId: "NEW",
+                      remark:
+                        remark === ""
+                          ? "Application is approved by the checker"
+                          : `${remark} Application is approved by the checker`,
+                      checker: getName(),
+                      checkerApprovedOn: new Date(),
+                    }).then(() => {
+                      uploadKyc(Number(leadId)).then(() => {
+                        setLeadSubmitted(true);
+                        setLeadSubmittedText("approved this application as Checker")
+                        setLoadingButton(false);
+                        setLoadingModalButton(false);
+                        setTimeout(() => {
+                          setLeadSubmitted(false);
+                          setLeadSubmittedText("");
+                          navigate(`/l1/sanctionletter/${leadId}`);
+                        }, 3000);
+
+                        // alert("Application is approved by the checker.");
+                        // navigate(`/l1/sanctionletter/${leadId}`);
+                        // setLoadingButton(false);
+                        // setLoadingModalButton(false);
+                      });
+                    });
+                 
+                    return;
+                  }
+                }}
+                sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    boxShadow: "0 8px 24px rgba(59, 92, 255, 0.35)",
+                    backgroundColor: "#1377ff",
+                    "&:hover": {
+                        color: "#1377ff",
+                        backgroundColor: "#fff",
+                        border: "1px solid #1377ff",
+                        boxShadow: "0 8px 24px rgba(51, 72, 216, 0.4)",
+                    },
+                }}
+                >
+                Submit
+                </Button>
+            </Box>
+        </Dialog>
+    </div>
+      )}
+    </>
   );
 });
 
-export default LoanDetails;
 
-import { BaseDTO } from "./baseModels";
-import * as Yup from "yup";
-import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
- 
-dayjs.extend(customParseFormat);
+export default CreditAssessmentMemo;
 
-//Data model
-export interface NbfcLoanDetails extends BaseDTO {
-  nbfcLoanAmount?: number;
-  nbfcRoi?: number;
-  nbfcTenure?: number;
-  nbfcDisbursalDate?: Date;
-  outstandingAmount?: number;
-  emiAmount?: string;
-  balanceTenure?: number;
-  nextFullEmiDate?: Date;
-  purpose?: string;
-  cgtmse?: string;
-  projectloan?: string;
-  dcco?: Date;
-  rateType?: string;
-  benchmark?: string;
-  nbfcEmiStartDate?: Date;
-  previousEmidate?: Date;
-  sidbiRoiToCustomer?: number;
-  bankRoi?: number;
-  baseRateType?: string;
-  baseRate?: number;
-  emiMoratorium?: number;
-  principleMoratorium?: number;
-  advanceEmi?: string;
-  processingFee?: string;
-  netDisbursalAmount?: string;
-  rateNegotiatedWithCustomer?: number;
-  nbfcSanctionDate?: Date;
+
+import * as React from 'react';
+import {
+  Grid,
+  Typography,
+  Box,
+  Button,
+  TextField,
+  CircularProgress,
+  Snackbar,
+  Alert,
+  LinearProgress,
+} from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import axios from 'axios';
+import { useAppSelector } from '../../app/hooks';
+import { useUpdateLeadMutation, useGetLeadQuery } from '../../slices/leadSlice';
+import useToken from '../../Features/Authentication/useToken'; // ← assuming this exists like in FileUpload
+
+interface DueDiligenceProps {
+  onSave?: () => void;
+  leadId?:any; // optional – but we prefer from store
 }
 
-//Validation Schema for the model
-export const nbfcLoanDetailsSchema = Yup.object().shape({
-  nbfcLoanAmount: Yup.number()
-    .typeError("Please enter a valid number")
-    .required("Please enter a valid number"),
-  nbfcRoi: Yup.number()
-    .typeError("Please enter a valid number")
-    .required("Please enter a valid number"),
-  nbfcTenure: Yup.number()
-    .typeError("Please enter a valid number")
-    .required("Please enter a valid number"),
-  nbfcDisbursalDate: Yup.string()
-    .nullable()  // This allows null values (so the field can be empty).
-    .notRequired()  // Makes it optional, so validation is not triggered if the field is empty.
-    .test(
-      'valid-date',
-      'Please enter a valid date in DD/MM/YYYY format',
-      (value) => {
-        if (value) {
-          const parsedDate = dayjs(value);
-          if (parsedDate.isValid()) {
-            value = parsedDate.format('YYYY-MM-DD'); // Extract only the date
+const DueDiligence = React.forwardRef<any, DueDiligenceProps>(({ onSave,leadId }, ref) => {
+  const { data: leadData } = useGetLeadQuery(+leadId || 0, { skip: !leadId });
+  const [updateLead, { isLoading: isSaving }] = useUpdateLeadMutation();
+
+  const { getToken } = useToken(); 
+
+  const [comment, setComment] = React.useState<string>('');
+  const [downloadProgress, setDownloadProgress] = React.useState<number>(0);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error'>('success');
+
+  // You can sync comment from backend if you store it
+  React.useEffect(() => {
+    // Uncomment if you decide to persist the comment in backend
+    // if (leadData?.legalEntity?.dueDiligenceComment) {
+    //   setComment(leadData.legalEntity.dueDiligenceComment);
+    // }
+  }, [leadData]);
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setComment(e.target.value);
+  };
+
+  const handleSave = async () => {
+    if (!leadId) {
+      setSnackbarMessage('No lead ID found');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    try {
+      const patchPayload = {
+        id: leadId,
+        legalEntity: {
+          ...(leadData?.legalEntity || {}),
+          dueDiligenceComment: comment.trim(),
+        },
+      };
+
+      await updateLead(patchPayload).unwrap();
+
+      setSnackbarMessage('Due Diligence comment saved successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      if (onSave) onSave();
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      setSnackbarMessage(err?.data?.message || 'Failed to save comment');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!leadId) {
+      setSnackbarMessage('No lead ID found');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    setSnackbarMessage('Starting download...');
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+
+    try {
+      const token = getToken();
+
+      const response = await axios({
+        method: 'GET',
+        url: `${process.env.REACT_APP_API_ENDPOINT}/dueDeligenceZip?leids=${leadId}`, 
+        responseType: 'blob', 
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setDownloadProgress(percent);
           }
-          // Check if the date is valid in the required format
-          return dayjs(value, 'YYYY-MM-DD', true).isValid();
-        }
-        return true; // Return true if the field is empty, so validation passes
-      }
-    )
-    .test(
-      'not-future-date',
-      'Date cannot be in the future',
-      (value) => {
-        if (value) {
-          // Ensure the date is not in the past or in the future
-          return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isAfter(dayjs(), 'day'));
-        }
-        return true; // Return true if the field is empty, so validation passes
-      }
-    )
-    ,
-  outstandingAmount: Yup.number()
-    .typeError("Please enter a valid number")
-    .required("Please enter a valid number"),
-  balanceTenure: Yup.number()
-    .typeError("Please enter a valid number")
-    .required("Please enter a valid number")
-    .test(
-      'is-less-than-or-equal-to-nbfcTenure',
-      'Balance Tenure should not be greater than Total Tenure (In Months) of the Loan',
-      function (value) {
-        const { nbfcTenure } = this.parent; // Access `nbfcTenure` from the parent object
-        return value !== undefined && value <= nbfcTenure; // Ensure `value` is defined and validate
-      }
-    ),
-  // nextFullEmiDate: Yup.string()
-  //   .required("Please enter a valid date")
-  //   .test(
-  //     'valid-date',
-  //     'Please enter a valid date in DD/MM/YYYY format',
-  //     (value) => {
-  //       if (value) {
-  //         const parsedDate = dayjs(value);
-  //         if (parsedDate.isValid()) {
-  //           value = parsedDate.format('YYYY-MM-DD'); // Extract only the date
-  //         }
-  //         // Check if the date is valid in the required format
-  //         return dayjs(value, 'YYYY-MM-DD', true).isValid();
-  //       }
-  //       return true; // Return true if the field is empty, so validation passes
-  //     }
-  //   )
-  //   .test(
-  //     'not-past-date',
-  //     'Date cannot be in the past',
-  //     (value) => {
-  //       // // Ensure the date is not in the past (compare against today's date)
-  //       return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isBefore(dayjs(), 'day')); //For 
-  //     }
-  //   )
-  //   ,
-  purpose: Yup.string()
-    .typeError("Please select from the drop down"),
-  cgtmse: Yup.string()
-    .required("Please select a value from drop-down list"),
-  projectloan: Yup.string()
-    .required("Please select a value from drop-down list"),
-  // sidbiHurdleRate: Yup.string()
-  //   .required("Please select a value from drop-down list"),
-  nbfcSanctionDate: Yup.string()
-  .nullable()
-  .notRequired()
-  .transform((value) => {
-    if (!value) return value;
-    const d = dayjs(value, "DD/MM/YYYY", true);
-    return d.isValid() ? d.format("YYYY-MM-DD") : value; // stored as YYYY-MM-DD
-  })
-  .test(
-    "valid-date",
-    "Please enter a valid date in DD/MM/YYYY format",
-    (value) => {
-      if (!value) return true;
-      return dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true).isValid();
+        },
+      });
+
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `due-diligence-lead-${leadId}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setSnackbarMessage('Due Diligence ZIP downloaded successfully');
+      setSnackbarSeverity('success');
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      const msg =
+        err?.response?.status === 404
+          ? 'Due diligence files not found for this lead'
+          : err?.message || 'Failed to download due diligence document';
+      setSnackbarMessage(msg);
+      setSnackbarSeverity('error');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      setSnackbarOpen(true);
     }
-  )
-  .test(
-    "sanction-after-disbursal",
-    "NBFC Sanction Date must be greater than or equal to Customer Application Date",
-    function (value) {
-      if (!value) return true;
-      const { nbfcDisbursalDate } = this.parent;
-      if (!nbfcDisbursalDate) return true;
- 
-      const sanction = dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
-      const disbursal = dayjs(nbfcDisbursalDate, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
- 
-      if (!sanction.isValid() || !disbursal.isValid()) return true;
- 
-      return (
-        sanction.isSame(disbursal, "day") ||
-        sanction.isAfter(disbursal, "day")
-      );
-    }
-  )
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
+  return (
+    <Box sx={{ p: 3, backgroundColor: '#fff', borderRadius: 1 }}>
+      {/* Header */}
+      {/* <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" fontWeight={600} color="text.primary">
+          Due Diligence
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Add notes, observations, or findings from due diligence process
+        </Typography>
+      </Box> */}
+
+      <Grid container spacing={3}>
+        {/* Comment Field */}
+        <Grid item xs={12}>
+          <TextField
+            label="Due Diligence Comments / Remarks"
+            multiline
+            rows={6}
+            fullWidth
+            variant="outlined"
+            value={comment}
+            onChange={handleCommentChange}
+            placeholder=""
+            InputLabelProps={{ shrink: true }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fafafa',
+              },
+            }}
+          />
+        </Grid>
+
+        {/* Action Buttons */}
+        <Grid item xs={12}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'center', sm: 'flex-start' },
+            }}
+          >
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+              onClick={handleSave}
+              disabled={isSaving}
+              sx={{ minWidth: 160 }}
+            >
+              {isSaving ? 'Saving...' : 'Save Comment'}
+            </Button>
+
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={
+                isDownloading ? <CircularProgress size={20} color="primary" /> : <DownloadIcon />
+              }
+              onClick={handleDownload}
+              disabled={isDownloading}
+              sx={{ minWidth: 220 }}
+            >
+              {isDownloading ? 'Downloading...' : 'Download Due Diligence Document'}
+            </Button>
+          </Box>
+
+          {isDownloading && downloadProgress > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <LinearProgress variant="determinate" value={downloadProgress} />
+              <Typography variant="body2" align="center" sx={{ mt: 1 }}>
+                {downloadProgress}% — Generating ZIP...
+              </Typography>
+            </Box>
+          )}
+        </Grid>
+      </Grid>
+
+      {/* Feedback Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        // anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
 });
 
-//Default values
-export const defaultNbfcLoanDetails = {
-  nbfcLoanAmount: undefined,
-  nbfcRoi: undefined,
-  rateNegotiatedWithCustomer: undefined,
-  nbfcTenure: undefined,
-  nbfcDisbursalDate: undefined,
-  outstandingAmount: undefined,
-  additionalSpread: undefined,
-  emiAmount: undefined,
-  balanceTenure: undefined,
-  nextFullEmiDate: undefined,
-  purpose: undefined,
-  cgtmse: undefined,
-  projectloan: undefined,
-  dcco: undefined,
-  nbfcSanctionDate: undefined,
-};
+export default DueDiligence;
 
-
-Loan Details	Retain as is – only change – remove project loan field	
-Loan Details	The following fields in Interest fixation are removed
-Rate negotiated with customer 
-Next Full EMI date
-Additional spread		
-
-these are changes which i have to do in these form and give me complete and proper code 
+i want design button CreditAssessmentMemo and one more change DueDiligence that download button at top in  DueDiligence make design more good 
