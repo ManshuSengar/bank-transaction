@@ -1,3 +1,276 @@
+import * as React from 'react';
+import {
+  Grid,
+  Typography,
+  Box,
+  Button,
+  TextField,
+  CircularProgress,
+  Snackbar,
+  Alert,
+  LinearProgress,
+} from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import axios from 'axios';
+import { useAppSelector } from '../../app/hooks';
+import { useUpdateLeadMutation, useGetLeadQuery } from '../../slices/leadSlice';
+import useToken from '../../Features/Authentication/useToken'; // ← assuming this exists like in FileUpload
+
+interface DueDiligenceProps {
+  onSave?: () => void;
+  leadId?: number; // optional – but we prefer from store
+}
+
+const DueDiligence = React.forwardRef<any, DueDiligenceProps>(({ onSave }, ref) => {
+  const { id: leadIdFromStore } = useAppSelector((state) => state.leadStore);
+  const leadId = leadIdFromStore || undefined; // or pass from props if needed
+
+  const { data: leadData } = useGetLeadQuery(leadId || 0, { skip: !leadId });
+  const [updateLead, { isLoading: isSaving }] = useUpdateLeadMutation();
+
+  const { getToken } = useToken(); // ← reuse same auth hook as FileUpload
+
+  const [comment, setComment] = React.useState<string>('');
+  const [downloadProgress, setDownloadProgress] = React.useState<number>(0);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error'>('success');
+
+  // You can sync comment from backend if you store it
+  React.useEffect(() => {
+    // Uncomment if you decide to persist the comment in backend
+    // if (leadData?.legalEntity?.dueDiligenceComment) {
+    //   setComment(leadData.legalEntity.dueDiligenceComment);
+    // }
+  }, [leadData]);
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setComment(e.target.value);
+  };
+
+  const handleSave = async () => {
+    if (!leadId) {
+      setSnackbarMessage('No lead ID found');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    try {
+      const patchPayload = {
+        id: leadId,
+        legalEntity: {
+          ...(leadData?.legalEntity || {}),
+          dueDiligenceComment: comment.trim(),
+        },
+      };
+
+      await updateLead(patchPayload).unwrap();
+
+      setSnackbarMessage('Due Diligence comment saved successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      if (onSave) onSave();
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      setSnackbarMessage(err?.data?.message || 'Failed to save comment');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!leadId) {
+      setSnackbarMessage('No lead ID found');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    setSnackbarMessage('Starting download...');
+    setSnackbarSeverity('info');
+    setSnackbarOpen(true);
+
+    try {
+      const token = getToken();
+
+      const response = await axios({
+        method: 'GET',
+        url: `/dueReport/dueDeligenceZip?leids=${leadId}`, // adjust baseURL if needed
+        responseType: 'blob', // crucial for binary files (zip)
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setDownloadProgress(percent);
+          }
+        },
+      });
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `due-diligence-lead-${leadId}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setSnackbarMessage('Due Diligence ZIP downloaded successfully');
+      setSnackbarSeverity('success');
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      const msg =
+        err?.response?.status === 404
+          ? 'Due diligence files not found for this lead'
+          : err?.message || 'Failed to download due diligence document';
+      setSnackbarMessage(msg);
+      setSnackbarSeverity('error');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
+  return (
+    <Box sx={{ p: 3, backgroundColor: '#fff', borderRadius: 1 }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" fontWeight={600} color="text.primary">
+          Due Diligence
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Add notes, observations, or findings from due diligence process
+        </Typography>
+      </Box>
+
+      <Grid container spacing={3}>
+        {/* Comment Field */}
+        <Grid item xs={12}>
+          <TextField
+            label="Due Diligence Comments / Remarks"
+            multiline
+            rows={6}
+            fullWidth
+            variant="outlined"
+            value={comment}
+            onChange={handleCommentChange}
+            placeholder="Enter observations, red flags, approvals, recommendations, etc..."
+            InputLabelProps={{ shrink: true }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fafafa',
+              },
+            }}
+          />
+        </Grid>
+
+        {/* Action Buttons */}
+        <Grid item xs={12}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'center', sm: 'flex-start' },
+            }}
+          >
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+              onClick={handleSave}
+              disabled={isSaving}
+              sx={{ minWidth: 160 }}
+            >
+              {isSaving ? 'Saving...' : 'Save Comment'}
+            </Button>
+
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={
+                isDownloading ? <CircularProgress size={20} color="primary" /> : <DownloadIcon />
+              }
+              onClick={handleDownload}
+              disabled={isDownloading}
+              sx={{ minWidth: 220 }}
+            >
+              {isDownloading ? 'Downloading...' : 'Download Due Diligence Document'}
+            </Button>
+          </Box>
+
+          {isDownloading && downloadProgress > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <LinearProgress variant="determinate" value={downloadProgress} />
+              <Typography variant="body2" align="center" sx={{ mt: 1 }}>
+                {downloadProgress}% — Generating ZIP...
+              </Typography>
+            </Box>
+          )}
+        </Grid>
+      </Grid>
+
+      {/* Feedback Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+});
+
+export default DueDiligence;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 https://codesandbox.io/p/sandbox/infinite-scroll-fz9738?file=%2Fsrc%2FComponents%2FInfiniteScroll.jsx
 
 
