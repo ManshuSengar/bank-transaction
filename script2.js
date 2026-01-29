@@ -1,3 +1,289 @@
+import * as React from 'react';
+import {
+  Grid,
+  Typography,
+  Box,
+  Button,
+  TextField,
+  CircularProgress,
+  Snackbar,
+  Alert,
+  LinearProgress,
+  Paper,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import axios from 'axios';
+import { useAppSelector } from '../../app/hooks';
+import { useUpdateLeadMutation, useGetLeadQuery } from '../../slices/leadSlice';
+import useToken from '../../Features/Authentication/useToken';
+
+interface DueDiligenceProps {
+  onSave?: () => void;
+  leadId?: number | string;
+}
+
+const DueDiligence = React.forwardRef<any, DueDiligenceProps>(({ onSave, leadId: propLeadId }, ref) => {
+  const { data: leadData } = useGetLeadQuery(+propLeadId || 0, { skip: !propLeadId });
+  const [updateLead, { isLoading: isSaving }] = useUpdateLeadMutation();
+  const { getToken } = useToken();
+
+  const leadId = propLeadId || leadData?.id; // fallback
+
+  const [comment, setComment] = React.useState<string>('');
+  const [downloadProgress, setDownloadProgress] = React.useState<number>(0);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error'>('success');
+
+  React.useEffect(() => {
+    if (leadData?.legalEntity?.dueDiligenceComment) {
+      setComment(leadData.legalEntity.dueDiligenceComment);
+    }
+  }, [leadData]);
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setComment(e.target.value);
+  };
+
+  const handleSave = async () => {
+    if (!leadId) {
+      setSnackbarMessage('Lead ID is missing');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    try {
+      const patchPayload = {
+        id: leadId,
+        legalEntity: {
+          ...(leadData?.legalEntity || {}),
+          dueDiligenceComment: comment.trim(),
+        },
+      };
+
+      await updateLead(patchPayload).unwrap();
+
+      setSnackbarMessage('Due Diligence remarks saved successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      if (onSave) onSave();
+    } catch (err: any) {
+      setSnackbarMessage(err?.data?.message || 'Failed to save remarks');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!leadId) {
+      setSnackbarMessage('Lead ID is missing');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setIsDownloading(true);
+    setDownloadProgress(0);
+
+    try {
+      const token = getToken();
+
+      const response = await axios({
+        method: 'GET',
+        url: `${process.env.REACT_APP_API_ENDPOINT}/dueDeligenceZip?leids=${leadId}`,
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setDownloadProgress(percent);
+          }
+        },
+      });
+
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `due-diligence-lead-${leadId}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setSnackbarMessage('Due Diligence files downloaded successfully');
+      setSnackbarSeverity('success');
+    } catch (err: any) {
+      const msg =
+        err?.response?.status === 404
+          ? 'No due diligence files found for this lead'
+          : err?.message || 'Download failed';
+      setSnackbarMessage(msg);
+      setSnackbarSeverity('error');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleSnackbarClose = () => setSnackbarOpen(false);
+
+  return (
+    <Paper
+      elevation={2}
+      sx={{
+        p: { xs: 2, md: 3 },
+        borderRadius: 2,
+        backgroundColor: '#ffffff',
+        position: 'relative',
+      }}
+    >
+      {/* Header with Download Button */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3,
+          pb: 2,
+          borderBottom: '1px solid #e0e0e0',
+        }}
+      >
+        <Box>
+          <Typography variant="h6" fontWeight={600} color="text.primary">
+            Due Diligence Remarks
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Observations, findings, red flags or key notes from due diligence
+          </Typography>
+        </Box>
+
+        <Tooltip title="Download all Due Diligence documents (ZIP)">
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={
+              isDownloading ? <CircularProgress size={20} color="primary" /> : <DownloadIcon />
+            }
+            onClick={handleDownload}
+            disabled={isDownloading || !leadId}
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 500,
+              px: 3,
+              minWidth: 180,
+            }}
+          >
+            {isDownloading ? 'Downloading...' : 'Download Files'}
+          </Button>
+        </Tooltip>
+      </Box>
+
+      {/* Main Content */}
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <TextField
+            label="Due Diligence Comments / Key Observations"
+            multiline
+            rows={7}
+            fullWidth
+            variant="outlined"
+            value={comment}
+            onChange={handleCommentChange}
+            placeholder="Enter important findings, discrepancies, legal observations, site visit notes, etc..."
+            InputLabelProps={{ shrink: true }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: '#fafafa',
+                borderRadius: 2,
+              },
+            }}
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
+              onClick={handleSave}
+              disabled={isSaving || !comment.trim()}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                px: 4,
+                py: 1.2,
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(25, 118, 210, 0.25)',
+                '&:hover': {
+                  boxShadow: '0 6px 16px rgba(25, 118, 210, 0.35)',
+                },
+              }}
+            >
+              {isSaving ? 'Saving...' : 'Save Remarks'}
+            </Button>
+          </Box>
+        </Grid>
+
+        {isDownloading && downloadProgress > 0 && (
+          <Grid item xs={12}>
+            <Box sx={{ mt: 2 }}>
+              <LinearProgress variant="determinate" value={downloadProgress} sx={{ height: 8, borderRadius: 4 }} />
+              <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1.5, fontWeight: 500 }}>
+                {downloadProgress}% — Preparing ZIP file...
+              </Typography>
+            </Box>
+          </Grid>
+        )}
+      </Grid>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={5000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarSeverity}
+          variant="filled"
+          sx={{ width: '100%', borderRadius: 2 }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Paper>
+  );
+});
+
+export default DueDiligence;
+
+
+
+
+
+
+
+
+
+
+
+
+
 import TitleHeader from "../../Components/titleheader";
 import * as React from 'react';
 import { 
