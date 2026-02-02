@@ -1,2368 +1,212 @@
-import * as React from 'react';
-import {
-  Grid,
-  Typography,
-  Box,
-  Button,
-  TextField,
-  CircularProgress,
-  Snackbar,
-  Alert,
-  LinearProgress,
-} from '@mui/material';
-import DownloadIcon from '@mui/icons-material/Download';
-import SaveIcon from '@mui/icons-material/Save';
-import axios from 'axios';
-import { useAppSelector } from '../../app/hooks';
-import { useUpdateLeadMutation, useGetLeadQuery } from '../../slices/leadSlice';
-import useToken from '../../Features/Authentication/useToken'; // ← assuming this exists like in FileUpload
+import { BaseDTO } from "./baseModels";
+import * as Yup from "yup";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+ 
+dayjs.extend(customParseFormat);
 
-interface DueDiligenceProps {
-  onSave?: () => void;
-  leadId?: number; // optional – but we prefer from store
+//Data model
+export interface NbfcLoanDetails extends BaseDTO {
+  customerAppliedAmount?: number;
+  nbfcCustomerApplicationDate?: number;
+  customerRequestedTenure?: number;
+  nbfcLoanAmount?: number;
+  nbfcSanctionDate?: Date;
+  nbfcTenure?: number;
+  purpose?: string;
+  cgtmse?: string;
+  nbfcRateType?: string; //UI
+  nbfcMclrReferenceRate?: number; //UI
+  nbfcSpread?: number; //UI
+  nbfcRoi?: number;
+  blendedRate?: number;
+  effectiveServiceFee?: number;
+  serviceFeePayableToNBFC?: number;
+  sidbiRate?: number;
+  nbfcRate?: number;
+  mclrReferenceRate?: number;
+  sidbiRateVal?: number;
+  actualSidbiSharePercentage?: number;
 }
 
-const DueDiligence = React.forwardRef<any, DueDiligenceProps>(({ onSave }, ref) => {
-  const { id: leadIdFromStore } = useAppSelector((state) => state.leadStore);
-  const leadId = leadIdFromStore || undefined; // or pass from props if needed
-
-  const { data: leadData } = useGetLeadQuery(leadId || 0, { skip: !leadId });
-  const [updateLead, { isLoading: isSaving }] = useUpdateLeadMutation();
-
-  const { getToken } = useToken(); // ← reuse same auth hook as FileUpload
-
-  const [comment, setComment] = React.useState<string>('');
-  const [downloadProgress, setDownloadProgress] = React.useState<number>(0);
-  const [isDownloading, setIsDownloading] = React.useState(false);
-
-  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
-  const [snackbarMessage, setSnackbarMessage] = React.useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error'>('success');
-
-  // You can sync comment from backend if you store it
-  React.useEffect(() => {
-    // Uncomment if you decide to persist the comment in backend
-    // if (leadData?.legalEntity?.dueDiligenceComment) {
-    //   setComment(leadData.legalEntity.dueDiligenceComment);
-    // }
-  }, [leadData]);
-
-  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setComment(e.target.value);
-  };
-
-  const handleSave = async () => {
-    if (!leadId) {
-      setSnackbarMessage('No lead ID found');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    try {
-      const patchPayload = {
-        id: leadId,
-        legalEntity: {
-          ...(leadData?.legalEntity || {}),
-          dueDiligenceComment: comment.trim(),
-        },
-      };
-
-      await updateLead(patchPayload).unwrap();
-
-      setSnackbarMessage('Due Diligence comment saved successfully');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-
-      if (onSave) onSave();
-    } catch (err: any) {
-      console.error('Save failed:', err);
-      setSnackbarMessage(err?.data?.message || 'Failed to save comment');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!leadId) {
-      setSnackbarMessage('No lead ID found');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    setIsDownloading(true);
-    setDownloadProgress(0);
-    setSnackbarMessage('Starting download...');
-    setSnackbarSeverity('info');
-    setSnackbarOpen(true);
-
-    try {
-      const token = getToken();
-
-      const response = await axios({
-        method: 'GET',
-        url: `/dueReport/dueDeligenceZip?leids=${leadId}`, // adjust baseURL if needed
-        responseType: 'blob', // crucial for binary files (zip)
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        onDownloadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setDownloadProgress(percent);
+//Validation Schema for the model
+export const nbfcLoanDetailsSchema = (nbfcRate: number, sidbiRate: number, actualSidbiSharePercentage: number | undefined) => Yup.object().shape({
+  customerAppliedAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcCustomerApplicationDate: Yup.string()
+    .nullable()  // This allows null values (so the field can be empty).
+    .notRequired()  // Makes it optional, so validation is not triggered if the field is empty.
+    .test(
+      'valid-date',
+      'Please enter a valid date in DD/MM/YYYY format',
+      (value) => {
+        if (value) {
+          const parsedDate = dayjs(value);
+          if (parsedDate.isValid()) {
+            value = parsedDate.format('YYYY-MM-DD'); // Extract only the date
           }
-        },
-      });
-
-      // Create blob URL and trigger download
-      const blob = new Blob([response.data], { type: 'application/zip' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `due-diligence-lead-${leadId}.zip`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      setSnackbarMessage('Due Diligence ZIP downloaded successfully');
-      setSnackbarSeverity('success');
-    } catch (err: any) {
-      console.error('Download failed:', err);
-      const msg =
-        err?.response?.status === 404
-          ? 'Due diligence files not found for this lead'
-          : err?.message || 'Failed to download due diligence document';
-      setSnackbarMessage(msg);
-      setSnackbarSeverity('error');
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress(0);
-      setSnackbarOpen(true);
-    }
-  };
-
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
-
-  return (
-    <Box sx={{ p: 3, backgroundColor: '#fff', borderRadius: 1 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" fontWeight={600} color="text.primary">
-          Due Diligence
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          Add notes, observations, or findings from due diligence process
-        </Typography>
-      </Box>
-
-      <Grid container spacing={3}>
-        {/* Comment Field */}
-        <Grid item xs={12}>
-          <TextField
-            label="Due Diligence Comments / Remarks"
-            multiline
-            rows={6}
-            fullWidth
-            variant="outlined"
-            value={comment}
-            onChange={handleCommentChange}
-            placeholder="Enter observations, red flags, approvals, recommendations, etc..."
-            InputLabelProps={{ shrink: true }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: '#fafafa',
-              },
-            }}
-          />
-        </Grid>
-
-        {/* Action Buttons */}
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-              flexWrap: 'wrap',
-              justifyContent: { xs: 'center', sm: 'flex-start' },
-            }}
-          >
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-              onClick={handleSave}
-              disabled={isSaving}
-              sx={{ minWidth: 160 }}
-            >
-              {isSaving ? 'Saving...' : 'Save Comment'}
-            </Button>
-
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={
-                isDownloading ? <CircularProgress size={20} color="primary" /> : <DownloadIcon />
-              }
-              onClick={handleDownload}
-              disabled={isDownloading}
-              sx={{ minWidth: 220 }}
-            >
-              {isDownloading ? 'Downloading...' : 'Download Due Diligence Document'}
-            </Button>
-          </Box>
-
-          {isDownloading && downloadProgress > 0 && (
-            <Box sx={{ mt: 2 }}>
-              <LinearProgress variant="determinate" value={downloadProgress} />
-              <Typography variant="body2" align="center" sx={{ mt: 1 }}>
-                {downloadProgress}% — Generating ZIP...
-              </Typography>
-            </Box>
-          )}
-        </Grid>
-      </Grid>
-
-      {/* Feedback Snackbar */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={handleSnackbarClose}
-          severity={snackbarSeverity}
-          sx={{ width: '100%' }}
-          variant="filled"
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
-  );
-});
-
-export default DueDiligence;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-https://codesandbox.io/p/sandbox/infinite-scroll-fz9738?file=%2Fsrc%2FComponents%2FInfiniteScroll.jsx
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import EntityForm from "../../Components/Framework/EntityForm";
-import { useImperativeHandle, useState } from "react";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import { useAppSelector } from "../../app/hooks";
-import {
-  useAddKmpMutation,
-  useGetKmpQuery,
-  useListKmpsQuery,
-  useUpdateKmpMutation,
-} from "../../slices/keyManagementPersonnelSlice";
-import { Typography, Grid } from "@mui/material";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { TextBoxFieldUppercase } from "../../Components/Framework/TextBoxFieldUppercase";
-// import { MaskedTextBoxField } from "../../Components/Framework/MaskedTextBoxField";
-import { TextBoxFieldAadhaarStartAdornment } from "../../Components/Framework/TextBoxFieldAadhaarStartAdornment";
-import {
-  FormSubmit,
-  SubmitableForm,
-} from "../../Components/Framework/FormSubmit";
-import React from "react";
-import {
-  defaultKeyManagemetPersonnel,
-  keyManagementPersonnelSchema,
-  KeyManagemetPersonnel,
-} from "../../models/keyManagementPersonnel";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-// import { DropDownField } from "../../Components/Framework/DropDownField";
-import Section from "../../Components/Framework/Section";
-import {
-  useAddKmpDocumentMutation,
-  useDeleteKmpDocumentMutation,
-  useLazyListKmpDocumentsQuery,
-  useListKmpDocumentsQuery,
-} from "../../slices/kmpDocumentSlice";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import {
-  useAddKmpBankDetailMutation,
-  useDeleteKmpBankDetailMutation,
-  useGetKmpBankDetailQuery,
-  useListKmpBankDetailsQuery,
-  useUpdateKmpBankDetailMutation,
-} from "../../slices/kmpBankDetailsSlice";
-import {
-  useAddKmpBankStatementMutation,
-  useDeleteKmpBankStatementMutation,
-  useLazyListKmpBankdStatementsQuery,
-  useListKmpBankdStatementsQuery,
-} from "../../slices/kmpBankStatementSlice";
-import BankDetailsContainer from "./BankDetailsContainer";
-import DocumentUploadContainer from "./DocumentUploadContainer";
-import {
-  useAddKmpItrMutation,
-  useDeleteKmpItrMutation,
-  useListKmpItrsQuery,
-} from "../../slices/kmpItrSlice";
-import {
-  useAddKmpBureauMutation,
-  useListKmpBureausQuery,
-  useDeleteKmpBureauMutation,
-  useLazyListKmpBureausQuery
-} from "../../slices/kmpBureauSlice";
-import {
-  useAddKmpAdditionalDocMutation,
-  useDeleteKmpAdditionalDocMutation,
-  useListKmpAdditionalDocsQuery,
-} from "../../slices/kmpAdditionalDocsSlice";
-import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
-import { RequestWithParentId, SearchRequest } from "../../models/baseModels";
-import { BankDetails } from "../../models/bankDetails";
-import { Document } from "../../models/document";
-import { BankStatement } from "../../models/bankStatement";
-import { DropDownFieldYes } from "../../Components/Framework/DropDownFieldYes";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { DropDownFieldInlineDomain } from "../../Components/Framework/DropDownFieldInlineDomain";
-import { useLazyGetMaterListFilteredQuery } from "../../slices/masterSlice";
-
-const KeyManagemetPersonnelComponent = React.forwardRef<
-  SubmitableForm,
-  { kmpId: number | undefined }
->((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-
-  const docListInput: RequestWithParentId<SearchRequest<Document>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
-  };
-
-  const bankDetailListInput: RequestWithParentId<SearchRequest<BankDetails>> = {
-    parentId: Number(props.kmpId) || 0,
-    requestValue: {},
-  };
-
-  // const { data: kmpKycDocuments } = useListKmpDocumentsQuery(docListInput);
-
-  const [listKmpDocsQuery] = useLazyListKmpDocumentsQuery();
-  const [listKmpBureausQuery] = useLazyListKmpBureausQuery();
-  const [masterDataQuery] = useLazyGetMaterListFilteredQuery();
-
-  const kmpListInput: RequestWithParentId<
-    SearchRequest<KeyManagemetPersonnel>
-  > = {
-    parentId: leadId || 0,
-    requestValue: {},
-  };
-
-  const { data: kmpList } = useListKmpsQuery(kmpListInput);
-
-  const [validationMessage, setValidationMessage] = useState("");
-
-  const validateAllKmps = async () : Promise<boolean> => {
-    
-    const masterBeneficiaryResponse = await masterDataQuery({
-      tableName: "m_beneficiary_type",
-      filter:undefined,
-      leadId: Number(leadId)
-    }).unwrap();
-    let overallValidationResult = true;
-    console.log("kmpList--> ",JSON.stringify(kmpList),JSON.stringify(masterBeneficiaryResponse));
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      // overallValidationResult = await kmpList.content.forEach(async (item) => {
-      //   let result = await validateKmp(item.id);
-      //   console.log("validateAllKmps", item.id, result);
-      //   overallValidationResult = overallValidationResult && result;
-      //   return overallValidationResult;
-      // })
-
-      setValidationMessage("");
-
-      for(let i = 0; i <kmpList.content.length; i++) {
-        overallValidationResult = await validateKmp(kmpList.content[i].id);
-        console.log("validateKmp: return value", kmpList.content[i].id, overallValidationResult);
-        if(!overallValidationResult) break;
-      }
-    } 
-
-    console.log("overallValidationResult", overallValidationResult);
-
-    if (overallValidationResult) {
-      const guarantorKey = masterBeneficiaryResponse.find(item => item.value === "Guarantor")?.key || "2";
-      const guarantorCount = kmpList.content.filter(item => item.professionalInformation && item.professionalInformation.beneficiaryType === guarantorKey).length;
-
-      if (guarantorCount > 1) {
-        setValidationMessage("Cannot have more than one Guarantor.");
-        overallValidationResult = false;
-      } else if (guarantorCount > 0 && kmpList.content.length < 2) {
-        setValidationMessage("If there is a Guarantor, at least one more KMP is mandatory.");
-        overallValidationResult = false;
-      }
-    }
-
-    return overallValidationResult;
-  }
-
-  const validateKmp = async (kmpId?: number) : Promise<boolean> => {
-
-    if(kmpId === undefined || Number.isNaN(kmpId)) return true;
-
-    let kmpKycDocuments = await listKmpDocsQuery({
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    }).unwrap();
-
-    console.log("KMP Validate Form: ", kmpId, kmpKycDocuments);
-
-    if(kmpKycDocuments?.content === undefined || 
-      kmpKycDocuments?.content.length < 2) {
-      setValidationMessage("Individual should have atleast 2 KYC Documents");
-      console.log("Returing false from validateKmp", kmpId);
-      return false;
-    }
-
-    if(kmpKycDocuments && kmpKycDocuments.content !== undefined &&
-      kmpKycDocuments.content.length > 0) {
-        console.log(kmpKycDocuments.content.length);
-      //10 represents PAN document. 13 represents Form 60
-      //If the DB ID changes, this has to be changed.
-      let panDocList = kmpKycDocuments?.content.filter(item => item.type === "10");
-      let form60 = kmpKycDocuments?.content.filter(item => item.type === "13");
-      if(panDocList.length <= 0 && form60.length <= 0) {
-        setValidationMessage("Please upload PAN copy or Form 60 in KYC Documents section.");
-        console.log("Returing false from validateKmp", kmpId);
-        return false;
-      }
-
-      //Requirement: If a KMP has Form 60, then atleast one of voter id / passport / aadhar / driving license / job card should be uploaded
-      //4 - Voter ID, 1 - Passport, 2 - DL, 5 - Job Card, ?? - Aadhar
-      let voterId = kmpKycDocuments?.content.filter(item => item.type === "4");
-      let passport = kmpKycDocuments?.content.filter(item => item.type === "1");
-      let driversLicense = kmpKycDocuments?.content.filter(item => item.type === "2");
-      let jobCard = kmpKycDocuments?.content.filter(item => item.type === "5");
-
-      if(form60.length > 0) {
-        if(voterId.length <= 0 && passport.length <= 0 && driversLicense.length <= 0 && jobCard.length <= 0) {
-          setValidationMessage("If FORM 60 is uploaded, then atleast one of voter id / passport / aadhar / driving license / job card should be uploaded.");
-          console.log("Returing false from validateKmp", kmpId);
-          return false;
+          // Check if the date is valid in the required format
+          return dayjs(value, 'YYYY-MM-DD', true).isValid();
         }
+        return true; // Return true if the field is empty, so validation passes
       }
-
-      //Requirement: Photo upload is mandatory
-      //8 - Photo
-      let photo = kmpKycDocuments?.content.filter(item => item.type === "8");
-      if(photo.length <= 0) {
-        setValidationMessage("Photo is mandatory for individuals.");
-        console.log("Returing false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    //Requirement: Atleast one of the KMP should have PAN
-    if(kmpList && kmpList.content != undefined && kmpList.content.length > 0) {
-      console.log("kmpList?.content pan",kmpList?.content);
-      let kmpWithPan = kmpList?.content.filter(item => item.pan !== undefined && item.pan !== null);
-      console.log("kmpwithpan",kmpWithPan);
-      if(kmpWithPan.length <= 0) {
-        setValidationMessage("Atleast PAN for one individual is mandatory.");
-        console.log("Returing false from validateKmp", kmpId);
-        return false;
-      }
-    }
-
-    // Bureau validation - At least 1 bureau document required
-    let kmpBureauDocuments = await listKmpBureausQuery({
-      parentId: Number(kmpId) || 0,
-      requestValue: {},
-    }).unwrap();
-
-    console.log("KMP Bureau Validate: ", kmpId, kmpBureauDocuments);
-    
-    if(kmpBureauDocuments?.content === undefined || 
-      kmpBureauDocuments?.content.length < 1) {
-      setValidationMessage("Individual should have at least 1 Bureau Document");
-      console.log("Returning false from validateKmp - Bureau missing", kmpId);
-      return false;
-    }
-
-    console.log("Returing true from validateKmp", kmpId);
-
-    return true;
-  }
-
-  const validateForm = async () => {
-    return validateKmp(props.kmpId);
-  };
-
-  useImperativeHandle(ref, () => ({        
-
-		//1. Submit function
-		async submit() {
-			if(await validateForm()) {
-       
-        if(formToSubmit.current) 
-        {
-          let isValidToSubmit = await formToSubmit.current.isValid();
-
-          if(isValidToSubmit) {
-            await formToSubmit.current.submit();
-            let response = await validateAllKmps();
-            console.log("validateAllKmps: ", response);
-            return response;
-          } else {
-            return false;
-          }
+    )
+    .test(
+      'not-future-date',
+      'Date cannot be in the future',
+      (value) => {
+        if (value) {
+          // Ensure the date is not in the past or in the future
+          return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isAfter(dayjs(), 'day'));
         }
-      } 
-
-      return false;
-		},
-  
-		//2. Check is dirty
-		isDirty() {
-      if(formToSubmit.current) 
-      {
-        return formToSubmit.current.isDirty();
+        return true; // Return true if the field is empty, so validation passes
       }
-
-      return false;
-    },
-  
-		//3. isValid
-		async isValid() {
-
-      setValidationMessage("")
-
-      if(props.kmpId === undefined || Number.isNaN(props.kmpId)) {
-        setValidationMessage("Please save and add the mandatory documents before proceeding.");
-        return false;
+    )
+    ,
+  customerRequestedTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcLoanAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number"),
+  nbfcSanctionDate: Yup.string()
+    .nullable()
+    .notRequired()
+    .transform((value) => {
+      if (!value) return value;
+      const d = dayjs(value, "DD/MM/YYYY", true);
+      return d.isValid() ? d.format("YYYY-MM-DD") : value; // stored as YYYY-MM-DD
+    })
+    .test(
+      "valid-date",
+      "Please enter a valid date in DD/MM/YYYY format",
+      (value) => {
+        if (!value) return true;
+        return dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true).isValid();
       }
-
-      let formIsValid = await validateAllKmps();
-
-      if(formIsValid && formToSubmit.current)
-      {
-        let response = await formToSubmit.current.isValid();
-        if(response === true) return response;
-      }
-      return false;
-    },
+    )
+    .test(
+      "sanction-after-disbursal",
+      "NBFC Sanction Date must be greater than or equal to Customer Application Date",
+      function (value) {
+        if (!value) return true;
+        const { nbfcCustomerApplicationDate } = this.parent;
+        if (!nbfcCustomerApplicationDate) return true;
   
-		//4. GetValues
-		getValues() {
-
-      if(formToSubmit.current && formToSubmit.current.getValues) 
-      {
-        formToSubmit.current.getValues();
-      }
-
-      return {};
-    }
+          const sanction = dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
+          const disbursal = dayjs(nbfcCustomerApplicationDate, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
   
-  }));
+          if (!sanction.isValid() || !disbursal.isValid()) return true;
+  
+          return (
+            sanction.isSame(disbursal, "day") ||
+            sanction.isAfter(disbursal, "day")
+          );
+        }
+      ),
+  nbfcTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .test(
+      'is-less-than-or-equal-to-nbfcTenure',
+      'Assured Tenure should not be greater than Total Tenure (In Months) of the Loan',
+      function (value) {
+        const { customerRequestedTenure } = this.parent; // Access `nbfcTenure` from the parent object
+        return value !== undefined && value <= customerRequestedTenure; // Ensure `value` is defined and validate
+      }
+    ),
+  purpose: Yup.string()
+    .notRequired()
+    .typeError("Please select from the drop down"),
+  cgtmse: Yup.string()
+    .required("Please select a value from drop-down list"),
+  nbfcRateType: Yup.string()
+  .required("Please select a value from drop-down list"),
+  // nbfcRate: Yup.string().required("NBFC Rate is required"),
+  nbfcRate: Yup.number()
+  .notRequired()
+  // .test(
+  //   "nbfc-greater-than-sidbi",
+  //   "NBFC Rate must be greater than SIDBI Rate",
+  //   (value) => {      
+  //     if (isNaN(nbfcRate) || isNaN(sidbiRate)) return true;
+  //     return Number(nbfcRate) > sidbiRate;
+  //   }
+  // )
+  ,
+  nbfcSpread: Yup.string().required("NBFC Spread is required"),
+  nbfcMclrReferenceRate: Yup.number().required("MCLR Ref Rate is mandatory."),
+  // blendedRate: Yup.string().test(
+  //   "blended-rate-check",
+  //   function (value) {
+  //     // Use the arguments passed to the factory function directly
+  //     const sRate = Number(sidbiRate);
+  //     const nRate = Number(nbfcRate);
+  //     const sharePerc = Number(actualSidbiSharePercentage);
 
-  return leadId ? (
-    <EntityForm
-      parentId={leadId}
-      id={props.kmpId}
-      defaultItem={defaultKeyManagemetPersonnel}
-      itemSchema={keyManagementPersonnelSchema}
-      useAddItemMutation={useAddKmpMutation}
-      useUpdateItemMutation={useUpdateKmpMutation}
-      useGetItemQuery={useGetKmpQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <>
-        <div>
-          <div>
-            <Section>
-              {validationMessage !== "" && 
-              <Grid container spacing={0} paddingTop={2} paddingLeft={4}>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    Check all KMPs for the following error.
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} lg={12}>
-                  <Typography
-                    variant="h6"
-                    gutterBottom
-                    style={{ marginBottom: "0px", fontWeight: "600", color: "red" }}
-                  >
-                    {validationMessage}
-                  </Typography>
-                </Grid>
-              </Grid>}
-              <Grid
-                container
-                style={{ backgroundColor: error && "#FFD1DC" }}
-                padding={4}
-                paddingTop={2}
-                spacing={0}
-              >
-                <Grid item xs={12} lg={12}>
-                  {isLoading && <LinearProgress color="secondary" />}
-                </Grid>
+  //     // Skip validation if data is missing or invalid
+  //     if (isNaN(sRate) || isNaN(nRate) || isNaN(sharePerc)) {
+  //       return true;
+  //     }
 
-                <Grid container spacing={2}>
-                  <Grid item xs={12} lg={12}>
-                    <ErrorMessage status={error} />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          First Name
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="firstName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label="Middle Name "
-                      name="middleName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Last Name
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="lastName"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>
-                          DOB
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="dob"
-                      allowPast={true}
-                      // ageRestrict={18}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label="PAN "
-                      name="pan"
-                      uppercase={true}
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldAadhaarStartAdornment
-                      label={
-                        <>
-                          Aadhaar Number
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name={"aadhaarNumber"}
-                    />
-                    {/* <MaskedTextBoxField
-                      label="Aadhaar Number"
-                      name="aadhaarNumber"
-                      mask={[
-                        /[X\d]/,
-                        /[X\d]/,
-                        /[X\d]/,
-                        /[X\d]/,
-                        "-",
-                        /[X\d]/,
-                        /[X\d]/,
-                        /[X\d]/,
-                        /[X\d]/,
-                        "-",
-                        /\d/,
-                        /\d/,
-                        /\d/,
-                        /\d/,
-                      ]}
-                      maskNumberValues="XXXX-XXXX-"
-                      preOrPostPosition="pre"
-                    /> */}
-                  </Grid>
-                  {/* <Grid item xs={12} lg={4}>
-                    <DropDownField
-                      label="Gender"
-                      name="gender"
-                      domain="gender"
-                    />
-                  </Grid> */}
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Category
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="beneficiaryCategory"
-                      domain="m_beneficiary_category"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Marital Status
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="maritalStatus"
-                      domain="m_marital_status"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldUppercase
-                      label={
-                        <>
-                        CKYC Number
-                        </>
-                      }
-                      name="ckycNumber"
-                      maxLength={14}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYesNo
-                      label={
-                        <>
-                          Politically Exposed Person
-                          <span className="required_symbol"
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="politicallyExposedPerson"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DropDownFieldYes
-                      label={
-                        <>
-                          UN Terrorist Checked & No Matches Found
-                          <span className="required_symbol"
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="unTerroist"
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2} paddingY={4}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
+  //     // 1. Recompute blended rate
+  //     const computedBlendedRate =
+  //       (sRate * sharePerc) / 100 + 
+  //       (nRate * (1 - sharePerc / 100));
 
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Contact Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Email
-                        </>
-                      }
-                      name="contactInformation.email"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Phone Number
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="contactInformation.phoneNumber"
-                      type="number"
-                      maxLength={10}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Address
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="contactInformation.address"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    {/* <AutocompleteField
-                      label="City "
-                      name="contactInformation.city"
-                      domain="cities"
-                      filter="contactInformation.state"
-                    /> */}
-                    <TextBoxField
-                      label={
-                        <>
-                          City
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="contactInformation.city"
-                      multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          State
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="contactInformation.state"
-                      domain="m_states"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Pin Code
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="contactInformation.pincode"
-                      type="number"
-                      maxLength={6}
-                    />
-                  </Grid>
-                </Grid>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <hr
-                      style={{
-                        marginTop: 0,
-                        marginBottom: "8px",
-                        backgroundColor: "#C0C0C0",
-                        color: "#C0C0C0",
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    <Typography
-                      variant="h6"
-                      gutterBottom
-                      style={{ marginBottom: "0px", fontWeight: "600" }}
-                    >
-                      Professional Information
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField
-                      label={
-                        <>Appointment Date
-                        </>
-                      }
-                      name="professionalInformation.appointmentDate"
-                      allowPast={true}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    {/* <DropDownField
-                      label="Designation"
-                      name="professionalInformation.designation"
-                      domain="designation"
-                    /> */}
-                    <DropDownFieldInlineDomain
-                      label={
-                        <>
-                          KMP Type
-                          <span className="required_symbol"
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="professionalInformation.designation"
-                      domain={["Financial", "Non financial"]}
-                      // multiline={3}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxField
-                      label={
-                        <>
-                          Experience in Years
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="professionalInformation.experienceInYear"
-                      type="number"
-                      maxLength={2}
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <AutocompleteField
-                      label={
-                        <>
-                          Beneficiary Type
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="professionalInformation.beneficiaryType"
-                      domain="m_beneficiary_type"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={4}>
-                    <TextBoxFieldPercentageEndAdornment
-                      label={
-                        <>
-                          Shareholding
-                          <span
-                            style={{ color: "red" }}
-                          >
-                            {" "}
-                            *
-                          </span>
-                        </>
-                      }
-                      name="professionalInformation.shareHolding"
-                    />
-                  </Grid>
-                  <Grid item xs={12} lg={12}>
-                    {!props.kmpId && (
-                      <span>
-                        Please save the Key Management Personnel to add related
-                        documents & bank details.
-                      </span>
-                    )}
-                  </Grid>
-                </Grid>
-              </Grid>
-            </Section>
-          </div>
-        </div>
+  //     // 2. Determine threshold logic
+  //     const isHighShare = sharePerc > 80;
+  //     const maxAllowed = isHighShare ? sRate + 0.5 : sRate + 1;
 
-        {props.kmpId && (
-          <>
-            <DocumentUploadContainer
-              parentId={props.kmpId}
-              message="Save the Key management personal to add documents."
-              heading="KYC Documents"
-              bucket="kmpDocuments"
-              documentTypeDomain={"m_kmp_kyc_document_type"}
-              useAddMutation={useAddKmpDocumentMutation}
-              useListQuery={useListKmpDocumentsQuery}
-              useDeleteMutation={useDeleteKmpDocumentMutation}
-            />
+  //     // 3. Validation Check
+  //     if (computedBlendedRate > maxAllowed) {
+  //       return this.createError({
+  //         message: isHighShare
+  //           ? "Blended Rate Test cannot exceed SIDBI Rate + 0.5%"
+  //           : "Blended Rate Test cannot exceed SIDBI Rate + 1%",
+  //       });
+  //     }
 
-            <Grid
-              container
-              style={{
-                backgroundColor: error && "#FFD1DC",
-                paddingBottom: 0,
-                paddingLeft: "16px",
-                paddingRight: "8px",
-              }}
-              padding={4}
-              spacing={2}
-            >
-              <DocumentUploadContainer
-                parentId={props.kmpId}
-                heading={"Bureau"}
-                bucket={"kmpBureaus"}
-                documentTypeDomain={"m_bureau"}
-                useAddMutation={useAddKmpBureauMutation}
-                useListQuery={useListKmpBureausQuery}
-                useDeleteMutation={useDeleteKmpBureauMutation}
-              />
-            </Grid>
-          </>
-        )}
-      </>
-      <FormSubmit ref={formToSubmit} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
-  );
+  //     return true;
+  //   }
+  // ),
 });
 
-export default KeyManagemetPersonnelComponent;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import Grid from "@mui/material/Grid";
-import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
-import EntityForm from "../../Components/Framework/EntityForm";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { useState, useEffect } from "react";
-import Typography from "@mui/material/Typography";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import * as Yup from "yup";
-import {
-  FormSubmit,
-  SubmitableForm,
-} from "../../Components/Framework/FormSubmit";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-import React from "react";
-import { useAppSelector } from "../../app/hooks";
-import {
-  defaultLoanDetails,
-  loanDetailsSchema,
-} from "../../models/loanDetails";
-import {
-  defaultNbfcLoanDetails,
-  nbfcLoanDetailsSchema,
-} from "../../models/nbfcLoanDetails";
-import Section from "../../Components/Framework/Section";
-import { TextBoxFieldAmountStartAdornmentWithDecimalText } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimalText";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
-import { SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-import SaveColorButton from "../../Components/Framework/ColorButton";
-
-const formatNonDigitCharacter = (num: string): string => {
-  if (num == null) return "";
-  const str = String(num);
-  let formattedNum = str.replace(/[^0-9.]/g, "");
- 
-  const parts = formattedNum.split(".");
-  if (parts.length > 2) {
-    formattedNum = `${parts[0]}.${parts[1]}`;
-  }
- 
-  if (parseFloat(formattedNum) > 100) {
-    return "100";
-  }
- 
-  if (parts[1]) {
-    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
-  }
- 
-  return formattedNum;
+//Default values
+export const defaultNbfcLoanDetails = {
+  customerAppliedAmount: undefined,
+  nbfcCustomerApplicationDate: undefined,
+  customerRequestedTenure: undefined,
+  nbfcLoanAmount: undefined,
+  nbfcSanctionDate: undefined,
+  nbfcTenure: undefined,
+  purpose: undefined,
+  cgtmse: undefined,
+  nbfcRateType: undefined,
+  nbfcMclrReferenceRate: undefined,
+  nbfcSpread: undefined,
+  nbfcRoi: undefined,
+  blendedRate: undefined,
+  effectiveServiceFee: undefined,
+  serviceFeePayableToNBFC: undefined,
+  sidbiRate: undefined,
+  nbfcRate: undefined,
+  mclrReferenceRate: undefined,
+  sidbiRateVal: undefined,
+  actualSidbiSharePercentage: undefined,
 };
 
-const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-    
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const { data } = useGetLeadQuery(Number(leadId) || skipToken);
-
-  const [isInterestFixationPossible] = useState((
-        (data?.leadStatus === "SANCTIONED" && data?.sidbiStatus === "WITH_NBFC")|| 
-        data?.leadStatus === "DISBURSED"));
-
-  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
-
-  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
-  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
-  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
-
-  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
-    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
-      let nbfcShare = 1 - config.sidbiShare;
-      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
-      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
-      setEffectiveRate(formattedEffectiveRateCalc);
-      return formattedEffectiveRateCalc;
-    }
-  }
-
-  useEffect(() => {
-    if (data && config) {
-      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
-      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
-   
-      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
-      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
-   
-      setNbfcRoi(formattedNbfc);
-      setSidbiRoiToCustomer(formattedSidbi);
-   
-      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
-    }
-  }, [data, config]);
-
-  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value) || 0;
-    setNbfcRoi(value);
-    if (sidbiRoiToCustomer !== null)
-      calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
-  };
-
-  const formToSubmit = React.useRef<SubmitableForm>(null);
-
-  const handleSave = () => {
-    if(formToSubmit.current) formToSubmit.current.submit();
-  }
-
-  return leadId ? (
-    <EntityForm
-      id={leadId || 0}
-      defaultItem={{
-        loanDetails: defaultLoanDetails,
-        nbfcLoanDetails: defaultNbfcLoanDetails,
-      }}
-      itemSchema={Yup.object().shape({
-        loanDetails: loanDetailsSchema,
-        nbfcLoanDetails: nbfcLoanDetailsSchema,
-      })}
-      useUpdateItemMutation={useUpdateLeadMutation}
-      useGetItemQuery={useGetLeadQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <Grid
-        container
-        style={{
-          backgroundColor: error && "#FFD1DC",
-          paddingBottom: 0,
-          paddingLeft: "16px",
-          paddingRight: "8px",
-        }}
-        spacing={2}
-      >
-        <Grid item xs={12} lg={12}>
-          {isLoading && <LinearProgress color="secondary" />}
-        </Grid>
-
-        <Section>
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                NBFC Loan Details
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimalText
-                label={
-                  <>
-                  Customer Applied Amount<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcLoanAmount"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-                <DatePickerField
-                  label={
-                    <>Customer Application Date</>
-                  }
-                  name="nbfcLoanDetails.nbfcDisbursalDate"
-                  allowPast={true}
-                  disabled
-                />
-              </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.nbfcTenure"
-                type="number"
-                maxLength={3}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimalText
-                label={
-                  <>
-                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.outstandingAmount"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-                <DatePickerField
-                  label={
-                    <>NBFC Sanction Date</>
-                  }
-                  name="nbfcLoanDetails.nbfcSanctionDate"
-                  allowPast={true}
-                  disabled
-                />
-              </Grid>
-              <Grid item xs={12} lg={4}>
-                <TextBoxField
-                  label={
-                    <>
-                      NBFC assessed Tenure (months)<span style={{ color: 'red' }}> *</span>
-                    </>
-                  }
-                  name="nbfcLoanDetails.balanceTenure"
-                  type="number"
-                  maxLength={3}
-                  disabled
-                />
-              </Grid>
-              <Grid item xs={12} lg={4}>
-                <AutocompleteField
-                  label={"Purpose"}
-                  name={"nbfcLoanDetails.purpose"}
-                  domain={"m_purpose_of_loan"}
-                  disabled
-                />
-              </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    CGTMSE<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.cgtmse"}
-                domain={"m_cgstme"}
-                disabled
-              />
-            </Grid>
-            {data?.productName === 'secured' && (
-              <>
-                <Grid item xs={12} lg={4}>
-                  <DropDownFieldYesNo
-                    label="Project Loan"
-                    name={"nbfcLoanDetails.projectloan"}
-                    disabled
-                    css={"#F8F8F8"}
-                  />
-                </Grid>
-                {data?.nbfcLoanDetails?.projectloan == 'y' && (
-                  <Grid item xs={12} lg={4}>
-                    <DatePickerField label="DCCO" name={"nbfcLoanDetails.dcco"} />
-                  </Grid>
-                )}
-              </>
-            )}
-          </Grid>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-        </Section>
-
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Loan Ask
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiShare/>
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiLoanAmount/>
-            </Grid>
-          </Grid>
-        </Section>
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Interest Fixation
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-              <Grid item xs={12} lg={4}>
-                <TextBoxFieldPercentageEndAdornment
-                  label={
-                    <>
-                    NBFC ROI<span style={{ color: 'red' }}> *</span>
-                    </>
-                  }
-                  name="nbfcLoanDetails.nbfcRoi"
-                onChange={handleNbfcRoiChange}
-                disabled={!isInterestFixationPossible}
-                css={!isInterestFixationPossible && "#F8F8F8"}
-                />
-              </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI's Hurdle Rate Type
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.rateType"}
-                domain={"m_base_rate_type"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                  SIDBI's Hurdle Rate<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.benchMarkRate"}
-                domain={"m_interest_rate"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Maximum Service rate fee
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.maxServiceRateFee"
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    SIDBI ROI to customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.sidbiRate" 
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Effective interest rate to end customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.effectiveInterestRateToCustomer"
-                valueChanged={effectiveRate}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            {isInterestFixationPossible && 
-                  <Grid item xs={12} style={{ textAlign: "right" }}>
-                    <SaveColorButton
-                      variant="contained"
-                      onClick={handleSave}
-                    >
-                      Save
-                    </SaveColorButton>
-                  </Grid>
-            }
-          </Grid>
-        </Section>
-      </Grid>
-      <FormSubmit ref={formToSubmit} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
-  );
-});
-
-export default LoanDetailsNbfc;
-
-
-
-
-
-
-
-
-.
-
-
-
-
 import Grid from "@mui/material/Grid";
 import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
 import EntityForm from "../../Components/Framework/EntityForm";
 import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useImperativeHandle } from "react";
 import Typography from "@mui/material/Typography";
 import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
 import LinearProgress from "@material-ui/core/LinearProgress";
 import * as Yup from "yup";
-import {
-  FormSubmit,
-  SubmitableForm,
-} from "../../Components/Framework/FormSubmit";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-import React from "react";
-import { useAppSelector } from "../../app/hooks";
-import {
-  defaultLoanDetails,
-  loanDetailsSchema,
-} from "../../models/loanDetails";
-import {
-  defaultNbfcLoanDetails,
-  nbfcLoanDetailsSchema,
-} from "../../models/nbfcLoanDetails";
-import Section from "../../Components/Framework/Section";
-import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import { SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-
-const formatNonDigitCharacter = (num: string): string => {
-  if (num == null) return "";
-  const str = String(num);
-  let formattedNum = str.replace(/[^0-9.]/g, "");
- 
-  const parts = formattedNum.split(".");
-  if (parts.length > 2) {
-    formattedNum = `${parts[0]}.${parts[1]}`;
-  }
- 
-  if (parseFloat(formattedNum) > 100) {
-    return "100";
-  }
- 
-  if (parts[1]) {
-    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
-  }
- 
-  return formattedNum;
-};
-
-const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-    
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const { data } = useGetLeadQuery(Number(leadId) || skipToken);
-
-  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
-
-  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
-  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
-  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
-
-  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
-    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
-      let nbfcShare = 1 - config.sidbiShare;
-      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
-      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
-      setEffectiveRate(formattedEffectiveRateCalc);
-    }
-  }
-
-  useEffect(() => {
-    if (data && config) {
-      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
-      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
-   
-      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
-      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
-   
-      setNbfcRoi(formattedNbfc);
-      setSidbiRoiToCustomer(formattedSidbi);
-   
-      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
-    }
-  }, [data, config]);
-
-  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value) || 0;
-    setNbfcRoi(value);
-    if (sidbiRoiToCustomer !== null)
-      calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
-  };
-
-  return leadId ? (
-    <EntityForm
-      id={leadId || 0}
-      defaultItem={{
-        loanDetails: defaultLoanDetails,
-        nbfcLoanDetails: defaultNbfcLoanDetails,
-      }}
-      itemSchema={Yup.object().shape({
-        loanDetails: loanDetailsSchema,
-        nbfcLoanDetails: nbfcLoanDetailsSchema,
-      })}
-      useUpdateItemMutation={useUpdateLeadMutation}
-      useGetItemQuery={useGetLeadQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <Grid
-        container
-        style={{
-          backgroundColor: error && "#FFD1DC",
-          paddingBottom: 0,
-          paddingLeft: "16px",
-          paddingRight: "8px",
-        }}
-        spacing={2}
-      >
-        <Grid item xs={12} lg={12}>
-          {isLoading && <LinearProgress color="secondary" />}
-        </Grid>
-
-        <Section>
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                NBFC Loan Details
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    Customer Applied Amount<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcLoanAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label="Customer Application Date"
-                name="nbfcLoanDetails.nbfcDisbursalDate"
-                allowPast={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.nbfcTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.outstandingAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label="NBFC Sanction Date"
-                name="nbfcLoanDetails.nbfcSanctionDate"
-                allowPast={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    NBFC assessed Tenure (months)
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.balanceTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label="Purpose"
-                name={"nbfcLoanDetails.purpose"}
-                domain={"m_purpose_of_loan"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    CGTMSE<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.cgtmse"}
-                domain={"m_cgstme"}
-              />
-            </Grid>
-          </Grid>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-        </Section>
-
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Loan Ask
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiShare/>
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiLoanAmount/>
-            </Grid>
-          </Grid>
-        </Section>
-
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Interest Fixation
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    NBFC ROI<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcRoi"}
-                onChange={handleNbfcRoiChange}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI's Hurdle Rate Type
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.rateType"}
-                domain={"m_base_rate_type"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI's Hurdle Rate
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.benchMarkRate"}
-                domain={"m_interest_rate"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Maximum Service rate fee<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.maxServiceRateFee"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    SIDBI ROI to customer
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.sidbiRate"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Effective interest rate to end customer
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.effectiveInterestRateToCustomer"}
-                valueChanged={effectiveRate}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>            
-          </Grid>
-        </Section>
-      </Grid>
-      <FormSubmit ref={ref} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
-  );
-});
-
-export default LoanDetailsNbfc;
-
-
-
-
-
-
-
-
-
-
-
-import Grid from "@mui/material/Grid";
-import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
-import EntityForm from "../../Components/Framework/EntityForm";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { useState, useEffect } from "react";
-import Typography from "@mui/material/Typography";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import * as Yup from "yup";
-import {
-  FormSubmit,
-  SubmitableForm,
-} from "../../Components/Framework/FormSubmit";
-import { DatePickerField } from "../../Components/Framework/DatePickerField";
-import React from "react";
-import { useAppSelector } from "../../app/hooks";
-import {
-  defaultLoanDetails,
-  loanDetailsSchema,
-} from "../../models/loanDetails";
-import {
-  defaultNbfcLoanDetails,
-  nbfcLoanDetailsSchema,
-} from "../../models/nbfcLoanDetails";
-import Section from "../../Components/Framework/Section";
-import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
-import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
-import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
-import { SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
-import { skipToken } from "@reduxjs/toolkit/dist/query";
-
-const formatNonDigitCharacter = (num: string): string => {
-  if (num == null) return "";
-  const str = String(num);
-  let formattedNum = str.replace(/[^0-9.]/g, "");
- 
-  const parts = formattedNum.split(".");
-  if (parts.length > 2) {
-    formattedNum = `${parts[0]}.${parts[1]}`;
-  }
- 
-  if (parseFloat(formattedNum) > 100) {
-    return "100";
-  }
- 
-  if (parts[1]) {
-    formattedNum = `${parts[0]}.${parts[1].substring(0, 2)}`;
-  }
- 
-  return formattedNum;
-};
-
-const LoanDetails = React.forwardRef<SubmitableForm, {}>((props, ref) => {
-  const { id: leadId } = useAppSelector((state) => state.leadStore);
-    
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const { data } = useGetLeadQuery(Number(leadId) || skipToken);
-
-  const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
-
-  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
-  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
-  const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
-
-  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
-    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
-      let nbfcShare = 1 - config.sidbiShare;
-      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
-      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
-      setEffectiveRate(formattedEffectiveRateCalc);
-    }
-  }
-
-  useEffect(() => {
-    if (data && config) {
-      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
-      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
-   
-      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
-      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
-   
-      setNbfcRoi(formattedNbfc);
-      setSidbiRoiToCustomer(formattedSidbi);
-   
-      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
-    }
-  }, [data, config]);
-
-  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value) || 0;
-    setNbfcRoi(value);
-    if (sidbiRoiToCustomer !== null)
-      calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
-  };
-
-  return leadId ? (
-    <EntityForm
-      id={leadId || 0}
-      defaultItem={{
-        loanDetails: defaultLoanDetails,
-        nbfcLoanDetails: defaultNbfcLoanDetails,
-      }}
-      itemSchema={Yup.object().shape({
-        loanDetails: loanDetailsSchema,
-        nbfcLoanDetails: nbfcLoanDetailsSchema,
-      })}
-      useUpdateItemMutation={useUpdateLeadMutation}
-      useGetItemQuery={useGetLeadQuery}
-      setError={setError}
-      setIsLoading={setIsLoading}
-    >
-      <Grid
-        container
-        style={{
-          backgroundColor: error && "#FFD1DC",
-          paddingBottom: 0,
-          paddingLeft: "16px",
-          paddingRight: "8px",
-        }}
-        spacing={2}
-      >
-        <Grid item xs={12} lg={12}>
-          {isLoading && <LinearProgress color="secondary" />}
-        </Grid>
-
-        <Section>
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                NBFC Loan Details
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    Customer Applied Amount<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcLoanAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label="Customer Application Date"
-                name="nbfcLoanDetails.nbfcDisbursalDate"
-                allowPast={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.nbfcTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimal
-                label={
-                  <>
-                    NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.outstandingAmount"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label="NBFC Sanction Date"
-                name="nbfcLoanDetails.nbfcSanctionDate"
-                allowPast={true}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxField
-                label={
-                  <>
-                    NBFC assessed Tenure (months)
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name="nbfcLoanDetails.balanceTenure"
-                type="number"
-                maxLength={3}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label="Purpose"
-                name={"nbfcLoanDetails.purpose"}
-                domain={"m_purpose_of_loan"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    CGTMSE<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.cgtmse"}
-                domain={"m_cgstme"}
-              />
-            </Grid>
-          </Grid>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-        </Section>
-
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Loan Ask
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiShare/>
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <SidbiLoanAmount/>
-            </Grid>
-          </Grid>
-        </Section>
-
-        <Section sx={{ marginTop: "24px", width: '100%' }}>
-          {isLoading && (
-            <Grid container spacing={0} padding={0}>
-              <Grid item xs={12} lg={12}>
-                <LinearProgress color="secondary" />
-              </Grid>
-            </Grid>
-          )}
-          <Grid container spacing={2} padding={4}>
-            <Grid item xs={12} lg={12}>
-              <Typography
-                variant="h6"
-                gutterBottom
-                style={{ marginBottom: "0px", fontWeight: "600" }}
-              >
-                Interest Fixation
-              </Typography>
-            </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    NBFC ROI<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"nbfcLoanDetails.nbfcRoi"}
-                onChange={handleNbfcRoiChange}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI's Hurdle Rate Type
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.rateType"}
-                domain={"m_base_rate_type"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI's Hurdle Rate
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.benchMarkRate"}
-                domain={"m_interest_rate"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Maximum Service rate fee<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.maxServiceRateFee"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    SIDBI ROI to customer
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.sidbiRate"}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Effective interest rate to end customer
-                    <span style={{ color: "red" }}> *</span>
-                  </>
-                }
-                name={"loanDetails.effectiveInterestRateToCustomer"}
-                valueChanged={effectiveRate}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>            
-          </Grid>
-        </Section>
-      </Grid>
-      <FormSubmit ref={ref} />
-    </EntityForm>
-  ) : (
-    <>Loading...</>
-  );
-});
-
-export default LoanDetails;
-
-
-import Grid from "@mui/material/Grid";
-import { useGetConfigQuery, useGetLeadQuery, useUpdateLeadMutation } from "../../slices/leadSlice";
-import EntityForm from "../../Components/Framework/EntityForm";
-import { TextBoxField } from "../../Components/Framework/TextBoxField";
-import { useState, useEffect } from "react";
-import Typography from "@mui/material/Typography";
-import { ErrorMessage } from "../../Components/Framework/ErrorMessage";
-import LinearProgress from "@material-ui/core/LinearProgress";
-import * as Yup from "yup";
+import { useFormikContext } from "formik";
 import {
   FormSubmit,
   SubmitableForm,
@@ -2381,15 +225,24 @@ import {
 import Section from "../../Components/Framework/Section";
 // import { DropDownField } from "../../Components/Framework/DropDownField";
 import { TextBoxFieldAmountStartAdornment } from "../../Components/Framework/TextBoxFieldAmountStartAdornment";
-import { TextBoxFieldAmountStartAdornmentWithDecimalText } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimalText";
+import { TextBoxFieldAmountStartAdornmentWithDecimal } from "../../Components/Framework/TextBoxFieldAmountStartAdornmentWithDecimal";
 import { TextBoxFieldPercentageEndAdornment } from "../../Components/Framework/TextBoxFieldPercentageEndAdornment";
 import { AutocompleteField } from "../../Components/Framework/AutocompleteField";
 import { DropDownFieldYesNo } from "../../Components/Framework/DropDownFieldYesNo";
 import { TextField } from "@material-ui/core";
 import { DisplayOnlyTextField } from "../../Components/Framework/DisplayOnlyTextField";
-import { SidbiDisbursementDate, SidbiLoanAmount, SidbiShare } from "./SidbiLoanAsk";
+import { SidbiDisbursementDate, SidbiLoanAmount, SidbiLoanAmountFormError, SidbiShare } from "./SidbiLoanAsk";
 import { skipToken } from "@reduxjs/toolkit/dist/query";
+import { sidbiShareSchema } from "../../models/sidbiShare";
 import SaveColorButton from "../../Components/Framework/ColorButton";
+import { formatNumberWithCommasAndZeroAllowed } from "../../Components/utilities";
+import { DropDownFieldInlineDomain } from "../../Components/Framework/DropDownFieldInlineDomain";
+import { ReadOnlyTextBox } from "../../Components/Framework/ReadOnlyTextBox";
+import OriginalSanctionDetails from "./OriginalSanctionDetails";
+import { KeyValuePair } from "../../Components/Framework/KeyValuePair";
+import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
+import ErrorMesasage from "../../Components/ErrorMessage";
 
 const formatNonDigitCharacter = (num: string): string => {
   if (num == null) return ""; // handle undefined or null safely
@@ -2416,79 +269,160 @@ const formatNonDigitCharacter = (num: string): string => {
   return formattedNum;
 };
 
-const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
+const LoanDetails = React.forwardRef<SubmitableForm, {}>((props, ref) => {
   const { id: leadId } = useAppSelector((state) => state.leadStore);
+  const { values, submitCount, touched } = useFormikContext<KeyValuePair>() || {};
     
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<string|undefined>();
+  const [isError, setIsError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const { data } = useGetLeadQuery(Number(leadId) || skipToken)
-  // const [isProjectLoanYes, setIsProjectLoanYes] = useState(false);
-
-  const [isInterestFixationPossible] = useState((
-        (data?.leadStatus === "SANCTIONED" && data?.sidbiStatus === "WITH_NBFC")|| 
-        data?.leadStatus === "DISBURSED"));
+  const [isProjectLoanYes, setIsProjectLoanYes] = useState(false);
+  const blendedRoiOnSanction = data?.loanDetails?.blendedRoiOnSanction;
+  const [blendedRoiSubmit, setBlendedRoiSubmit] = useState(data?.loanDetails?.blendedRoi ?? 0);
+  // const  = data?.loanDetails?.blendedRoi;
+  const [nbfcAssessedAmount , setNbfcAssessedAmount ] = React.useState(data?.nbfcLoanDetails?.nbfcLoanAmount);
+  
+  const [isInterestFixationPossibleSanction, setIsInterestFixationPossibleSanction] = useState((data?.leadStatus === "SANCTIONED") && data?.sidbiStatus === "WITH_NBFC");
+  const [isInterestFixationPossibleDisbursed, setIsInterestFixationPossibleDisbursed] = useState(data?.leadStatus === "DISBURSED");
+ 
+  const handleProjectLoanChange = (event: any) => {
+    setIsProjectLoanYes(event.target.value === "y"); // Check if 'Yes' is selected
+  };
 
   const {data : config} = useGetConfigQuery(Number(leadId) || skipToken);
 
-  const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
-  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
+  const [nbfcRoi, setNbfcRoi] = useState<number | null>(data?.nbfcLoanDetails?.nbfcRoi ?? null);
+  const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(data?.loanDetails?.sidbiRate ?? null);
+  // alert('nbfcRoi = ' + nbfcRoi + ' sidbiRoiToCustomer = ' + sidbiRoiToCustomer);
+  // const [nbfcRoi, setNbfcRoi] = useState<number | null>(null);
+  // const [sidbiRoiToCustomer, setSidbiRoiToCustomer] = useState<number | null>(null);
   const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
-
-  const calculateEffectiveInterestRateToCustomer = (nbfcRoi : number, sidbiRoiToCustomer : number) => {
-    if(config?.sidbiShare && nbfcRoi && sidbiRoiToCustomer) {
-      let nbfcShare = 1 - config.sidbiShare;
-      let effectiveRateCalc = nbfcRoi * nbfcShare + sidbiRoiToCustomer * config.sidbiShare;
-      const formattedEffectiveRateCalc = parseFloat(formatNonDigitCharacter(String(effectiveRateCalc))) || 0;
-      setEffectiveRate(formattedEffectiveRateCalc);
-      return formattedEffectiveRateCalc;
-    }
-  }
-
-  // ✅ On page load, populate fields from API and calculate
-  useEffect(() => {
-    if (data && config) {
-      const nbfc = data?.nbfcLoanDetails?.nbfcRoi ?? 0;
-      const sidbi = data?.loanDetails?.sidbiRate ?? 0;
-   
-      const formattedNbfc = parseFloat(formatNonDigitCharacter(String(nbfc))) || 0;
-      const formattedSidbi = parseFloat(formatNonDigitCharacter(String(sidbi))) || 0;
-   
-      setNbfcRoi(formattedNbfc);
-      setSidbiRoiToCustomer(formattedSidbi);
-   
-      calculateEffectiveInterestRateToCustomer(formattedNbfc, formattedSidbi);
-    }
-  }, [data, config]);
-
-  // ✅ Handle NBFC ROI change
-  const handleNbfcRoiChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value) || 0;
-        setNbfcRoi(value);
-        if (sidbiRoiToCustomer !== null)
-          calculateEffectiveInterestRateToCustomer(value, sidbiRoiToCustomer);
-      };
+  const [effectiveDiff, setEffectiveDiff] = useState<number | string>("");
+  // const [maxSidbiShare, setMaxSidbiShare] = useState(0);
 
   const formToSubmit = React.useRef<SubmitableForm>(null);
 
-  const handleSave = () => {
-    if(formToSubmit.current) formToSubmit.current.submit();
+  const setErrorHook = (errorLocal: any) => {
+    console.log("Set error hook", errorLocal);
+    if(errorLocal) {
+      if(errorLocal !== "") {
+        setIsError(true) 
+        setError(errorLocal)
+      } else {
+        setIsError(false)
+        setError(undefined)
+      }
+    }
   }
 
-  return leadId ? (
+   useEffect(()=>{
+     console.log("Original 2 here Sanction Details")
+    },[])
+
+  useEffect(() => {
+    console.log("Form error: ", error)
+  }, [error, isError])
+
+  useImperativeHandle(ref, () => ({
+
+    clearErrors() {
+      setError("");
+    },
+
+    async submit() {
+      setError("")
+      if (formToSubmit.current) return formToSubmit.current?.submit();
+      else return false;
+    },
+
+    isDirty() {
+      if (formToSubmit.current) {
+        setError("")
+        return formToSubmit.current?.isDirty()
+      } else {
+        return false;
+      }
+    },
+    
+    async isValid(finalSubmit?: boolean) {
+      console.log("Loan details is valid called " + error + " :: ");
+      if(!formToSubmit.current) {
+        console.error("formToSubmit.current is null");
+        return false;
+      }
+      const isValid=await formToSubmit.current.isValid();
+      if(!isValid) return false;
+      return true;
+    }
+
+  }));
+
+  const sidbiMclrRate = (data?.loanDetails?.benchMarkRate);
+  const sidbiSpread = (data?.loanDetails?.spread);
+  const fldgSpreadPercentage = (data?.loanDetails?.fldgSpreadPercentage);
+  const sidbiHurdleRate = (
+    ((sidbiMclrRate || 0) + 
+    (sidbiSpread || 0) -
+    (fldgSpreadPercentage || 0))
+  );
+
+  const [serviceFeePayableToNBFC, setServiceFeePayableToNBFC] = useState(data?.loanDetails?.serviceFeePayableToNbfc);
+  const handleChangeServiceFeePayableToNBFC = (event: any) => {
+    setServiceFeePayableToNBFC(parseFloat(event.target.value));
+  };
+
+  const effectiveServiceFee = Number((
+    (serviceFeePayableToNBFC || 0) + 
+    (fldgSpreadPercentage || 0)
+  ).toFixed(2));
+
+  const sidbiRate = Number((
+    (sidbiHurdleRate || 0) + 
+    (effectiveServiceFee || 0)).toFixed(2));
+
+  const [nbfcMclrRefRate, setNbfcMclrRefRate] = useState(data?.nbfcLoanDetails?.nbfcMclrReferenceRate);
+  const handleChangeNbfcMclrRefRate = (event: any) => {
+    setNbfcMclrRefRate(parseFloat(event.target.value));
+  };
+
+  const [nbfcSpread, setNbfcSpread] = useState(data?.nbfcLoanDetails?.nbfcSpread);
+  const handleChangeNbfcSpread = (event: any) => {
+    setNbfcSpread(parseFloat(event.target.value));
+  };
+
+  const nbfcRate = Number((
+    (nbfcMclrRefRate || 0) + 
+    (nbfcSpread || 0)
+  ).toFixed(2))
+
+  const [actualSidbiSharePercentage, setActualSidbiSharePercentage] = useState(data?.loanDetails?.sidbiShareAge || config?.sidbiShare);
+  const maxSidbiShareValue = (config?.sidbiShare ?? 0) * 100;
+  const minSidbiShareValue=50;
+  const handleChangeActualSidbiSharePercentage = (event: any) => {
+    setActualSidbiSharePercentage(parseFloat(event.target.value));
+  };
+
+  const blendedRate = (
+    (sidbiRate * (actualSidbiSharePercentage || 0) / 100) +
+    (nbfcRate * (1 - ((actualSidbiSharePercentage || 0) / 100)))
+  )
+  
+  return leadId ? ( 
     <EntityForm
       id={leadId || 0}
       defaultItem={{
         loanDetails: defaultLoanDetails,
-        nbfcLoanDetails: defaultNbfcLoanDetails,
+        nbfcLoanDetails: defaultNbfcLoanDetails
       }}
       itemSchema={Yup.object().shape({
-        loanDetails: loanDetailsSchema,
-        nbfcLoanDetails: nbfcLoanDetailsSchema,
+        loanDetails: loanDetailsSchema(maxSidbiShareValue,minSidbiShareValue), 
+        nbfcLoanDetails: nbfcLoanDetailsSchema(nbfcRate, sidbiRate, actualSidbiSharePercentage),
       })}
       useUpdateItemMutation={useUpdateLeadMutation}
       useGetItemQuery={useGetLeadQuery}
-      setError={setError}
+      setError={setErrorHook}
       setIsLoading={setIsLoading}
     >
       <Grid
@@ -2505,7 +439,34 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
           {isLoading && <LinearProgress color="secondary" />}
         </Grid>
 
+        {isInterestFixationPossibleSanction && <>
         <Section>
+          <Grid
+            container
+            spacing={4}
+            padding={4}
+          >
+            <Grid item xs="auto">
+              <Typography
+                variant="h6"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Original Sanction Details
+              </Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <OriginalSanctionDetails />
+            </Grid>
+          </Grid>
+        </Section>
+            </>
+        }
+
+        {error && <Grid item xs={12} lg={12}>
+          <ErrorMesasage error={error} isError={error !== undefined && error !== ""} />
+        </Grid>}
+        <Section sx={{ marginTop: "24px", width: '100%' }}>
           <Grid container spacing={2} padding={4}>
             <Grid item xs={12} lg={12}>
               <Typography
@@ -2516,87 +477,96 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
                 NBFC Loan Details
               </Typography>
             </Grid>
-            <Grid item xs={12} lg={12}>
-              <ErrorMessage status={error} />
-            </Grid>
             <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimalText
+              <TextBoxFieldAmountStartAdornmentWithDecimal
                 label={
                   <>
-                  Customer Applied Amount<span style={{ color: 'red' }}> *</span>
+                    Customer Applied Amount<span style={{ color: 'red' }}> *</span>
                   </>
                 }
-                name={"nbfcLoanDetails.nbfcLoanAmount"}
-                disabled
-                css={"#F8F8F8"}
+                name={"nbfcLoanDetails.customerAppliedAmount"}
               />
             </Grid>
             <Grid item xs={12} lg={4}>
                 <DatePickerField
                   label={
-                    <>Customer Application Date</>
+                    <>
+                    Customer Application Date
+                    </>
                   }
-                  name="nbfcLoanDetails.nbfcDisbursalDate"
+                  name="nbfcLoanDetails.nbfcCustomerApplicationDate"
                   allowPast={true}
-                  disabled
                 />
               </Grid>
-            <Grid item xs={12} lg={4}>
+              <Grid item xs={12} lg={4}>
               <TextBoxField
                 label={
                   <>
                     Requested Tenure (Months)<span style={{ color: 'red' }}> *</span>
                   </>
                 }
-                name="nbfcLoanDetails.nbfcTenure"
+                name="nbfcLoanDetails.customerRequestedTenure"
                 type="number"
                 maxLength={3}
-                disabled
               />
             </Grid>
             <Grid item xs={12} lg={4}>
-              <TextBoxFieldAmountStartAdornmentWithDecimalText
+              <TextBoxFieldAmountStartAdornmentWithDecimal
                 label={
                   <>
                     NBFC assessed amount (in Rs)<span style={{ color: 'red' }}> *</span>
                   </>
                 }
-                name={"nbfcLoanDetails.outstandingAmount"}
-                disabled
-                css={"#F8F8F8"}
+                name={"nbfcLoanDetails.nbfcLoanAmount"}
+                onChange={(value: any) => {
+                  // Extract the raw string value
+                  let val = typeof value === 'object' ? value?.target?.value || value?.value : value;
+                
+                  // Remove all commas if val is a string
+                  if (typeof val === 'string') {
+                    val = val.replace(/,/g, ''); 
+                  }
+                
+                  setNbfcAssessedAmount(val);
+                }}
               />
             </Grid>
             <Grid item xs={12} lg={4}>
-                <DatePickerField
-                  label={
-                    <>NBFC Sanction Date</>
-                  }
-                  name="nbfcLoanDetails.nbfcSanctionDate"
-                  allowPast={true}
-                  disabled
-                />
-              </Grid>
-              <Grid item xs={12} lg={4}>
-                <TextBoxField
-                  label={
-                    <>
-                      NBFC assessed Tenure (months)<span style={{ color: 'red' }}> *</span>
-                    </>
-                  }
-                  name="nbfcLoanDetails.balanceTenure"
-                  type="number"
-                  maxLength={3}
-                  disabled
-                />
-              </Grid>
-              <Grid item xs={12} lg={8}>
-                <AutocompleteField
-                  label={"Purpose"}
-                  name={"nbfcLoanDetails.purpose"}
-                  domain={"m_purpose_of_loan"}
-                  disabled
-                />
-              </Grid>
+              <DatePickerField
+                label={
+                  <>
+                  NBFC Sanction Date
+                  </>
+                }
+                name="nbfcLoanDetails.nbfcSanctionDate"
+                allowPast={true}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <TextBoxField
+                label={
+                  <>
+                    NBFC assessed Tenure (months)
+                    <span
+                      style={{ color: "red" }}
+                    >
+                      {" "}
+                      *
+                    </span>
+                  </>
+                }
+                name="nbfcLoanDetails.nbfcTenure"
+                type="number"
+                maxLength={3}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <AutocompleteField
+                label={"Purpose"}
+                name={"nbfcLoanDetails.purpose"}
+                domain={"m_purpose_of_loan"}
+              />
+            </Grid>
             <Grid item xs={12} lg={4}>
               {/* <DropDownFieldYesNo
                 label="CGTMSE"
@@ -2610,26 +580,32 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
                 }
                 name={"nbfcLoanDetails.cgtmse"}
                 domain={"m_cgstme"}
-                disabled
               />
             </Grid>
-            {data?.productName === 'secured' && (
+            {/* {data?.productName === 'secured' && (
               <>
                 <Grid item xs={12} lg={4}>
                   <DropDownFieldYesNo
-                    label="Project Loan"
+                    label={
+                      <>
+                        Project Loan
+                      </>
+                    }
                     name={"nbfcLoanDetails.projectloan"}
-                    disabled
-                    css={"#F8F8F8"}
+                    onChange={handleProjectLoanChange}
+                    // onChange={(event: any) => {
+                    //   console.log(event.target.value);
+                    //   setIsProjectLoanYes(event.target.value === 'Yes');
+                    // }}
                   />
                 </Grid>
-                {data?.nbfcLoanDetails?.projectloan == 'y' && (
+                {isProjectLoanYes && (
                   <Grid item xs={12} lg={4}>
                     <DatePickerField label="DCCO" name={"nbfcLoanDetails.dcco"} />
                   </Grid>
                 )}
               </>
-            )}
+            )} */}
           </Grid>
           {isLoading && (
             <Grid container spacing={0} padding={0}>
@@ -2658,17 +634,65 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
                 Loan Ask
               </Typography>
             </Grid>
-            <Grid item xs={12} lg={12}>
+            {/* <Grid item xs={12} lg={12}>
               <ErrorMessage status={error} />
+            </Grid> */}
+            <Grid item xs={12} lg={4}>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  Max SIDBI Share Percentage
+                  </>
+                }
+                css={"#F8F8F8"}
+                name={"dummy"}
+                disabled
+                valueChanged={((config?.sidbiShare ?? 0) * 100)}
+              />
             </Grid>
             <Grid item xs={12} lg={4}>
-              <SidbiShare/>
+              <TextBoxFieldPercentageEndAdornment
+                label={
+                  <>
+                  Actual SIDBI Share Percentage<span style={{ color: 'red' }}> *</span>
+                  </>
+                }
+                name={"loanDetails.sidbiShareAge"}
+                onChange={handleChangeActualSidbiSharePercentage}
+                // valueChanged={(actualSidbiSharePercentage || 0) }
+              />
             </Grid>
             <Grid item xs={12} lg={4}>
-              <SidbiLoanAmount/>
+              <SidbiLoanAmount nbfcLoanAmount={nbfcAssessedAmount} sidbiShare={(actualSidbiSharePercentage??0)/100} />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+                <TextBoxField
+                  label={
+                      <>
+                      NBFC LAN
+                      {isInterestFixationPossibleDisbursed && (
+                        <span style={{ color: "red" }}> *</span>
+                      )}
+                      </>
+                  }
+                  name={"loanDetails.nbfcLoanAccountNumber"}
+                />
+                
+                <Typography
+                  variant="body1"
+                  gutterBottom
+                  style={{
+                    marginBottom: "0px",
+                    fontWeight: "400",
+                    color: "#A9A9A9",
+                  }}
+                >
+                  Note: Mandatory at the time of disbursement
+                </Typography>
             </Grid>
           </Grid>
         </Section>
+
         <Section sx={{ marginTop: "24px", width: '100%' }}>
           {isLoading && (
             <Grid container spacing={0} padding={0}>
@@ -2687,151 +711,362 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
                 Interest Fixation
               </Typography>
             </Grid>
-            <Grid item xs={12} lg={12}>
+            {/* {error && <Grid item xs={12} lg={12}>
               <ErrorMessage status={error} />
+            </Grid>} */}
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="body1"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Originating RE Portion
+              </Typography>
             </Grid>
-              <Grid item xs={12} lg={4}>
-                <TextBoxFieldPercentageEndAdornment
-                  label={
-                    <>
-                    NBFC ROI<span style={{ color: 'red' }}> *</span>
-                    </>
-                  }
-                  name="nbfcLoanDetails.nbfcRoi"
-                onChange={handleNbfcRoiChange}
-                disabled={!isInterestFixationPossible}
-                css={!isInterestFixationPossible && "#F8F8F8"}
-                />
+              
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0}>
+                <Grid item xs={12} lg={4}>
+                  <DropDownFieldInlineDomain
+                    label={
+                      <>
+                        RE Rate Type<span style={{ color: 'red' }}> *</span>
+                      </>
+                    }
+                    name="nbfcLoanDetails.nbfcRateType"
+                    domain={["Fixed", "Floating"]}  
+                  />
+                </Grid>
+                {/* <Grid item xs={12} lg={4}>
+                  <DropDownFieldYesNo
+                    label={
+                      <>FLDG Applicable<span style={{ color: 'red' }}> *</span></>
+                    }
+                    name={"loanDetails.fldgApplicable"}
+                    onChange={handleChangeFldgApplicable}
+                    // disabled
+                    // css={"#F8F8F8"}
+                  />
+                </Grid> */}
               </Grid>
-              <Grid item xs={12} lg={4}>
-                <TextBoxFieldPercentageEndAdornment
-                  label={
-                    <>
-                    Rate Negotiated With Customer
-                    </>
-                  }
-                  name="nbfcLoanDetails.rateNegotiatedWithCustomer"
-                  disabled={!isInterestFixationPossible}
-                  css={!isInterestFixationPossible && "#F8F8F8"}
-                />
+            </Grid>
+              
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0} alignItems={"center"}>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        RE Reference Rate<span style={{ color: 'red' }}> *</span>
+                      </>
+                    }
+                    name={"nbfcLoanDetails.nbfcMclrReferenceRate"}
+                    onChange={handleChangeNbfcMclrRefRate}
+                    // valueChanged={nbfcMclrRefRate}
+                  />
+                </Grid>
+                <Grid item xs="auto">+</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        RE Spread<span style={{ color: 'red' }}> *</span>
+                      </>
+                    }
+                    name={"nbfcLoanDetails.nbfcSpread"}
+                    onChange={handleChangeNbfcSpread}
+                    allowNegativeValue={true}
+                    // valueChanged={nbfcSpread}
+                  />
+                </Grid>
+                <Grid item xs="auto">=</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      RE Rate
+                      </>
+                    }
+                    name={"nbfcLoanDetails.nbfcRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={nbfcRate}
+                  />
+                </Grid>
               </Grid>
-            <Grid item xs={12} lg={4}>
-              <DatePickerField
-                label={
-                  <>Next Full EMI Date</>
-                }
-                name="nbfcLoanDetails.nextFullEmiDate"
-                allowFuture={true}
-                disabled={!isInterestFixationPossible}
-              />
             </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                    SIDBI’s Hurdle Rate Type
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name={"loanDetails.rateType"}
-                domain={"m_base_rate_type"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <AutocompleteField
-                label={
-                  <>
-                  SIDBI’s Hurdle Rate<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name={"loanDetails.benchMarkRate"}
-                domain={"m_interest_rate"}
-                disabled
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Additional spread<span style={{ color: 'red' }}> *</span>
-                  </>
-                }
-                name="loanDetails.additionalSpread"
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Maximum Service rate fee
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.maxServiceRateFee"
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    SIDBI ROI to customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.sidbiRate" 
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            <Grid item xs={12} lg={4}>
-              <TextBoxFieldPercentageEndAdornment
-                label={
-                  <>
-                    Effective interest rate to end customer
-                    <span
-                      style={{ color: "red" }}
-                    >
-                      {" "}
-                      *
-                    </span>
-                  </>
-                }
-                name="loanDetails.effectiveInterestRateToCustomer"
-                valueChanged={effectiveRate}
-                disabled
-                css={"#F8F8F8"}
-              />
-            </Grid>
-            {isInterestFixationPossible && 
-                  <Grid item xs={12} style={{ textAlign: "right" }}>
-                    <SaveColorButton
-                      variant="contained"
-                      onClick={handleSave}
-                    >
-                      Save
-                    </SaveColorButton>
+              
+              <Grid item xs={12} lg={12}>
+                <Grid container spacing={2} padding={0}>
+                <Grid item xs={12} lg={4}>
+                    <TextBoxFieldPercentageEndAdornment
+                      label={
+                        <>
+                          Service Fee Payable to RE<span style={{ color: 'red' }}> *</span>
+                        </>
+                      }
+                      name={"loanDetails.serviceFeePayableToNbfc"}
+                      onChange={handleChangeServiceFeePayableToNBFC}
+                    />
                   </Grid>
-            }
+                </Grid>
+              </Grid>
+
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="body1"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                SIDBI Portion
+              </Typography>
+            </Grid>
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0}>
+                <Grid item xs={12} lg={4}>
+                  <ReadOnlyTextBox
+                    label="SIDBI Hurdle Type"
+                  value={data?.loanDetails?.rateType === 'L'? 'Floating' : data?.loanDetails?.rateType === 'F'? 'Fixed' : ''}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0} alignItems={"center"}>
+                <Grid item xs={3}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        Service Fee Payable to RE<span style={{ color: 'red' }}> *</span>
+                      </>
+                    }
+                    name={"loanDetails.serviceFeePayableToNbfc"}
+                    disabled
+                    css={"#F8F8F8"}
+                    onChange={handleChangeServiceFeePayableToNBFC}
+                  />
+                </Grid>
+                {(fldgSpreadPercentage && fldgSpreadPercentage > 0)? <><Grid item xs="auto">+</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      FLDG Spread Percentage<span style={{ color: 'red' }}> *</span>
+                      </>
+                    }
+                    name={"loanDetails.fldgSpreadPercentage"}
+                    disabled
+                    css={"#F8F8F8"}
+                  />
+                </Grid></> : <></>}
+                <Grid item xs="auto">=</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      Effective Service Fee
+                      </>
+                    }
+                    name={"loanDetails.effectiveServiceFee"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={effectiveServiceFee}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+            
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0} alignItems={"center"}>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        MCLR Rate
+                      </>
+                    }
+                    name={"loanDetails.benchMarkRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                  />
+                </Grid>
+                <Grid item xs="auto">+</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        Spread (%)
+                      </>
+                    }
+                    name={"loanDetails.spread"}
+                    disabled
+                    css={"#F8F8F8"}
+                  />
+                </Grid>
+                {(fldgSpreadPercentage && fldgSpreadPercentage > 0)? <><Grid item xs="auto">-</Grid>
+                <Grid item xs={2.71}>
+                   <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      FLDG Spread Percentage
+                      </>
+                    }
+                    name={"loanDetails.fldgSpreadPercentage"}
+                    disabled
+                    css={"#F8F8F8"}
+                  />
+                </Grid></> : <></>}
+                <Grid item xs="auto">=</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      SIDBI’s Hurdle Rate
+                      </>
+                    }
+                    name={"loanDetails.sidbiHurdleRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={Number(sidbiHurdleRate.toFixed(2))}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={2} padding={0} alignItems={"center"}>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        SIDBI Hurdle Rate
+                      </>
+                    }
+                    name={"loanDetails.sidbiRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={Number(sidbiHurdleRate.toFixed(2))}
+                  />
+                </Grid>
+                <Grid item xs="auto">+</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        Effective Service Fee
+                      </>
+                    }
+                    name={"loanDetails.effectiveServiceFee"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={effectiveServiceFee}
+                  />
+                </Grid>
+                <Grid item xs="auto">=</Grid>
+                <Grid item xs={2.71}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      SIDBI Rate
+                      </>
+                    }
+                    name={"nbfcLoanDetails.sidbiRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={Number(sidbiRate.toFixed(2))}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+            
+            <Grid item xs={12} lg={12}>
+              <Typography
+                variant="body1"
+                gutterBottom
+                style={{ marginBottom: "0px", fontWeight: "600" }}
+              >
+                Blended
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12} lg={12}>
+              <Grid container spacing={0.5} padding={0} alignItems={"center"}>
+                <Grid item xs="auto">(</Grid>
+                <Grid item xs={2.03}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        SIDBI Rate
+                      </>
+                    }
+                    name={"nbfcLoanDetails.sidbiRateVal"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={Number(sidbiRate.toFixed(2))}
+                  />
+                </Grid>
+                <Grid item xs="auto">*</Grid>
+                <Grid item xs={2.1}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        Actual SIDBI Share %
+                      </>
+                    }
+                    name={"nbfcLoanDetails.actualSidbiSharePercentage"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={(actualSidbiSharePercentage || 0)}
+                  />
+                </Grid>
+                <Grid item xs="auto">)</Grid>
+                <Grid item xs="auto">+</Grid>
+                <Grid item xs="auto">(</Grid>
+                <Grid item xs={2.03}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        NBFC Rate
+                      </>
+                    }
+                    name={"nbfcLoanDetails.nbfcRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={nbfcRate}
+                  />
+                </Grid>
+                <Grid item xs="auto">*</Grid>
+                <Grid item xs={2.4}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                        NBFC Share %
+                      </>
+                    }
+                    name={"nbfcLoanDetails.actualSidbiSharePercentage"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={(100 - (actualSidbiSharePercentage || 0))}
+                  />
+                </Grid>
+                <Grid item xs="auto">)</Grid>
+                <Grid item xs="auto">=</Grid>
+                <Grid item xs={2.03}>
+                  <TextBoxFieldPercentageEndAdornment
+                    label={
+                      <>
+                      Blended Rate
+                      </>
+                    }
+                    name={"nbfcLoanDetails.blendedRate"}
+                    disabled
+                    css={"#F8F8F8"}
+                    valueChanged={Number(blendedRate.toFixed(2))}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
           </Grid>
         </Section>
       </Grid>
@@ -2842,7 +1077,7 @@ const LoanDetailsNbfc = React.forwardRef<SubmitableForm, {}>((props, ref) => {
   );
 });
 
-export default LoanDetailsNbfc;
+export default LoanDetails;
 
-
-as from loandetails i remove many fields but in loadndetails nbfc i didn't do that so i want to do that changes in loadnDetailsNbfc also 
+NBFC assessed amount should not be greater than customer applied amount
+Service fee payable to RE - null and zero should not be allowed these two ponints we do that and one more thing don't remove comment alignmnet etc and give me complete and proper code 
