@@ -1,3 +1,183 @@
+// Validation Schema for the model
+export const nbfcLoanDetailsSchema = (
+  nbfcRate: number,
+  sidbiRate: number,
+  actualSidbiSharePercentage: number | undefined
+) => Yup.object().shape({
+  customerAppliedAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .positive("Amount must be greater than zero"),
+
+  nbfcCustomerApplicationDate: Yup.string()
+    .nullable()
+    .notRequired()
+    .test(
+      'valid-date',
+      'Please enter a valid date in DD/MM/YYYY format',
+      (value) => {
+        if (value) {
+          const parsedDate = dayjs(value);
+          if (parsedDate.isValid()) {
+            value = parsedDate.format('YYYY-MM-DD');
+          }
+          return dayjs(value, 'YYYY-MM-DD', true).isValid();
+        }
+        return true;
+      }
+    )
+    .test(
+      'not-future-date',
+      'Date cannot be in the future',
+      (value) => {
+        if (value) {
+          return !(dayjs(value).isSame(dayjs(), 'day') || dayjs(value).isAfter(dayjs(), 'day'));
+        }
+        return true;
+      }
+    ),
+
+  customerRequestedTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .positive("Tenure must be greater than zero")
+    .integer("Tenure must be a whole number"),
+
+  nbfcLoanAmount: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .positive("Amount must be greater than zero")
+    .test(
+      "nbfc-loan-amount-not-greater-than-applied",
+      "NBFC assessed amount should not be greater than Customer Applied Amount",
+      function (value) {
+        const { customerAppliedAmount } = this.parent;
+        if (!customerAppliedAmount || !value) return true;
+        return Number(value) <= Number(customerAppliedAmount);
+      }
+    ),
+
+  nbfcSanctionDate: Yup.string()
+    .nullable()
+    .notRequired()
+    .transform((value) => {
+      if (!value) return value;
+      const d = dayjs(value, "DD/MM/YYYY", true);
+      return d.isValid() ? d.format("YYYY-MM-DD") : value;
+    })
+    .test(
+      "valid-date",
+      "Please enter a valid date in DD/MM/YYYY format",
+      (value) => {
+        if (!value) return true;
+        return dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true).isValid();
+      }
+    )
+    .test(
+      "sanction-after-disbursal",
+      "NBFC Sanction Date must be greater than or equal to Customer Application Date",
+      function (value) {
+        if (!value) return true;
+        const { nbfcCustomerApplicationDate } = this.parent;
+        if (!nbfcCustomerApplicationDate) return true;
+
+        const sanction = dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
+        const application = dayjs(nbfcCustomerApplicationDate, ["YYYY-MM-DD", "DD/MM/YYYY"], true);
+
+        if (!sanction.isValid() || !application.isValid()) return true;
+
+        return (
+          sanction.isSame(application, "day") ||
+          sanction.isAfter(application, "day")
+        );
+      }
+    ),
+
+  nbfcTenure: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Please enter a valid number")
+    .positive("Tenure must be greater than zero")
+    .integer("Tenure must be a whole number")
+    .test(
+      'is-less-than-or-equal-to-requested-tenure',
+      'NBFC assessed Tenure should not be greater than Requested Tenure (In Months)',
+      function (value) {
+        const { customerRequestedTenure } = this.parent;
+        if (value === undefined || customerRequestedTenure === undefined) return true;
+        return value <= customerRequestedTenure;
+      }
+    ),
+
+  purpose: Yup.string()
+    .notRequired()
+    .typeError("Please select from the drop down"),
+
+  cgtmse: Yup.string()
+    .required("Please select a value from drop-down list"),
+
+  nbfcRateType: Yup.string()
+    .required("Please select a value from drop-down list"),
+
+  nbfcMclrReferenceRate: Yup.number()
+    .required("MCLR Ref Rate is mandatory.")
+    .typeError("Please enter a valid number"),
+
+  nbfcSpread: Yup.number()           // ← changed from string → number
+    .required("NBFC Spread is required")
+    .typeError("Please enter a valid number"),
+
+  nbfcRate: Yup.number()
+    .notRequired(),
+
+  // ────────────────────────────────────────────────
+  // New: Service Fee Payable to RE (in loanDetails)
+  // ────────────────────────────────────────────────
+});
+
+// Important: Also update loanDetailsSchema if serviceFeePayableToNbfc lives there
+// Assuming it is in loanDetails (as per your form usage)
+
+export const loanDetailsSchema = (maxSidbiShare: number, minSidbiShare: number) => Yup.object().shape({
+  // ... other fields ...
+
+  serviceFeePayableToNbfc: Yup.number()
+    .typeError("Please enter a valid number")
+    .required("Service Fee Payable to RE is required")
+    .moreThan(0, "Service Fee Payable to RE must be greater than 0")
+    .test(
+      "is-valid-decimal",
+      "Please enter a valid percentage (up to 2 decimal places)",
+      (value) => {
+        if (value === undefined || value === null) return false;
+        return /^\d+(\.\d{1,2})?$/.test(String(value));
+      }
+    ),
+
+  // ... rest of your loanDetails schema ...
+});
+
+<Grid item xs={12} lg={4}>
+  <TextBoxFieldPercentageEndAdornment
+    label={
+      <>
+        Service Fee Payable to RE<span style={{ color: 'red' }}> *</span>
+      </>
+    }
+    name={"loanDetails.serviceFeePayableToNbfc"}
+    onChange={handleChangeServiceFeePayableToNBFC}
+    // Optional: you can add min={0.01} or helper text
+    helperText="Must be greater than 0%"
+  />
+</Grid>
+
+
+
+
+
+
+
+
+
 import { BaseDTO } from "./baseModels";
 import * as Yup from "yup";
 import dayjs from "dayjs";
